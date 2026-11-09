@@ -2,7 +2,7 @@
 
 All notable changes to the plugins in this marketplace.
 
-## Unreleased
+## abofles 2.5.0 · abofles-guide 0.8.0 — 2026-11-10
 
 - abofles + abofles-guide: **the session goes on after `/compact`.** After your own `/compact` the mod sends one turn: Claude continues what the summary shows open, or says in a line or two that nothing is left to continue. Never after an automatic compact (its turn goes on by itself) or while you are typing. New key `Continue after compact = auto | off` (default `auto`), in the editor's Session group.
 - abofles: **Needs you keeps a problem that comes back.** An ATTENTION or FAIL that was fixed is added again when a later receipt reports it, and another session's open item no longer hides this session's own (with `Other items = hide` this session never saw it). A decision or question once answered stays settled.
