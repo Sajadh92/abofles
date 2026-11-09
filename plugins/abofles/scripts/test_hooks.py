@@ -2706,7 +2706,7 @@ def main():
         lr = lres() or {}
         check("memo resolve: the guide state keeps last_resolved with the item text and the reopen argv",
               lr.get("text", "").startswith("owner decision 1: ") and "pick A or B" in lr["text"] and len(lr["text"]) <= 100 and isinstance(lr.get("ts"), float)
-              and lr.get("unresolve") == ["bash", str(Path(MEMOPY).parent / "py").replace("\\", "/"), MEMOPY.replace("\\", "/"), "reopen", "1", "--trace", "--session", sL] and all(not i["id"].startswith("dec:") for i in gitems(sL)))
+              and (lr.get("unresolve") or [])[:4] == ["bash", str(Path(MEMOPY).parent / "py").replace("\\", "/"), MEMOPY.replace("\\", "/"), "reopen"] and re.fullmatch(r"#[0-9a-fA-F]{4}", (lr.get("unresolve") or [""] * 5)[4]) and lr["unresolve"][5:] == ["--trace", "--session", sL] and all(not i["id"].startswith("dec:") for i in gitems(sL)))
         ur_ = _sp.run(lr.get("unresolve") or ["false"], cwd=pl_, capture_output=True, text=True, env=lenv)
         check("memo Undo argv runs through the launcher from the project root and reopens the item", ur_.returncode == 0 and ur_.stdout.startswith("reopened:") and "1. [ ] " in H.memo_path(pl_).read_text() and lres() is None)
         lmemo("resolve", "1", "re-checked: X", "--trace")  # back to the resolved state the checks below expect

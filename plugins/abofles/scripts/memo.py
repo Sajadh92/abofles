@@ -309,8 +309,9 @@ def main():
             print(usage)
             sys.exit(2)
         n = rest[0]
-        if a_sid is not None:
-            sid = re.sub(r"[^A-Za-z0-9_-]", "", a_sid) or "unknown"
+        if a_sid is not None:  # the named session; a short id keeps the full one it resolved to (its state holds the band's Undo)
+            named = re.sub(r"[^A-Za-z0-9_-]", "", a_sid) or "unknown"
+            sid = sid if sid and sid.startswith(named) else named
         if not sid:
             no_session()
         if not undo and not " ".join(rest[1:]).strip():  # nothing is settled on a bare word: the note is the evidence (a question's answer settles its items in the hook, without this command)
@@ -329,7 +330,8 @@ def main():
         if undo:
             last_resolved_note(cwd, sid)  # a reopen ends the band's Undo
         elif sid:
-            last_resolved_note(cwd, sid, f"owner decision {n}: {item}", script_cmd("memo.py", "reopen", n, "--trace", "--session", sid))
+            iid = re.search(r"#([0-9a-fA-F]{4})\b", hit)  # Undo reopens the item by its stable id: its number can change before the press
+            last_resolved_note(cwd, sid, f"owner decision {n}: {item}", script_cmd("memo.py", "reopen", f"#{iid.group(1)}" if iid else n, "--trace", "--session", sid))
     elif cmd == "note":
         text = " ".join(args[1:]).strip()
         if not text:

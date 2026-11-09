@@ -30,6 +30,7 @@ All notable changes to the plugins in this marketplace.
 - abofles: **a short `--session` id names that session.** `memo.py now --session e18fb730` ignored the short id and wrote the newest session's Now (another session of the same project). A short id now selects the one session whose id starts with it, and names none when no session or several match.
 - abofles: **no stale "a judged question is still unasked".** An Explainer that answered a follow-up `SendMessage` with all its questions again unlocked the ones already asked a second time, and the Stop hook asked for them for the rest of the task. A reply now unlocks only the passed-on questions that are not asked or unlocked yet.
 - abofles: **a skipped reviewer needs its reason.** The review gate took any `<Tag> … skipped` within 60 characters, so `Finance · Security skipped` also skipped Finance, and a bare `Security skipped` passed. Now each skip stands on its own (never past a `·`, `,` or `;`) and names a reason: `Security skipped: <reason>`, a dash, a bracket, or `because …`.
+- abofles: **Undo reopens the item you resolved.** The band's Undo reopened the Needs-you item by its number, which can change before the press; it now uses the item's `#id`. `memo.py resolve --session <short id>` keeps the full session it resolves to, so the Undo is saved.
 
 ## abofles 2.4.0 · abofles-guide 0.7.0 — 2026-11-09
 
