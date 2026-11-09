@@ -31,6 +31,7 @@ All notable changes to the plugins in this marketplace.
 - abofles: **no stale "a judged question is still unasked".** An Explainer that answered a follow-up `SendMessage` with all its questions again unlocked the ones already asked a second time, and the Stop hook asked for them for the rest of the task. A reply now unlocks only the passed-on questions that are not asked or unlocked yet.
 - abofles: **a skipped reviewer needs its reason.** The review gate took any `<Tag> … skipped` within 60 characters, so `Finance · Security skipped` also skipped Finance, and a bare `Security skipped` passed. Now each skip stands on its own (never past a `·`, `,` or `;`) and names a reason: `Security skipped: <reason>`, a dash, a bracket, or `because …`.
 - abofles: **Undo reopens the item you resolved.** The band's Undo reopened the Needs-you item by its number, which can change before the press; it now uses the item's `#id`. `memo.py resolve --session <short id>` keeps the full session it resolves to, so the Undo is saved.
+- abofles: **the context watch warns again after a compact that stays big.** The marks re-armed only when the compacted context fell under the first mark (500K); a compact from 960K to 520K left every later mark silent for the rest of the session. Now the marks above the new size warn again, and a mark the compacted context still passes stays quiet.
 
 ## abofles 2.4.0 · abofles-guide 0.7.0 — 2026-11-09
 

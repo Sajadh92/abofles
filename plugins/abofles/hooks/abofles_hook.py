@@ -4760,9 +4760,9 @@ def context_watch(data, st):
     if st.get("spawns_since_receipt") and not background_running(data.get("session_id", "")) and receipt_printed_after(path, st.get("last_spawn_offset", 0)):
         close_task(st, "receipt")
     in_task = st.get("spawns_since_receipt", 0)
+    if warned and tokens < warned * 1000:  # compacted below the last warned mark: the marks above the new size warn again
+        warned = st["context_warned_at"] = crossed[-1] if crossed else 0  # a mark the compacted context still passes stays quiet
     if not crossed:
-        if warned:
-            st["context_warned_at"] = 0  # compacted: arm every mark again
         return None
     mark = crossed[-1]
     if warned >= mark:

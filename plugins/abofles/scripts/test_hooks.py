@@ -2359,6 +2359,8 @@ def main():
         check("context: stop_hook_active still warns a new mark", "**600K tokens**" in out and "700K" in out)
         check("context: compact re-arms the marks", cwatch(90_000) == "" and "**500K tokens**" in cwatch(505_000))
         check("context: last mark wording", "last mark" in cwatch(955_000))
+        check("context: a compact that stays above a mark re-arms the marks above the new size, the passed one stays quiet",
+              cwatch(520_000) == "" and "**600K tokens**" in cwatch(610_000))
         # receipt and context together -> one block with both
         Path(cwd, "CLAUDE.md").write_text("## abofles overrides\n- Context marks = 60, 80\n")
         run("start", {"session_id": "cw3", "cwd": cwd}, led)
