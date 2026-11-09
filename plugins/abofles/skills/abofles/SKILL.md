@@ -1,6 +1,6 @@
 ---
 name: abofles
-description: "Abo Fles (ابو فليس) — picks the model (haiku / sonnet / opus / fable) and effort (low..max) for every subagent in coding work from a topic × side matrix, and suggests the main-session model. TRIGGER once per session, before the first coding task or Agent tool call (it stays in context after that — never re-invoke it per task), before planning a multi-agent fan-out, and when the user asks which model or effort to use. Never spawn a subagent in coding work without routing here first. SKIP for non-coding tasks."
+description: "Abo Fles (ابو فليس) — picks the model (haiku / sonnet / opus / fable) and effort (low..max) for every subagent in coding work from a topic × side matrix, and suggests the main-session model. TRIGGER once per session, before the first coding task or Agent tool call (it stays in context after that — never re-invoke it per task), before planning a multi-agent fan-out, and when the user asks which model or effort to use. Never start a subagent in coding work without routing here first. SKIP for non-coding tasks."
 ---
 
 # Abo Fles (ابو فليس) — Agent Router
@@ -14,33 +14,33 @@ Goal: correct work, fast, fewest tokens. The usual waste is a subagent inheritin
 ## Hard rules
 
 1. Every Agent call passes **both** `model` and `effort`. Never inherit. This skill is the explicit instruction that permits setting `effort`.
-2. Print one route line before each spawn, plain markdown: <Side emoji> `<Side>` → **<Topic>** · <Model> · <Effort> · Cap <N> · <Tier>[ · <Modifier>]. Emoji: 🔍 Read · 🧠 Analyse · 📐 Plan · 🛠️ Work · 🌿 Git (Work cell) · ✅ Verify · ⚖️ Judge · 💬 Explain; reviewers (Verify cell): 🛡️ Security · 💰 Finance · 📜 Compliance · 🧪 Tester · 🎯 QA · 🎨 UIUX · 🧹 Clean · 🗄️ DBA · ⚙️ Ops · ⚡ Perf · 📊 Data. Tier = the word with its dot, never the code: 🟢 Minor (T1) · 🟡 Normal (T2) · 🟠 Sensitive (T3) · 🔴 Critical (T4); `T#` stays in prompt headers. Side = full word; topic = matrix name exactly, Title Case. Modifiers, each after its own ` · `: `Scope −1`, `User: <what>`, `User Cap`, `Project Override`, `Merged: N Questions`, `Parallel`, `Fallback: <Model> Unavailable`. Several route lines: bullets.
+2. Print one route line before each agent, plain markdown: <Side emoji> `<Side>` → **<Topic>** · <Model> · <Effort> · Cap <N> · <Tier>[ · <Modifier>]. Emoji: 🔍 Read · 🧠 Analyse · 📐 Plan · 🛠️ Work · 🌿 Git (Work cell) · ✅ Verify · ⚖️ Judge · 💬 Explain · 🗂️ Memo (the memo agent, started only on the hook's own memo-upkeep line or `/abofles:memo`); reviewers (Verify cell): 🛡️ Security · 💰 Finance · 📜 Compliance · 🧪 Tester · 🎯 QA · 🎨 UIUX · 🧹 Clean · 🗄️ DBA · ⚙️ Ops · ⚡ Perf · 📊 Data. Tier = the word with its dot, never the code: 🟢 Minor (T1) · 🟡 Normal (T2) · 🟠 Sensitive (T3) · 🔴 Critical (T4); `T#` stays in prompt headers. Side = full word; topic = matrix name exactly, Title Case. Modifiers, each after its own ` · `: `Scope −1`, `User: <what>`, `User Cap`, `Project Override`, `Merged: N Questions`, `Parallel`, `Fallback: <Model> Unavailable`. Several route lines: bullets.
 3. One subagent = one side (Read → Analyse → Plan → Work → Verify, separate small agents; Judge and Explain are the question gate's). Results flow forward as short summaries.
 4. `fable` only on Analyse and Plan. Never for Read, Work or Verify.
 5. `max` effort only through escalation, never as a start value.
 6. **Ultracode / Workflow tool: never without a clear yes from the user.** For huge jobs (30+ files) suggest it in one line with an agent count; wait.
 7. No subagent when the main session can finish in 1–3 tool calls, unless the user asks for one or says "use abofles".
 8. **Merge parallel reads**: same topic and tier → one Read agent with a numbered question list; split only for unrelated folders or a combined cap over 150 lines.
-9. **Model not available** (access/permission error): re-spawn one step down, effort up — `fable` → `opus·xhigh`, `opus` → `sonnet·xhigh`, `sonnet` → `haiku·high`; modifier `Fallback: Fable 5.1 Unavailable`. Never retry the same model.
-10. **Background spawns:** `run_in_background: false` unless in a parallel group (independent agents go in one message); for a background spawn **you** check `STATUS`/`CONFIDENCE` on arrival and apply Step 4. Details and fallback agents: [references/spawn-details.md](references/spawn-details.md).
+9. **Model not available** (access/permission error): restart one step down, effort up — `fable` → `opus·xhigh`, `opus` → `sonnet·xhigh`, `sonnet` → `haiku·high`; modifier `Fallback: Fable 5.1 Unavailable`. Never retry the same model.
+10. **Background agents:** `run_in_background: false` unless in a parallel group (independent agents go in one message); for a background agent **you** check `STATUS`/`CONFIDENCE` on arrival and apply Step 4. Details and fallback agents: [references/agent-details.md](references/agent-details.md).
 11. **Git:** every git or `gh` write (branch, worktree, commit, merge, rebase, conflict, push, PR, tag, release) goes through `abofles:abofles-git`; read-only git (status, log, diff, show, fetch) is free. Several sessions or agents on one project: it checks and records claims (`scripts/claims.py`). The hook's `Git guard = warn | deny | off` (default warn) flags a risky git command (force push, push --delete / :ref / --mirror / --prune, reset --hard / --merge / --keep, rebase, branch -D / -f / -M, tag -d / -f, clean -f, checkout -- paths / -f / -B, switch -f / -C, restore, stash drop / clear, commit --amend, update-ref, reflog expire, gc --prune=now, worktree remove -f, filter-branch, `git config alias.*`, …; seen through sudo, env, timeout, xargs, shell keywords, `sh -c`, `eval`, here-strings, `| sh`, `find -exec`, `-c alias.x=…`, `submodule foreach`, …) run outside it. The agent commits, pushes, rewrites history or opens a PR only on the user's quoted ask. Its prompt carries the session id (claims), the user's exact words in quotes when they asked to commit/push/rebase/PR, the commit/PR attribution lines from the system reminder, and the `Line cap`.
 
-A hook blocks breaches of rules 1 and 4; `abofles:skip` as the prompt's first word bypasses it once (non-coding spawns only).
+A hook blocks breaches of rules 1 and 4; `abofles:skip` as the prompt's first word bypasses it once (non-coding agents only).
 
 ## Step 0 — Main session check (once per session, then once per task)
 
-You know your model. Your effort comes from the hook line `abofles: session effort is <level>`; else the user's statement or a `Main session = …` override; the desktop `get_session` tool is the last resort ([references/agent-gate.md](references/agent-gate.md)). Else unknown: never infer it.
+You know your model. Your effort comes from the hook line `abofles: session effort is <level>`; else the user's statement or a `Main session = …` / `Sub session = …` override; the desktop `get_session` tool is the last resort ([references/agent-gate.md](references/agent-gate.md)). Else unknown: never infer it.
 
 | Main model | Mode | What it means |
 |---|---|---|
-| opus, fable | **Orchestrator** | Routes, spawns, reads replies, decides. Does **not** read code, grep, write code or run tests itself — every side goes through the matrix. A `Stop` hook refuses to end a turn that spawned agents without the receipt. A guard warns on direct-read streaks in any mode. |
+| opus, fable | **Orchestrator** | Routes, starts agents, reads replies, decides. Does **not** read code, grep, write code or run tests itself — every side goes through the matrix. A `Stop` hook refuses to end a turn that started agents without the receipt. A guard warns on direct-read streaks in any mode. |
 | haiku, sonnet | **Worker** | Fine for T1–T2 or pure coordination. For T3+ the gate offers `Switch main to Opus 5.5 and orchestrate`. |
 
-**Agent gate — once per session, before the first spawn.** The hook denies the first Agent call until you ask (unless `Agents = auto | N | off`). Size the task, then ask **one** `AskUserQuestion` whose text contains `Abo Fles agent gate`, options in this order, labels starting exactly:
+**Agent gate — once per session, before the first agent.** The hook denies the first Agent call until you ask (unless `Agents = auto | N | off`). Size the task, then ask **one** `AskUserQuestion` whose text contains `Abo Fles agent gate`, options in this order, labels starting exactly:
 1. `Auto (recommended)` 2. `This task: N agents` 3. `Main session only` 4. Orchestrator, Large task only: `Max: N agents · M parallel`; Worker mode (any tier): `Switch main to Opus 5.5 and orchestrate` — if chosen, reply with one line, `Pick Opus 5.5 in the model picker (bottom right), then send "go".`, and **end the turn** (the plugin cannot switch the model).
-The hook records the answer (`agents: …`) — continue, never re-ask; over an auto budget it raises the budget itself (twice per task, `Budget raise = auto`), over a fixed one or a third time it denies the spawn: finish in the main session or ask to raise it. Descriptions, sizing, budgets: [references/agent-gate.md](references/agent-gate.md).
+The hook records the answer (`agents: …`) — continue, never re-ask; over an auto budget it raises the budget itself (twice per task, `Budget raise = auto`), over a fixed one or a third time it denies the agent: finish in the main session or ask to raise it. Descriptions, sizing, budgets: [references/agent-gate.md](references/agent-gate.md).
 
-**Per task**, tier the task and compare with the table. The hook hands you a line at the first work spawn (`abofles: new task — print this line now … \`main: …\``): print it **as given, as the next line of your reply** (right after the first route line), every task — `main: <Model> · <Effort> fits this <Tier> task` when both match, else `main: suggest <Model> · <Effort> for this <Tier> task (now <current Model> · <Effort or 'effort unknown'>). Switch in the model picker, or say "keep".` Continue on the current setting; a resume block printed first never replaces it.
+**Per task**, tier the task and compare with the table. The hook hands you a line at the first work agent (`abofles: new task — print this line now … \`main: …\``): print it **as given, as the next line of your reply** (right after the first route line), every task — `main: <Model> · <Effort> fits this <Tier> task` when both match (`fits your setting` / `suggest …, your setting` under a `Main session` or `Sub session` override), else `main: suggest <Model> · <Effort> for this <Tier> task (now <current Model> · <Effort or 'effort unknown'>). Switch in the model picker, or say "keep".` Continue on the current setting; a resume block printed first never replaces it.
 
 | Task shape | Suggested main session |
 |---|---|
@@ -76,7 +76,7 @@ Two inputs: the topic's **tier** (Step 2) and the ask's **intent**. Print one wo
 | `change` 🟢 / 🟡 | add, fix, implement, refactor | Work → Verify / Read → Work → Verify |
 | `change` 🟠 / 🔴 | same | Read → Analyse → Plan → Work → Verify → Review |
 
-`Review` = the topic domain's specialist reviewers at that tier — the lookup prints them per topic (`reviewers T3 … · T4 …`; table in [references/workflow.md](references/workflow.md): Money → Finance; Security → Security; Databases → DBA; Cache/Search/Messaging and Performance → Perf; DevOps, Cloud, Edge, Servers, Observability → Ops; Data & Analytics → Data; Frontend/UX/Mobile → UIUX; Business, APIs, Integrations, AI → QA; Testing/Debugging → Tester; Code Health → Clean; PII and audit topics add Compliance), spawned **in parallel after Verify passes**, each at the tier's Verify cell with the header `abofles: <Topic> / <Tag> · T<tier>`. A reviewer FAIL → Work fixes → re-run that reviewer only. A step you drop (rule 7, or the ask makes it pointless) is fine — say so in the receipt's `workflow` line. On a 🔴 change the Plan's open decisions go through the Judge before Work starts. **Review gate** (hook): a 🔴 change closed without a required reviewer is refused once, naming them; 🟠 gets a 🟠 guide item; `Security skipped: <reason>` in the `workflow` line passes it. Overrides: `Workflow: <Domain|Topic> = …`, `Reviewers: <Domain|Topic> = …`, `Review: <Tag> / T<tier> = cell`, `Review gate = auto | on | warn | off` ([references/overrides.md](references/overrides.md)).
+`Review` = the topic domain's specialist reviewers at that tier — the lookup prints them per topic (`reviewers T3 … · T4 …`; table in [references/workflow.md](references/workflow.md): Money → Finance; Security → Security; Databases → DBA; Cache/Search/Messaging and Performance → Perf; DevOps, Cloud, Edge, Servers, Observability → Ops; Data & Analytics → Data; Frontend/UX/Mobile → UIUX; Business, APIs, Integrations, AI → QA; Testing/Debugging → Tester; Code Health → Clean; PII and audit topics add Compliance), started **in parallel after Verify passes**, each at the tier's Verify cell with the header `abofles: <Topic> / <Tag> · T<tier>`. A reviewer FAIL → Work fixes → re-run that reviewer only. A step you drop (rule 7, or the ask makes it pointless) is fine — say so in the receipt's `workflow` line. On a 🔴 change the Plan's open decisions go through the Judge before Work starts. **Review gate** (hook): a 🔴 change closed without a required reviewer is refused once, naming them; 🟠 gets a 🟠 guide item; `Security skipped: <reason>` in the `workflow` line passes it. Overrides: `Workflow: <Domain|Topic> = …`, `Reviewers: <Domain|Topic> = …`, `Review: <Tag> / T<tier> = cell`, `Review gate = auto | on | warn | off` ([references/overrides.md](references/overrides.md)).
 
 ## Step 2 — Find the topic and its tier
 
@@ -120,7 +120,7 @@ Escalate on `STATUS: partial|blocked`, `CONFIDENCE: low`, or verifier `VERDICT: 
 
 Stop after 2 escalations per subtask; report what failed. Never re-run at the same setting.
 
-After a verifier FAIL, re-verify only the failed criterion: [references/spawn-details.md](references/spawn-details.md).
+After a verifier FAIL, re-verify only the failed criterion: [references/agent-details.md](references/agent-details.md).
 
 ## Step 5 — Write the subagent prompt for low token use
 
@@ -131,13 +131,13 @@ After a verifier FAIL, re-verify only the failed criterion: [references/spawn-de
 
 ## Step 6 — Progress line, receipt, gates, memo
 
-Between spawns print only the route line and, for 2+ spawns, a progress line when it changes: `abofles [■■■□□] 3/5 · Plan ✓ · Work ✓ · Work ▶ · Verify · 142 u`
+Between agents print only the route line and, for 2+ agents, a progress line when it changes: `abofles [■■■□□] 3/5 · Plan ✓ · Work ✓ · Work ▶ · Verify · 142 u`
 
-After every task that spawned agents print the receipt as **plain markdown, never in a code block**: the 🧾 header, then bullets `done`, `why`, `check`, `workflow` (🟠/🔴 changes: each step and reviewer with ✓, or `<Tag> skipped: <reason>`), `open`, `next` (2+ items → indented sub-bullets). **The hook computes the header** — copy the newest `abofles: Receipt at task end … 🧾 **…**` exactly; `next` is the 🧭 line it hands you. The form (`full | short | savings N | off`) follows its note. `open` lists every `partial`, `blocked`, `low`, `NOTE: ATTENTION` or unresolved FAIL reply, plus anything the user must decide; never close with an ATTENTION unmentioned. Shape and example: [references/receipt-and-example.md](references/receipt-and-example.md).
+After every task that started agents print the receipt as **plain markdown, never in a code block**: the 🧾 header, then bullets `done`, `why`, `check`, `workflow` (🟠/🔴 changes: each step and reviewer with ✓, or `<Tag> skipped: <reason>`), `open`, `next` (2+ items → indented sub-bullets). **The hook computes the header** — copy the newest `abofles: Receipt at task end … 🧾 **…**` exactly; `next` is the 🧭 line it hands you. The form (`full | short | savings N | off`) follows its note. `open` lists every `partial`, `blocked`, `low`, `NOTE: ATTENTION` or unresolved FAIL reply, plus anything the user must decide; never close with an ATTENTION unmentioned. Shape and example: [references/receipt-and-example.md](references/receipt-and-example.md).
 
 - **Question gate**: a hook denies every `AskUserQuestion` bar the agent gate until a Judge has seen it; route by the decision's tier, follow the VERDICT (`ANSWERED` → don't ask; `ASK` → ask; `HANDOFF` → Explainer first). Read [references/question-gate.md](references/question-gate.md) first.
 - **Resume block** (`📍 **Resume**`) handed by a hook: print verbatim first, then the prompt; never rebuild it. **Context watch** block from the `Stop` hook: print verbatim as the turn's last output plus one line for the branch that applies (no task open / task open — see memo-resume.md). Memo, Needs-you, guide: [references/memo-resume.md](references/memo-resume.md).
-- **Session cap** warning: stop spawning, ask.
+- **Session cap** warning: stop starting agents, ask.
 
 Commands and editing this skill: [references/maintenance.md](references/maintenance.md).
 

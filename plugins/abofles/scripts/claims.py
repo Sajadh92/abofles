@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Abo Fles claims: who works on which branch and files of a repository, so several sessions and agents do not collide.
 
-    claims.py list                                       one line per live claim; overlaps flagged
+    claims.py list                                       one line per live claim; overlaps flagged (from a folder above several
+                                                         repositories: each repository's claims)
     claims.py claim --session S --branch B [--worktree W] [--files f ...]   record (or replace) S's claim
     claims.py heartbeat --session S                      keep S's claim alive
     claims.py release --session S                        drop S's claim
+    --repo <path> on any of them                         work on that repository instead of the current folder's
 
 The store is `<git rev-parse --git-common-dir>/abofles-claims.json`: inside .git, so it is never committed and every worktree of
 the repository shares it. One claim per session; a claim with no heartbeat for 2 hours drops out. An overlap is the same branch or
@@ -26,11 +28,25 @@ from abofles_hook import lock_file, unlock_file, replace_file  # noqa: E402
 TTL = 2 * 3600  # seconds without a heartbeat before a claim drops out
 
 
-def store_path():
-    r = subprocess.run(["git", "rev-parse", "--git-common-dir"], capture_output=True, text=True)
+def store_path(repo=None):
+    r = subprocess.run(["git", *(["-C", repo] if repo else []), "rev-parse", "--git-common-dir"], capture_output=True, text=True)
     if r.returncode != 0 or not r.stdout.strip():
         return None
-    return Path(os.path.abspath(r.stdout.strip())) / "abofles-claims.json"  # a relative answer (`.git`) is relative to the current folder
+    return Path(os.path.abspath(os.path.join(repo or ".", r.stdout.strip()))) / "abofles-claims.json"  # a relative answer (`.git`) is relative to the folder git ran in
+
+
+NOT_REPOS = {"node_modules", "bin", "obj", "vendor", "dist", "build"}
+
+
+def nested_repos(top=".", depth=3):
+    """The git repositories under a folder that is not one itself (a project root holding several): relative paths, sorted, hidden and build folders skipped."""
+    found = []
+    for root, dirs, files in os.walk(top):
+        rel = os.path.relpath(root, top)
+        if rel != "." and (".git" in dirs or ".git" in files):
+            found.append(rel)
+        dirs[:] = [] if (0 if rel == "." else rel.count(os.sep) + 1) >= depth else [d for d in dirs if not d.startswith(".") and d not in NOT_REPOS]
+    return sorted(found)
 
 
 _warned = False
@@ -178,9 +194,23 @@ def main():
     if cmd not in ("list", "claim", "heartbeat", "release"):
         print(__doc__.strip().split("\n\n")[0])
         sys.exit(2)
-    path = store_path()
+    repo = opt(args, "--repo")
+    if "--repo" in args and (not repo or repo.startswith("--")):  # an empty shell variable must not fall back to the current folder's repository
+        print("abofles: --repo needs a path")
+        sys.exit(2)
+    path = store_path(repo)
     if not path:
-        print("abofles: not in a git repository")
+        repos = [] if repo else nested_repos()
+        if cmd == "list" and repos:
+            now = time.time()
+            for r in repos:
+                p = store_path(r)
+                claims = live(read(p), now) if p else []
+                print(f"{r}: " + ("no claims" if not claims else ""))
+                for c in claims:
+                    print("  " + line(c, claims, now))
+            return
+        print("abofles: not in a git repository" + (f". Run this inside one, or add --repo <path>: {', '.join(repos[:8])}" if repos else ""))
         sys.exit(2)
     sess = opt(args, "--session")
     if cmd != "list" and not sess:

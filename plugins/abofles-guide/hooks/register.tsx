@@ -2,6 +2,7 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { Guide } from '../types'
 import { renderPane } from './pane'
+import { noteBackground, noteNotified, noteStep, noteTool, noteToolDone, noteTurnEnd, noteTurnStart, startTick } from './running'
 import {
   anyPane,
   autoOpen,
@@ -18,6 +19,7 @@ import {
   openPane,
   paneIsPlaced,
   plain,
+  noteCompact,
   refresh,
   setPaneOpen,
   undoRow,
@@ -54,24 +56,51 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     $.ui.status(undefined) // an entry an earlier build of this mod pinned: the band is enough
     try {
-      await $.command.register({ name: 'abofles-pane', description: 'Open or close the Abo Fles pane (guide, resume, spawns, overrides)' })
+      await $.command.register({ name: 'abofles-pane', description: 'Open or close the Abo Fles pane (guide, resume, agents, overrides)' })
     } catch {
       // the command file of the abofles plugin still answers /abofles:pane
     }
     await loadFolds($)
     await refresh($)
     await autoOpen($)
+    startTick($)
+    return next(e)
+  })
+
+  // What runs now, for the Running page (running.tsx). Each note catches its own failure: the tool or the model call goes on whatever happens there.
+  on('turn.start', async ($, e, next) => {
+    await noteTurnStart($, e.agentId)
+    return next(e)
+  })
+
+  on('turn.step', async function* ($, e, next) {
+    const r = yield* next(e)
+    await noteStep($, e, r)
+    return r
+  })
+
+  on('tool.call', async ($, e, next) => {
+    await noteTool($, e)
+    const ran = await next(e)
+    await noteToolDone($, e, ran)
+    return ran
+  })
+
+  on('session.append', async ($, e, next) => {
+    if (e.origin.kind === 'task-notification') await noteNotified($, e.message)
     return next(e)
   })
 
   on('turn.complete', async ($, e, next) => {
     const result = await next(e)
+    await noteTurnEnd($, e.agentId)
     await refresh($)
     return result
   })
 
   on('classic.Stop', async ($, e, next) => {
     const result = await next(e)
+    await noteBackground($, e)
     await refresh($)
     return result
   }).catch(($, e, next) => next(e)) // a failed refresh must not change the Stop result
@@ -79,6 +108,7 @@ export const register: Register = on => {
   // The pane's live spawns: a subagent ended, or a tool (the Agent tool's spawn among them) ran.
   on('classic.SubagentStop', async ($, e, next) => {
     const result = await next(e)
+    await noteBackground($, e)
     await refresh($)
     await autoOpen($)
     return result
@@ -90,6 +120,23 @@ export const register: Register = on => {
     await autoOpen($)
     return result
   }).catch(($, e, next) => next(e))
+
+  // A compact shrinks the context and rewrites the memo, and no turn ends with it: nothing else redraws the pane until the next reply.
+  on('classic.PostCompact', async ($, e, next) => {
+    const result = await next(e)
+    await refresh($)
+    return result
+  }).catch(($, e, next) => next(e))
+
+  // The size after a compact. The transcript gets it only after the hooks ran, so PostCompact cannot read it there.
+  // No `.catch` that calls next again: it would compact twice. noteCompact never throws.
+  on('session.compact', async ($, e, next) => {
+    const main = !e.agentId && e.trigger !== 'precompute'
+    if (main) await noteCompact($, null)
+    const result = await next(e)
+    if (main) await noteCompact($, result.skip ? null : result.tokensAfter ?? null)
+    return result
+  })
 
   // The person's command, by the name the engine gives a plugin's command file (`<plugin>:<name>`) and by the alias this mod registers.
   on('command.run', { command: 'abofles:pane' }, $ => togglePane($)).catch(($, e, next) => next(e)) // a failure leaves the command file to answer

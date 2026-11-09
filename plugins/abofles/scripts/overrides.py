@@ -61,6 +61,8 @@ def clean_value(key, spec, value):
         return ", ".join(str(int(p)) for p in parts)
     if not v:
         raise Bad(f"{key}: empty value (use \"\" to remove the key)")
+    if key in ("Main session", "Sub session") and not H.pick_of(v):
+        raise Bad(f"{key}: '{v}' is not a model and effort, e.g. opus.medium")
     return v
 
 

@@ -6,7 +6,7 @@ tools: Read, Glob, Grep, Edit, Write, Bash
 
 You are the Act & Work side of Abo Fles. You make the change. You do not redesign, and you do not widen the scope.
 
-The spawning prompt gives you: the plan or findings to apply, the files, constraints, what "done" means, and a line cap.
+Your prompt gives you: the plan or findings to apply, the files, constraints, what "done" means, and a line cap.
 
 ## Reply format — exactly this, nothing before or after
 

@@ -54,6 +54,8 @@ const CSS = [
   // no app colour written on the root (a surface without one): the theme's text colour by the media query
   'svg:not([color]) .root{color:#1f1e1d}@media (prefers-color-scheme:dark){svg:not([color]) .root{color:#ececec}}',
   '.root *{box-sizing:border-box;margin:0;padding:0;min-width:0}',
+  // a card fills its picture: when a line was estimated too many, the room stays inside the card, so the gap between cards is always the same
+  '.root>.card{min-height:100%}',
   `.card{border:1px solid ${mix('currentColor', 14)};border-radius:10px;background:${mix('currentColor', 3)};overflow:hidden}`,
   `.sec{padding:${PAD}px}.sec+.sec{border-top:1px solid ${mix('currentColor', 10)}}`,
   `.col{display:flex;flex-direction:column;gap:${GAP}px}`,
@@ -62,6 +64,7 @@ const CSS = [
   '.row .grow{text-align:start}', // a line keeps the column's leading edge (dir=auto still orders an Arabic line's words)
   '.one{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
   `.clamp{display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}`,
+  '.whole{overflow-wrap:anywhere}',
   '.dim{opacity:.7}.faint{opacity:.62}', // 6:1 and 4.6:1 on white; more in dark
   `.cap{font-size:11px;line-height:${CAP}px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;opacity:.66;white-space:nowrap}`,
   `.small{font-size:12px;line-height:${CAP}px}`,
@@ -92,7 +95,7 @@ const CSS = [
   '.lead{display:flex;align-items:flex-start;gap:8px}',
   `.nb{flex:none;display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 6px;border-radius:10px;font-size:12px;font-weight:650;font-variant-numeric:tabular-nums;background:${mix('var(--c)', 17)};color:color-mix(in srgb,var(--c) 50%,currentColor)}`,
   '.bul{flex:none;width:6px;height:6px;margin:7px 0;border-radius:50%;background:currentColor;opacity:.45}',
-  '.arrow{flex:none;width:12px;opacity:.5}',
+  '.arrow{flex:none;width:12px;opacity:.5}.arrow:dir(rtl){transform:scaleX(-1)}',
   `.hair{height:1px;background:${mix('currentColor', 9)}}`,
   '.big{font-size:16px;line-height:20px;font-weight:650;white-space:nowrap}',
   `.bar{display:flex;gap:2px;height:6px}.bar i{display:block;flex:none;height:6px;border-radius:3px;background:var(--c)}.bar .rest{flex:1 1 auto;background:${mix('currentColor', 12)}}`,
@@ -100,10 +103,11 @@ const CSS = [
   '.mt{font-size:12px;line-height:16px;height:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.mt .q{opacity:.7}',
   '.word{font-weight:650;letter-spacing:.03em}',
   // a receipt detail's kind (check, open, next, flow) as a small word in its tone, in a column of its own
-  '.lbl{flex:none;width:44px;font-size:10px;line-height:16px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:color-mix(in srgb,var(--c) 50%,currentColor)}',
+  '.lbl.word{width:auto}.lbl{flex:none;width:44px;font-size:10px;line-height:16px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:color-mix(in srgb,var(--c) 50%,currentColor)}',
   '.mt2{display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere;font-size:12px;line-height:16px}.mt2 .q{opacity:.7}',
   '.pad{padding-inline-start:16px}',
-  '.c1{flex:none;width:28px;text-align:end}.c2{flex:none;width:56px;text-align:end}.c3{flex:none;width:36px;text-align:end}',
+  '.c0{flex:none;width:52px;text-align:end}.c1{flex:none;width:56px;text-align:end}.c2{flex:none;width:56px;text-align:end}.c3{flex:none;width:40px;text-align:end}',
+  `.row.thead{height:${CAP}px}.sw0{flex:none;width:8px}`, // a table's column titles: the empty swatch keeps Model on the labels' edge
   // a page's cards slide in when the person moves to it (a short ease-out, one after another); none for reduced motion
   '.enter{animation:enter .26s cubic-bezier(.2,.8,.2,1) both}@keyframes enter{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}',
   '@media (prefers-reduced-motion:reduce){.enter{animation:none}}',
@@ -125,6 +129,20 @@ export const esc = (t: string): string =>
 
 // A block of a card: its markup and its height in px.
 export type Block = { html: string; h: number }
+
+// A block's visible text, one line per element: what a picture with no alt of its own says.
+export const textOf = (html: string): string =>
+  html
+    .replace(/<[^>]+>/g, '\n')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&amp;/g, '&')
+    .split('\n')
+    .map(l => l.trim())
+    .filter(Boolean)
+    .join('\n')
 
 // The pane's width in px from its width in cells (a cell is 1ch of the pane's body font: about 9 px, read off the app), and the room a text has
 // inside a card's section (borders and padding off).
@@ -209,13 +227,18 @@ export function cardOf(sections: (Block | null)[]): Block {
 // A fact: a label and its value held between two edges (no divider needed), an optional meter under it (`pct` of the track, in
 // `tone`) and an optional muted line under that (`sub`). `tone` colours the value where it carries meaning (a budget at 0).
 // A meter or a note is tucked 4 px under its fact (`.tuck` takes 4 px back from the row gap); its `h` counts that.
-export type Fact = { label: string; value: string; tone?: Tone; meter?: { pct: number; tone: Tone }; sub?: string }
-export function facts(list: Fact[]): Block {
+// `subMark` is the part of `sub` the reader acts on, drawn in amber. With `room` a long `sub` wraps to two lines; without it the line is cut.
+export type Fact = { label: string; value: string; tone?: Tone; meter?: { pct: number; tone: Tone }; sub?: string; subMark?: string }
+export function facts(list: Fact[], room = 0): Block {
   const parts: Block[] = []
   for (const f of list) {
     parts.push({ html: `<div class="fact"><span class="k">${esc(f.label)}</span><span class="v${f.tone ? ` ink t-${f.tone}` : ''}" dir="auto">${esc(f.value)}</span></div>`, h: LINE })
     if (f.meter) parts.push({ html: `<div class="track tuck"><div class="fill t-${f.meter.tone}" style="width:${Math.max(0, Math.min(100, f.meter.pct)).toFixed(1)}%"></div></div>`, h: 4 - 4 })
-    if (f.sub) parts.push({ html: `<div class="small dim one tuck" dir="auto">${esc(f.sub)}</div>`, h: CAP - 4 })
+    if (f.sub) {
+      const n = room ? Math.min(2, estLines(f.sub, room, 12)) : 1
+      const text = f.subMark && f.sub.includes(f.subMark) ? f.sub.split(f.subMark).map(x => `<span class="dim">${esc(x)}</span>`).join(`<span class="ink t-amber">${esc(f.subMark)}</span>`) : `<span class="dim">${esc(f.sub)}</span>`
+      parts.push({ html: `<div class="small tuck ${n > 1 ? 'clamp' : 'one'}" dir="auto"${n > 1 ? ` style="-webkit-line-clamp:${n}"` : ''}>${text}</div>`, h: n * CAP - 4 })
+    }
   }
   return stack(parts, GAP)
 }
@@ -285,7 +308,7 @@ export function guideBlock(g: GuideIn): { block: Block; more: boolean } {
     )
     sections.push(stack([{ html: '<div class="cap">Also open</div>', h: CAP }, ...rows], GAP))
   }
-  if (g.facts.length > 0) sections.push(facts(g.facts))
+  if (g.facts.length > 0) sections.push(facts(g.facts, room))
   return { block: cardOf(sections), more }
 }
 
@@ -322,15 +345,19 @@ export function headerBlock(icon: IconName, tone: Tone, title: string, summary?:
   return { html: `<div class="head"><span class="htile t-${tone}">${iconSvg(icon)}</span><span class="title grow">${esc(title)}</span>${right}</div>`, h: 24 }
 }
 
+// The room a header strip's parts take, when a button shares its row: a little over what they need, since the picture cuts and the row's free space is blank anyway.
+export const headerWidth = (title: string, summary?: string | null): number =>
+  PAD + 1 + 24 + 8 + Math.ceil(Array.from(title).length * 8.6) + (summary ? 8 + Array.from(summary).length * 8 + 16 : 0) + 2
+
 // A section's icon tile alone, as the header strip draws it (the icon in `tone` on a tint of it), as a picture `size` px square:
 // the nav bar's items. `on` (the page shown) fills the tile with the tone and draws the icon white on it — outline at rest, fill
 // for the active one.
 // `dy` px of room above the tile: the desktop sets a picture on its line a little high, so the nav bar drops the tile to centre
-// it on the button laid over it.
-export function tileSvg(icon: IconName, tone: Tone, size = 32, on = false, dy = 0): string {
+// it on the button laid over it. `dot`: something runs on that page, seen from every other page.
+export function tileSvg(icon: IconName, tone: Tone, size = 32, on = false, dy = 0, dot = false): string {
   const t = size - 2
   const fill = on ? 'background:color-mix(in srgb,var(--c) 80%,#000);color:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25)' : ''
-  return svgOf({ html: `<div style="padding-top:${dy}px"><span class="htile t-${tone}" style="width:${t}px;height:${t}px;border-radius:10px;${fill}">${iconSvg(icon, Math.round(t * 0.56), on ? 2.25 : 2)}</span></div>`, h: t + dy }, size)
+  return svgOf({ html: `<div style="padding-top:${dy}px"><span class="htile t-${tone}" style="position:relative;width:${t}px;height:${t}px;border-radius:10px;${fill}">${iconSvg(icon, Math.round(t * 0.56), on ? 2.25 : 2)}${dot ? `<span style="position:absolute;top:3px;inset-inline-end:3px;width:7px;height:7px;border-radius:50%;background:${on ? '#fff' : 'var(--c)'}"></span>` : ''}</span></div>`, h: t + dy }, size)
 }
 
 // A group's caption inside a card, with an optional count at the right (a pill in `tone`, else muted).
@@ -380,19 +407,27 @@ export function emptyCard(text: string, paneW: number): Block {
 
 // A text clamped to its estimated lines, at most `max` (the whole text is on the section's detail page). The estimate runs on a
 // room 6% short: a text that may need one more line gets it, so a short estimate never hides a last word.
+// `max` = WHOLE on a detail page: the text is never cut. There the estimate runs on a room 14% short: on 3,450 real memo texts at six widths, no line was left out.
+const WHOLE_ROOM = 0.86
+export const WHOLE = 99
 function fit(text: string, room: number, max: number, cls = ''): Block {
-  return clamped(text, Math.min(estLines(text, room * 0.94, 14, /\bb\b/.test(cls)), max), cls)
+  const need = estLines(text, room * (max >= WHOLE ? WHOLE_ROOM : 0.94), 14, /\bb\b/.test(cls))
+  if (max >= WHOLE) return { html: `<div class="whole ${cls}" dir="auto">${esc(text)}</div>`, h: need * LINE } // its own height: a spare estimated line falls under the card, not inside a row
+  return clamped(text, Math.min(need, max), cls)
 }
 
 // The same at the small size (12 px on a 16 px line, muted); SF Pro Text tracks wider at 12 px than at 14 (+5%).
 function fitSmall(text: string, room: number, max: number): Block {
+  if (max >= WHOLE) return { html: `<div class="whole small dim" dir="auto">${esc(text)}</div>`, h: estLines(text, (room * WHOLE_ROOM) / 1.05, 12) * CAP }
   return clamped(text, Math.min(estLines(text, (room * 0.94) / 1.05, 12), max), 'small dim', CAP)
 }
 
 // A row with a lead on its text's first line: a dot, a number, a bullet, an arrow.
 function leadRow(lead: string, leadW: number, text: string, room: number, max: number, cls = ''): Block {
   const f = fit(text, room - leadW - GAP, max, cls)
-  return { html: `<div class="lead">${lead}<div class="grow">${f.html}</div></div>`, h: f.h }
+  // named here, as `dir=auto` skips a child with its own dir: an Arabic text keeps its lead beside it
+  const rtl = /[\u0590-\u08ff]/.test(/[A-Za-z\u0590-\u08ff]/.exec(text)?.[0] ?? '')
+  return { html: `<div class="lead" dir="${rtl ? 'rtl' : 'ltr'}">${lead}<div class="grow">${f.html}</div></div>`, h: f.h }
 }
 
 // ---- Resume
@@ -417,16 +452,18 @@ function detailRow(kind: string, text: string, room: number): Block {
   return { html: `<div class="lead">${lead}<div class="grow">${f.html}</div></div>`, h: f.h }
 }
 
-export type Receipt = { time: string; spawns: string | null; usd: string | null; saved: string | null; text: string; details: string[] }
+export type Receipt = { time: string; spawns: string | null; usd: string | null; saved: string | null; tokens?: string | null; money?: string | null; text: string; details: string[] } // money: `73% saved ($0.09) vs Opus 5.5`
 
 // A receipt as a card of its own: the time and the cost on two edges; what was done as its headline (body text, two lines, then
 // its Full details); the spawns and the saving; then, under a hairline, the other details as quiet labelled rows.
+const RECEIPT_MORE = new Set(['why', 'workflow', 'next', 'largest'])
 export function receiptCard(x: Receipt, paneW: number): Block {
   const room = textRoom(paneW)
   const kinds = x.details.map(kindOf)
   const done = kinds.find(k => k.kind === 'done')
   const headline = done?.text ?? (x.text || kinds[0]?.text || '')
-  const rest = kinds.filter(k => k !== done && (done || x.text || k !== kinds[0]))
+  // the short card: what was done, how it was checked, what is open; the rest is on its Full details page
+  const rest = kinds.filter(k => k !== done && !RECEIPT_MORE.has(k.kind) && (done || x.text || k !== kinds[0]))
   const top: Block = { html: `<div class="fact"><span class="cap k">${esc(x.time)}</span><span class="v">${esc(x.usd ?? '')}</span></div>`, h: LINE }
   const stat: Block | null = x.spawns ? { html: `<div class="mt"><span class="q">${esc(x.spawns)}</span>${x.saved ? ` <span class="q">·</span> <span class="ink t-green">${esc(x.saved)} saved</span>` : ''}</div>`, h: CAP } : null
   const head = stack([top, headline ? fit(headline, room, 2) : null, stat], 4)
@@ -443,7 +480,7 @@ export type ResumeIn = {
   paneW: number
   now: string[]
   next: string[]
-  needs: { n: string; text: string }[] // the ones shown
+  needs: { n: string; text: string; other?: boolean }[] // the ones shown; other: another session's or project's, information only
   needsOpen: number
   left: string[] // the ones shown
   facts: Fact[] // Session, Memo saved, Away
@@ -451,6 +488,17 @@ export type ResumeIn = {
 
 // The Resume cards: where the work stands (Now, Next), what needs the owner (numbered), what is left, and the memo's facts. Each
 // is a card of its own so its buttons sit right under it; the receipts are cards of their own (receiptCard).
+// An item of another session or project: information, a step back from the owner's own items (muted text, marked).
+function otherRow(text: string, room: number, max = 2): Block {
+  return leadRow(BUL, 6, `${text} · other`, room, max, 'dim')
+}
+
+// The items of other sessions and projects, once Show others is pressed.
+export function othersBlock(n: number, rows: { text: string }[], paneW: number): Block {
+  const room = textRoom(paneW)
+  return cardOf([stack([capRow('Other sessions and projects', String(n)), ruledRows(rows.map(r => leadRow(BUL, 6, r.text, room, 2, 'dim')))], GAP)])
+}
+
 export function resumeBlocks(r: ResumeIn): { status: Block | null; needs: Block | null; left: Block | null; facts: Block | null } {
   const room = textRoom(r.paneW)
   const lines = (title: string, list: string[]) => (list.length === 0 ? null : stack([capRow(title), ...list.map(t => fit(t, room, 3))], 4))
@@ -460,65 +508,113 @@ export function resumeBlocks(r: ResumeIn): { status: Block | null; needs: Block 
   const needs =
     r.needs.length === 0
       ? null
-      : cardOf([stack([capRow('Needs you', String(r.needsOpen), 'amber'), ruledRows(r.needs.map(n => leadRow(`<span class="nb t-amber">${esc(n.n)}</span>`, 20, n.text, room, 2)))], GAP)])
+      : cardOf([stack([capRow('Needs you', String(r.needsOpen), 'amber'), ruledRows(r.needs.map(n => (n.other ? otherRow(n.text, room) : leadRow(BUL, 6, n.text, room, 2))))], GAP)])
   const left = r.left.length === 0 ? null : cardOf([stack([capRow('Left'), ...r.left.map(t => leadRow('<span class="bul"></span>', 6, t, room, 2))], 4)])
   return { status, needs, left, facts: r.facts.length > 0 ? cardOf([facts(r.facts)]) : null }
 }
 
 // ---- Spawns
 
-export type SpawnRow = { tone: Tone; side: string; desc: string; cost: string; meta: string; word: string; wordTone: Tone | null }
-export type SpawnsIn = {
-  paneW: number
+export type SpawnRow = { tone: Tone; side: string; desc: string; cost: string; meta: string; word: string; wordTone: Tone | null; now?: string } // now: what a running one does, its last tool
+export type SpendIn = {
   saved: string // "54% saved"
   versus: string // "$0.41 of $0.90 on Opus 5.5"
-  models: { label: string; tone: Tone; spawns: number; usd: string; pct: number }[]
+  models: { label: string; tone: Tone; tokens: string; spawns: number; usd: string; pct: number }[] // tokens: '' when no agent of the model reported any
   facts: Fact[] // Tokens, Open FAIL
-  live: SpawnRow[]
+}
+export type SpawnsIn = SpendIn & {
+  paneW: number
   days: { label: string; rows: SpawnRow[] }[] // the history rows shown, newest first, by day
   updated: string | null // "Updated 15:30 · refreshes when a turn ends"
 }
 
 // A spawn: its status dot, the side in semibold and the cost at the right; the ask under it (two lines; the whole ask is on the
 // detail page); the muted meta line (time, model, tokens) with the status word in its tone.
-function spawnBlock(x: SpawnRow, room: number): Block {
+function spawnBlock(x: SpawnRow, room: number, max = 2): Block {
   const top: Block = { html: `<div class="row"><span class="dot t-${x.tone}"></span><span class="b grow one" dir="auto">${esc(x.side || '?')}</span>${x.cost ? `<span class="dim num fix">${esc(x.cost)}</span>` : ''}</div>`, h: LINE }
-  const d = x.desc ? fit(x.desc, room - 16, 2) : null
+  const d = x.desc ? fit(x.desc, room - 16, max) : null
   const word = x.word ? ` · <span class="word${x.wordTone ? ` ink t-${x.wordTone}` : ''}">${esc(x.word)}</span>` : ''
   // the meta line wraps to a second line rather than cutting the tokens or the status word
   const metaText = [x.meta, x.word].filter(Boolean).join(' · ')
-  const n = Math.min(2, estLines(metaText, room - 16, 12))
+  const n = max >= WHOLE ? estLines(metaText, (room - 16) * WHOLE_ROOM, 12) : Math.min(2, estLines(metaText, room - 16, 12))
   const meta: Block | null = metaText
     ? { html: `<div class="mt2 pad" style="-webkit-line-clamp:${n};height:${n * CAP}px"><span class="q">${esc(x.meta)}</span>${x.meta ? word : word.replace(/^ · /, '')}</div>`, h: n * CAP }
     : null
-  return stack([top, d ? { ...d, html: `<div class="pad">${d.html}</div>` } : null, meta], 4)
+  const now: Block | null = !x.now
+    ? null
+    : max >= WHOLE
+      ? { html: `<div class="whole small pad ink t-blue" dir="auto">${esc(x.now)}</div>`, h: estLines(x.now, (room - 16) * WHOLE_ROOM, 12) * CAP }
+      : { html: `<div class="mt pad ink t-blue" dir="auto">${esc(x.now)}</div>`, h: CAP }
+  return stack([top, d ? { ...d, html: `<div class="pad">${d.html}</div>` } : null, now, meta], 4)
 }
 
-export function spawnsBlocks(s: SpawnsIn): { spend: Block; running: Block | null; history: Block[] } {
-  const room = textRoom(s.paneW)
-  const row = (x: SpawnRow) => spawnBlock(x, room)
+// The room the spend table's five columns need: the swatch, `Sonnet 5.5` and the four numbers, 8 px apart.
+const SPEND_TABLE = 324
+
+// The saving and the spend split by model, on the Spawns page and on Home (`head` titles it there). A pane too narrow for the
+// table puts the numbers under each model, every one with its word, so they never lose their column title.
+export function spendCard(s: SpendIn, paneW: number, head: Block | null = null): Block {
+  const room = textRoom(paneW)
+  const wide = room >= SPEND_TABLE
   // the saving as the headline, what it compares under it: the full line at any width
   const top = stack([{ html: `<div class="big">${esc(s.saved)}</div>`, h: 20 }, { html: `<div class="mt"><span class="q num">${esc(s.versus)}</span></div>`, h: CAP }], 2)
   const bar: Block | null =
     s.models.length === 0
       ? null
       : { html: `<div class="bar">${s.models.filter(m => m.pct > 0).map(m => `<i class="t-${m.tone}" style="width:calc(${Math.max(1, m.pct).toFixed(1)}% - 2px)"></i>`).join('')}<i class="rest"></i></div>`, h: 6 }
-  const legend = s.models.map(
-    (m): Block => ({
-      html: `<div class="row"><span class="sw t-${m.tone}"></span><span class="grow one">${esc(m.label)}</span><span class="c1 dim num">${m.spawns}</span><span class="c2 dim num">${esc(m.usd)}</span><span class="c3 num">${m.pct}%</span></div>`,
-      h: LINE,
-    }),
-  )
-  const spend = cardOf([stack([top, bar, ...legend], GAP), s.facts.length > 0 ? facts(s.facts) : null])
-  const running = s.live.length === 0 ? null : cardOf([stack([capRow('Running', String(s.live.length), 'blue'), ruledRows(s.live.map(row))], GAP)])
-  const rows: Block[] = []
-  s.days.forEach(d => {
-    d.rows.forEach((x, i) => rows.push(i === 0 && d.label ? stack([{ html: `<div class="cap faint">${esc(d.label)}</div>`, h: CAP }, row(x)], GAP) : row(x)))
+  const titles: Block | null =
+    wide && s.models.length > 0
+      ? { html: '<div class="row thead"><span class="sw0"></span><span class="cap grow">Model</span><span class="cap c0">Tokens</span><span class="cap c1">Agents</span><span class="cap c2">Cost</span><span class="cap c3">%</span></div>', h: CAP }
+      : null
+  const rows = s.models.map((m): Block => {
+    const name = `<span class="sw t-${m.tone}"></span><span class="grow one">${esc(m.label)}</span>`
+    if (wide) return { html: `<div class="row">${name}<span class="c0 dim num">${esc(m.tokens || '—')}</span><span class="c1 dim num">${m.spawns}</span><span class="c2 dim num">${esc(m.usd)}</span><span class="c3 num">${m.pct}%</span></div>`, h: LINE }
+    const words = [m.tokens ? `${m.tokens} tokens` : '', `${m.spawns} agent${m.spawns === 1 ? '' : 's'}`, m.usd].filter(Boolean).join(' · ')
+    const n = Math.min(2, estLines(words, room - 16, 12))
+    return stack([{ html: `<div class="row">${name}<span class="c3 num">${m.pct}%</span></div>`, h: LINE }, { html: `<div class="mt2 pad" style="-webkit-line-clamp:${n};height:${n * CAP}px"><span class="q">${esc(words)}</span></div>`, h: n * CAP }], 2)
   })
+  return cardOf([stack([head, top, bar, titles, ...rows], GAP), s.facts.length > 0 ? facts(s.facts) : null])
+}
+
+// The history rows, each day's first under its muted caption.
+function dayRows(days: SpawnsIn['days'], row: (x: SpawnRow) => Block): Block[] {
+  return days.flatMap(d => d.rows.map((x, i) => (i === 0 && d.label ? stack([{ html: `<div class="cap faint">${esc(d.label)}</div>`, h: CAP }, row(x)], GAP) : row(x))))
+}
+
+export function spawnsBlocks(s: SpawnsIn): { spend: Block; history: Block[] } {
+  const room = textRoom(s.paneW)
+  const row = (x: SpawnRow) => spawnBlock(x, room)
+  const spend = spendCard(s, s.paneW)
+  const rows = dayRows(s.days, row)
   const un = s.updated ? Math.min(2, estLines(s.updated, room, 12)) : 0
   const foot: Block | null = s.updated ? { html: `<div class="mt2" style="-webkit-line-clamp:${un};height:${un * CAP}px"><span class="q">${esc(s.updated)}</span></div>`, h: un * CAP } : null
   const history = rows.length === 0 ? [] : listCards(capRow('History', 'newest first'), rows, foot)
-  return { spend, running, history }
+  return { spend, history }
+}
+
+// ---- Running
+
+// One running agent or command in a card of its own: its buttons sit under the picture, so each gets its own. Its `cost` holds the elapsed time.
+export const runCard = (x: SpawnRow, paneW: number, max = 2): Block => cardOf([spawnBlock(x, textRoom(paneW), max)])
+
+// Its Full details page: the tools it ran, newest first, each with its time on the text's first line.
+const RECENT_WHEN = 56 // `15:59:02` at 12 px, tabular
+export function runRecent(rows: { when: string; text: string }[], paneW: number): Block {
+  const room = textRoom(paneW)
+  return cardOf([stack([capRow('Recent tools', String(rows.length)), stack(rows.map(r => leadRow(`<span class="small dim num fix" style="width:${RECENT_WHEN}px;line-height:${LINE}px">${esc(r.when)}</span>`, RECENT_WHEN, r.text, room, WHOLE)), GAP)], GAP)])
+}
+
+// A command's Full details page: the end of its output, or one muted line saying why there is none.
+export function runOutput(lines: string[], note: string | null, paneW: number): Block {
+  const room = textRoom(paneW)
+  const body = lines.length ? stack(lines.map(l => fitSmall(l, room, WHOLE)), 2) : fitSmall(note ?? '', room, WHOLE)
+  return cardOf([stack([capRow('Output', lines.length ? (note ?? null) : null), body], GAP)])
+}
+
+// Home's card: what runs now, the first few rows, with the whole count.
+export function runningHome(rows: SpawnRow[], n: number, paneW: number): Block {
+  const room = textRoom(paneW)
+  return cardOf([stack([capRow('Running', String(n), 'blue'), ruledRows(rows.map(x => spawnBlock(x, room)))], GAP)])
 }
 
 // ---- Decisions
@@ -527,7 +623,7 @@ export type DecisionRow = { when: string; q: string; a: string; note: boolean }
 
 // A decision: its time small and muted, the question, then the answer after an arrow in semibold — what was decided reads at a
 // glance. A note is its text alone.
-export function decisionCards(title: string, n: number, rows: DecisionRow[], paneW: number): Block[] {
+export function decisionCards(title: string, n: number, rows: DecisionRow[], paneW: number, max = 2): Block[] {
   const room = textRoom(paneW)
   const head = capRow(title, String(n))
   if (rows.length === 0) return [cardOf([stack([head, { html: '<div class="dim">No decisions yet</div>', h: LINE }], GAP)])]
@@ -535,8 +631,8 @@ export function decisionCards(title: string, n: number, rows: DecisionRow[], pan
     stack(
       [
         { html: `<div class="mt"><span class="q num">${esc(d.when)}</span></div>`, h: CAP },
-        fit(d.note ? d.a : d.q, room, 2),
-        d.note ? null : leadRow('<span class="arrow">→</span>', 12, d.a, room, 2, 'b'),
+        fit(d.note ? d.a : d.q, room, max),
+        d.note ? null : leadRow('<span class="arrow">→</span>', 12, d.a, room, max, 'b'),
       ],
       4,
     ),
@@ -547,14 +643,30 @@ export function decisionCards(title: string, n: number, rows: DecisionRow[], pan
 // ---- Overrides
 
 // The keys set in a CLAUDE.md, the value and where it is set held at the right; a muted line on the rest.
-export function overridesBlock(rows: { key: string; value: string; where: string }[], note: string): Block {
-  const list = rows.map(
-    (k): Block => ({
-      html: `<div class="fact"><span class="k one">${esc(k.key)}</span><span class="row" style="gap:8px;min-width:0"><span class="b one" dir="auto">${esc(k.value)}</span><span class="pill t-grey">${esc(k.where)}</span></span></div>`,
-      h: LINE,
-    }),
-  )
-  return cardOf([list.length > 0 ? ruledRows(list) : null, { html: `<div class="small dim">${esc(note)}</div>`, h: CAP }])
+// One setting of the Overrides card, nothing cut: the name and its value between the two edges, the value under the name when both do not fit on a line;
+// then what the setting does, muted.
+function overrideRow(k: { key: string; value: string; help?: string }, room: number): Block {
+  const fits = estLines(`${k.key}    ${k.value}`, room) === 1
+  const top: Block = fits
+    ? { html: `<div class="row"><span class="fix">${esc(k.key)}</span><span class="grow"></span><span class="b fix" dir="auto">${esc(k.value)}</span></div>`, h: LINE }
+    : stack([{ html: `<div class="one">${esc(k.key)}</div>`, h: LINE }, fit(k.value, room, WHOLE, 'b')], 2)
+  return stack([top, k.help ? fitSmall(k.help, room, WHOLE) : null], 2)
+}
+
+// The small badge beside an overridden setting's name on the Edit page: a picture, as a mod's Text has no fill. Returns its SVG and its width.
+export const chipSvg = (text: string, tone: Tone): { source: string; width: number } => {
+  const width = Math.round(Array.from(text).length * 9 + 18)
+  return { source: svgOf({ html: `<span class="pill t-${tone}">${esc(text)}</span>`, h: 20 }, width), width }
+}
+
+// The Overrides page: one card per place a setting applies, so the scope is said once and the two read as separate lists. What the rest uses is about both, so it
+// stands under them, on the cards' content inset.
+export function overridesBlocks(groups: { title: string; rows: { key: string; value: string; help?: string }[] }[], note: string, paneW: number): { cards: Block[]; note: Block } {
+  const room = textRoom(paneW)
+  return {
+    cards: groups.filter(g => g.rows.length > 0).map(g => cardOf([stack([capRow(g.title, String(g.rows.length)), ruledRows(g.rows.map(k => overrideRow(k, room)))], GAP)])),
+    note: { html: `<div class="small dim" style="padding-inline:${PAD + 1}px">${esc(note)}</div>`, h: CAP },
+  }
 }
 
 // ---- Home
@@ -564,15 +676,16 @@ export type HomeIn = {
   top: CardItem | null // the Guide's top item
   clear: { title: string; text: string } | null // nothing open: what the memo says next
   glance: Fact[] // the numbers that matter now, from every section
+  spend: (SpendIn & { spawns: number }) | null // the Spawns page's spend card, with the count for its title
   now: string | null
   next: string | null
   decision: DecisionRow | null // the newest decision
   receipt: { time: string; text: string } | null // the newest receipt: what was done
 }
 
-// The Home page: the one thing to do next (the Guide's top item), the numbers that matter at a glance, where the work stands, and
+// The Home page: the one thing to do next (the Guide's top item), the numbers that matter at a glance, the spend, where the work stands, and
 // the latest decision and receipt — each section's most important line, so the other pages are for the detail.
-export function homeBlocks(h: HomeIn): { next: Block; more: boolean; glance: Block | null; where: Block | null; latest: Block | null } {
+export function homeBlocks(h: HomeIn): { next: Block; more: boolean; glance: Block | null; spend: Block | null; where: Block | null; latest: Block | null } {
   const room = textRoom(h.paneW)
   const g = guideBlock({ paneW: h.paneW, top: h.top, rest: [], clear: h.clear, facts: [] })
   const glance = h.glance.length ? cardOf([stack([capRow('At a glance'), facts(h.glance)], GAP)]) : null
@@ -592,7 +705,72 @@ export function homeBlocks(h: HomeIn): { next: Block; more: boolean; glance: Blo
     : null
   const rcpt = h.receipt ? stack([capRow('Last receipt', h.receipt.time), fit(h.receipt.text, room, 2)], 4) : null
   const latest = dec || rcpt ? cardOf([dec, rcpt]) : null
-  return { next: g.block, more: g.more, glance, where, latest }
+  const spend = h.spend ? spendCard(h.spend, h.paneW, capRow('Agents', String(h.spend.spawns))) : null
+  return { next: g.block, more: g.more, glance, spend, where, latest }
+}
+
+// ---- Detail pages
+
+// What a Full details button opens: the main page's own cards with nothing cut. The text is the point here, so it reads at body size; labels and metadata stay
+// quiet. One column, labels on the leading edge, amounts on the trailing edge.
+const BUL = '<span class="bul"></span>'
+
+export function guideDetail(g: { paneW: number; items: CardItem[]; note: { title: string; text: string } | null; facts: Fact[] }): Block[] {
+  const room = textRoom(g.paneW)
+  const row = (x: CardItem, i: number) => stack([{ html: `<div class="row"><span class="cap grow">${i === 0 ? 'Next up' : 'Then'}</span><span class="pill t-${x.tone}">${esc(x.word)}</span></div>`, h: LINE }, fit(x.text, room, WHOLE)], 4)
+  const note = g.note ? cardOf([stack([capRow(g.note.title), fit(g.note.text, room, WHOLE)], 4)]) : null
+  return [...(g.items.length ? listCards(null, g.items.map(row)) : []), ...(note ? [note] : []), ...(g.facts.length ? [cardOf([facts(g.facts, room)])] : [])]
+}
+
+export function resumeDetail(r: ResumeIn): Block[] {
+  const room = textRoom(r.paneW)
+  const lines = (title: string, list: string[]) => (list.length === 0 ? null : stack([capRow(title), ...list.map(t => fit(t, room, WHOLE))], 4))
+  const now = lines('Now', r.now)
+  const next = lines('Next', r.next)
+  const needs = r.needs.map(n => (n.other ? otherRow(n.text, room, WHOLE) : leadRow(BUL, 6, n.text, room, WHOLE)))
+  const left = r.left.map(t => leadRow(BUL, 6, t, room, WHOLE))
+  return [
+    ...(now || next ? [cardOf([now, next])] : []),
+    ...(needs.length ? listCards(capRow('Needs you', String(r.needsOpen), 'amber'), needs) : []),
+    ...(left.length ? listCards(capRow('Left', String(left.length)), left) : []),
+  ]
+}
+
+// A receipt whole: the time and the cost on two edges, what was done, the spawns and the saving; then each kind of detail as its own section, a list when its text
+// is a list.
+const RECEIPT_ORDER = ['why', 'workflow', 'check', 'open', 'next', 'largest']
+
+// A receipt's Full details page: everything the receipt said, as the chat printed it. Nothing is cut.
+export function receiptDetail(x: Receipt, paneW: number): Block[] {
+  const room = textRoom(paneW)
+  const kinds = x.details.map(kindOf)
+  const done = kinds.find(k => k.kind === 'done')
+  const headline = done?.text ?? (x.text || kinds[0]?.text || '')
+  const order = (k: { kind: string }): number => {
+    const at = RECEIPT_ORDER.indexOf(k.kind)
+    return at < 0 ? RECEIPT_ORDER.length : at
+  }
+  const rest = kinds.filter(k => k !== done && (done || x.text || k !== kinds[0])).sort((a, b) => order(a) - order(b))
+  const top: Block = { html: `<div class="fact"><span class="cap k">${esc(x.time)}</span><span class="v b">${esc(x.usd ?? '')}</span></div>`, h: LINE }
+  const plainStat = [x.spawns, x.tokens].filter(Boolean).join(' · ')
+  const statText = [plainStat, x.money].filter(Boolean).join(' · ')
+  const stat: Block | null = statText
+    ? { html: `<div class="mt2"><span class="q">${esc(plainStat)}</span>${x.money ? `${plainStat ? ' <span class="q">·</span> ' : ''}<span class="ink t-green">${esc(x.money)}</span>` : ''}</div>`, h: estLines(statText, (room * WHOLE_ROOM) / 1.05, 12) * CAP }
+    : null
+  const head = stack([top, headline ? fit(headline, room, WHOLE) : null, stat], 4)
+  const secs = rest.map(k => {
+    const items = k.text.split(/;\s+/).map(t => t.trim()).filter(Boolean)
+    const label: Block | null = k.kind ? { html: `<div class="row"><span class="lbl word t-${DETAIL_TONE[k.kind] ?? 'grey'}">${esc(k.kind)}</span></div>`, h: LINE } : null
+    return stack([label, ...(items.length > 1 ? items.map(t => leadRow(BUL, 6, t, room, WHOLE)) : [fit(k.text, room, WHOLE)])], 4)
+  })
+  return [cardOf([head, ...secs])]
+}
+
+export function spawnsDetail(s: { paneW: number; days: SpawnsIn['days'] }): Block[] {
+  const room = textRoom(s.paneW)
+  const row = (x: SpawnRow) => spawnBlock(x, room, WHOLE)
+  const rows = dayRows(s.days, row)
+  return [...(rows.length ? listCards(capRow('History', 'newest first'), rows) : [])]
 }
 
 // ---- Brand

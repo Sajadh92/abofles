@@ -12,7 +12,8 @@ export type Guide = {
   ts: number
   root: string
   items: GuideItem[]
-  ctx: { tokens: number; mark: number | null } | null // mark in K tokens; null: past the last mark
+  ctx: { tokens: number; mark: number | null; auto?: boolean } | null // mark in K tokens; null: past the last mark; auto: a compact saves the memo by itself
+  ctx_wait?: { marks: number[]; auto: boolean } | null // a compact ran and the hooks have no size yet: every mark in K tokens, for the mod's own figure; absent in older state files
   task: { spawns: number; usd: number; budget: number | null; left: number | null; raised?: number } | null // raised: automatic agent-budget raises this task
   all?: { n: number; fill: string } | null // 2+ items open: what Check all puts in the prompt box; absent in older state files
   main: string | null // "suggest Opus 5.5 · Medium (now Fable 5.1 · Medium)"; null when the main session fits
@@ -27,6 +28,7 @@ export type PanePlaces = {
   guide: 'pane' | 'band' // where the guide shows; old hooks: the band
   resume: 'pane' | 'output' // where /abofles:resume shows; old hooks: the output
   spawns: 'pane' | 'output' // where /abofles:bill shows; old hooks: the output
+  running: 'pane' | 'off' // the Running page and Home's Running card; old hooks: the pane
 }
 
 export type PaneResume = {
@@ -34,15 +36,19 @@ export type PaneResume = {
   now: string[]
   left: string[]
   next: string[]
-  needs: { n: number | null; text: string }[] // the open decisions, numbered as the memo numbers them
+  needs: { n: number | null; text: string; other?: boolean }[] // the open decisions, numbered as the memo numbers them; other: another session's or project's (Other items = show), information only
   needs_open: number
   needs_fill?: string | null // 2+ Needs-you items open: the combined text Check all puts in the prompt box
+  others?: { sessions: number; projects: number } | null // Other items = hide: how many items of other sessions and projects were left out of needs
+  others_items?: { n: number | null; text: string }[] // those items, drawn only after Show others
   last: string[]
 }
 
-export type PaneDecision = { ts: string; q: string; a: string; sid: string } // ts: "MM-DD HH:MM"; a judge q may start with "judge: "
+export type PaneHealth = { archived_items: number; archived_sessions: number; trimmed: number; deduped: number; line: string }
 
-export type PaneDecisions = { you: PaneDecision[]; judge: PaneDecision[]; n_you: number; n_judge: number } // newest first, at most 50 per group
+export type PaneDecision = { ts: string; q: string; a: string; sid: string; other?: boolean } // ts: "MM-DD HH:MM"; a judge q may start with "judge: "; other: of another session or project
+
+export type PaneDecisions = { you: PaneDecision[]; judge: PaneDecision[]; n_you: number; n_judge: number; others?: { sessions: number; projects: number } | null; others_rows?: PaneDecision[] } // newest first, at most 50 per group; others: left out (Other items = hide), others_rows: drawn only after Show others
 
 export type PaneLive = { side: string; model: string; effort: string; description: string; ts: number | null } // ts: epoch seconds
 
@@ -64,13 +70,13 @@ export type PaneRow = {
   resolved: boolean // a FAIL closed by hand with evidence (status.py --resolve)
 }
 
-export type PaneModel = { model: string; label: string; spawns: number; usd: number; pct: number } // pct: share of the spend
+export type PaneModel = { model: string; label: string; spawns: number; tokens: number; usd: number; pct: number } // pct: share of the spend
 
 export type PaneTotals = { spawns: number; tokens: number; usd: number; base_usd: number; saved_pct: number; open_fail: number; base_label: string; by_model: PaneModel[] }
 
 export type PaneSpawns = { live: PaneLive[]; rows: PaneRow[]; totals: PaneTotals } // rows: the last 30, oldest first
 
-export type PaneOverrideKey = { key: string; kind: string; options: string[]; value: string; source: string; default: string }
+export type PaneOverrideKey = { key: string; kind: string; options: string[]; value: string; source: string; default: string; project: string | null; user: string | null } // project, user: that file's own value, null when it sets none
 
 export type PaneOverrides = {
   files: { project: string; user: string }
@@ -88,8 +94,15 @@ export type Pane = {
   spawns: PaneSpawns
   overrides: PaneOverrides | null
   decisions?: PaneDecisions | null // absent in older state files: no Decisions card
+  memo_health?: PaneHealth | null // what the memo's last tidy-up moved; absent in older state files
   cmd: { overrides: string[] | null } // argv prefix of the script the overrides editor runs
 }
+
+// ---- what runs now, kept by the mod from the engine's events (running.tsx); no hook and no model call feeds it.
+export type WorkLoop = { startedAt: number; now: string | null; uses: number; tokens: number; model: string | null; effort: string | null; recent?: { at: number; s: string }[] } // startedAt: ms; now: its last tool, in words; recent: its last tools, oldest first
+export type WorkTask = { id: string; kind: string; desc: string; detail: string | null; startedAt: number; out?: string | null } // a background command, monitor or workflow; out: its output file
+export type WorkCron = { id: string; schedule: string; recurring: boolean; prompt: string }
+export type Work = { main: WorkLoop | null; agents: Record<string, WorkLoop>; tasks: WorkTask[]; crons: WorkCron[] }
 
 declare module 'claude-code' {
   interface PluginState {
@@ -98,6 +111,7 @@ declare module 'claude-code' {
     // `dismissedTs`: the `ts` of the last_resolved row the person hid; that row stays down.
     // `running`: true while an Undo command runs; its button is gone meanwhile.
     // `toasted`: the ids of the red items already toasted; a toast fires only for a red id not in it.
+    // `compactedTo`: the size the engine gave for the last compact, in tokens; stands in until the hooks can read one.
     // `pane`: the pane payload of the state file (null: older hooks, or none yet).
     // `paneOpen`: true after the person or a command opened the pane, false after it was closed by hand or by the
     // command, null while undecided; also kept in $.store under `paneOpen` so a new session honours it.
@@ -106,8 +120,10 @@ declare module 'claude-code' {
     // `paneSaving`: true while the editor's Save runs its command.
     // `paneView`: the page the pane shows: 'main' (the cards), 'overrides' (the editor) or 'detail' (the full text of one card).
     // `paneDetail`: which card the detail page shows: 'guide', 'resume', 'spawns', 'decisions' or 'receipt:<n>'.
-    // `paneTab`: the page the desktop's nav bar shows ('home', 'guide', 'resume', 'decisions', 'spawns', 'overrides').
+    // `paneTab`: the page the desktop's nav bar shows ('home', 'running', 'guide', 'resume', 'decisions', 'spawns', 'overrides').
     // `paneNavTs`: when the person last moved to a page (ms): its cards slide in for a moment after.
+    // `work`: what runs now (Work); `workTick`: bumped every few seconds while anything runs, so the elapsed times move; `workBusy`: how many agents and commands run, the nav bar's dot;
+    // `workConfirm`: the row whose Stop waits for its confirmation.
     // `paneFolds`: open (true) or folded (false) by id: a card, an editor group (`g:<name>`), a long list (`more:<id>`); also in $.store.
     'abofles-guide': {
       guide: Guide | null
@@ -115,6 +131,7 @@ declare module 'claude-code' {
       dismissedTs: number | null
       running: boolean
       toasted: string[]
+      compactedTo: number | null
       pane: Pane | null
       paneOpen: boolean | null
       paneAuto: boolean
@@ -125,6 +142,10 @@ declare module 'claude-code' {
       paneTab: string
       paneNavTs: number
       paneFolds: Record<string, boolean>
+      work: Work
+      workTick: number
+      workBusy: number
+      workConfirm: string | null
     }
   }
 }

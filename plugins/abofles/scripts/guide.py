@@ -8,7 +8,7 @@
 
 Ladder, highest first: open FAIL / ATTENTION · judged question unasked · owner decisions open ·
 partial/low reply not escalated · background agents running · context or memo hygiene · agent budget
-nearly out · the memo's Next. Advice only: it never spawns, blocks or changes anything.
+nearly out · the memo's Next. Advice only: it never starts agents, blocks or changes anything.
 """
 import os
 import sys

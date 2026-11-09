@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Abo Fles agent gate: how many agents a task may spawn.
+"""Abo Fles agent gate: how many agents a task may start.
 
     agents.py                 show the current setting and this task's budget
     agents.py set auto        abofles sizes each task by tier (no more questions this session)
     agents.py set N           budget N for the current task (asked again next task)
     agents.py set off         no budget, no questions this session
-    agents.py set ask         ask the gate question again at the next spawn
+    agents.py set ask         ask the gate question again before the next agent
 
 Acts on the session you type in: ABOFLES_SESSION, else `--session <id>` (the command passes its own session id), else the
 newest prompt among this folder's sessions. Never a session of another project.
@@ -36,7 +36,7 @@ def main():
             st = load_state(sid)
             if v == "ask":
                 st["gate"], st["task_budget"], st["task_parallel"] = None, None, None
-                note = "agents: ask at the next spawn"
+                note = "agents: ask before the next agent"
             else:
                 note = apply_gate_answer(st, v if not v.isdigit() else f"{v} agents")
             save_state(sid, st)
@@ -48,7 +48,7 @@ def main():
     budget, src = task_budget(cwd, st, st.get("task_tier_max") or None)
     used, gate_runs = budget_used(st), st.get("task_judges", 0)
     print(f"Agents = {setting}{'' if n is None else ' ' + str(n)} · mode {mode_of(st)} · gate {st.get('gate') or 'unset'}")
-    print(f"This task: {used} of budget {'none' if budget is None else budget} used ({src})" + (f" · {gate_runs} gate run{'s' if gate_runs != 1 else ''} not counted" if gate_runs else "") + (f" · {work_spawns(st)} work spawns since the receipt" if work_spawns(st) != used else ""))
+    print(f"This task: {used} of budget {'none' if budget is None else budget} used ({src})" + (f" · {gate_runs} gate run{'s' if gate_runs != 1 else ''} not counted" if gate_runs else "") + (f" · {work_spawns(st)} work agents since the receipt" if work_spawns(st) != used else ""))
     print("Auto table: " + " · ".join(f"{tier_name(i + 1)} {b}" for i, b in enumerate(AGENT_BUDGETS[mode_of(st)])))
 
 

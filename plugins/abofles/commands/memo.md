@@ -1,11 +1,11 @@
 ---
-description: "Update the Now section of the work memo (task, done, left, decisions, next, verify) so the session can be compacted or paused without losing the thread; then run /compact yourself"
-allowed-tools: Bash(bash *), Bash(git *)
+description: "Optional: write a sharper Now section of the work memo (task, done, left, decisions, next, verify). /compact already saves the memo by itself"
+allowed-tools: Bash(bash *), Bash(git *), Agent
 ---
 
-Update the memo's **Now** section for this session, then tell the user to run `/compact`.
+Write a sharper **Now** section for this session. It is optional: every `/compact` and auto-compact already saves the memo by itself (`Memo on compact = auto`; with `off`, run this first).
 
-The memo is two files in the project root — the directory the session started in, whatever `cd` happened since, until most of the session's edits land in another repository (the hooks move the memo there and say so in the Journal): the main memo `.claude/abofles-memo.md` (**Needs you**, **Decisions** = notes settled in chat, **Sessions** = one index line per session with a link) and this session's file `.claude/abofles-memo.d/<session>.md` (**Now**, **Journal** = one line per receipt, **Decisions** = the questions this session asked with their answers). `bash "${CLAUDE_PLUGIN_ROOT}/scripts/py" "${CLAUDE_PLUGIN_ROOT}/scripts/memo.py" path mine --session "${CLAUDE_SESSION_ID}"` prints the session file. The hook stamps Now with the time it was written; the resume block shows that age. The hooks also rewrite Now from each receipt (stamped `· from receipt`); this command writes the richer version before a compact. Everything else is kept by the hooks; never rewrite it.
+The memo is two files in the project root — the directory the session started in, whatever `cd` happened since, until most of the session's edits land in another repository (the hooks move the memo there and say so in the Journal): the main memo `.claude/abofles-memo.md` (**Needs you**, **Decisions** = notes settled in chat, **Sessions** = one index line per session with a link) and this session's file `.claude/abofles-memo.d/<session>.md` (**Now**, **Journal** = one line per receipt, **Decisions** = the questions this session asked with their answers). `bash "${CLAUDE_PLUGIN_ROOT}/scripts/py" "${CLAUDE_PLUGIN_ROOT}/scripts/memo.py" path mine --session "${CLAUDE_SESSION_ID}"` prints the session file. The hook stamps Now with the time it was written; the resume block shows that age. The hooks also rewrite Now from each receipt (stamped `· from receipt`) and from each compact summary (stamped `· from compact`, unless a Now written here is newer than the last receipt); this command writes the richer version. Everything else is kept by the hooks; never rewrite it.
 
 1. Run `git status --short` first if the project is a git repository (first 20 lines go under `Tree`).
 
@@ -23,4 +23,6 @@ Tree      <first 20 lines of git status --short, or "clean">
 EOF
 ```
 
-3. Reply with two lines: the session file path (the script prints it), then: `Memo saved. Now run /compact — the resume block is shown again after it.` The user runs `/compact` themselves (a command cannot). When the user typed `/abofles:memo`, those two lines are the whole reply. When the context watch made you run it mid-turn, print the two lines and continue the turn.
+3. Unless the project's `Memo agent` override is `off`, start the memo agent in the background in the same step (the same message as the `memo.py now` call): print the route line `🗂️ \`Memo\` → **Memo Upkeep** · Haiku 5.5 · Low · Cap 15 · 🟢 Minor`, then call Agent with `subagent_type` `abofles:abofles-memo`, `model` `haiku`, `effort` `low`, `run_in_background` true, `description` `Memo upkeep` and this prompt: `abofles: Memo Upkeep / Work · T1`, then `Session id: ${CLAUDE_SESSION_ID}. Memo command: bash "${CLAUDE_PLUGIN_ROOT}/scripts/py" "${CLAUDE_PLUGIN_ROOT}/scripts/memo.py" <subcommand> ... --session ${CLAUDE_SESSION_ID}`, then `Line cap: 15`. It needs no budget, no receipt and no answer; never wait for it.
+
+4. Reply with two lines: the session file path (the script prints it), then: `Memo saved. Run /compact when ready — the resume block is shown again after it.` The user runs `/compact` themselves (a command cannot). When the user typed `/abofles:memo`, those two lines are the whole reply. When the context watch made you run it mid-turn, print the two lines and continue the turn.

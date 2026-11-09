@@ -1,16 +1,21 @@
 import type { EngineInterface } from 'claude-code'
 
-import type { Guide, GuideItem, Pane, PaneDecision, PaneLive, PaneRow, PaneSpawns } from '../types'
+import type { Guide, GuideItem, Pane, PaneDecision, PaneLive, PaneRow, PaneSpawns, PaneTotals } from '../types'
 import { overridesCard, overridesPage } from './editor'
-import { BRAND_AR, BRAND_EN, brandFooter, decisionCards, guideBlock, homeBlocks, receiptCard, resumeBlocks, spawnsBlocks, subhead, toneOf } from './html'
+import { BRAND_AR, BRAND_EN, WHOLE, brandFooter, decisionCards, guideBlock, guideDetail, homeBlocks, othersBlock, receiptCard, receiptDetail, resumeBlocks, resumeDetail, spawnsBlocks, spawnsDetail, subhead, toneOf } from './html'
 import type { Block, CardItem, DecisionRow, Fact, Receipt, SpawnRow, Tone } from './html'
+import { getWorkBusy, runningDetail, runningHomeCard, runningPage, runningTerminal } from './running'
 import {
+  fmtTokens,
+  modelName,
+  plural,
   ACCENT,
   GREY,
   bar,
   caretOf,
   card,
   copyPrompt,
+  copyText,
   dotIcon,
   emptyLine,
   fillPrompt,
@@ -44,6 +49,7 @@ import {
   longText,
   lookOf,
   moreButton,
+  othersToggle,
   plain,
   rule,
   ruled,
@@ -65,7 +71,7 @@ import type { Folds, GuideView, IconName, Look, RenderEvent, Ui } from './shared
 // On the terminal: flat sections with a rule between them, each folding from its header; rows with a lead (a status dot, a
 // number, a bullet, a caret), the text, and a value held at the right; long text cut at a word with a grey "Read more" link.
 
-export const fmtTokens = (n: number): string => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1000 ? `${Math.round(n / 1000)}K` : String(n))
+export { fmtTokens, modelName }
 export const fmtUsd = (x: number): string => (x > 0 && x < 0.005 ? '<$0.01' : `$${x.toFixed(2)}`)
 
 const pad2 = (n: number): string => String(n).padStart(2, '0')
@@ -86,8 +92,6 @@ export function fmtWhen(text: string, comma = false): string {
   const month = MONTHS[Number(m[1]) - 1]
   return month ? `${month} ${Number(m[2])}${comma ? ',' : ''} ${m[3]}` : text
 }
-
-const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`
 
 // The colours the app's own meters use; theme keys for meaning (error, warning, success).
 const BLUE = '#4a8cf0'
@@ -131,6 +135,9 @@ function priority(p: string | undefined): { word: string; tone: string } {
 
 // ---- Guide
 
+// A compact ran and no size is known yet: the row stays, so the card does not change shape.
+const COMPACT_WAIT = 'The size shows after the next reply.'
+
 // The guide's numbers: Context with its meter (amber once the memo is due), this task's spawns and cost, the budget, the suggestion.
 function guideNumbers(ui: Ui, g: Guide, v: GuideView, look: Look): JSX.Element[] {
   const { Text } = ui
@@ -139,16 +146,24 @@ function guideNumbers(ui: Ui, g: Guide, v: GuideView, look: Look): JSX.Element[]
     const k = Math.round(g.ctx.tokens / 1000)
     rows.push(kv(ui, 'Context', g.ctx.mark == null ? `${k}K` : `${k}K / ${g.ctx.mark}K`))
     if (g.ctx.mark) rows.push(bar(ui, look, [{ pct: (100 * k) / g.ctx.mark, color: v.memo ? 'warning' : BLUE }], `Context ${Math.round((100 * k) / g.ctx.mark)}% of the next mark`))
-    if (v.memo && v.done) rows.push(<Text size="caption" dimColor>Near the next mark: save the memo, then /compact.</Text>)
+    if (v.memo && v.done) rows.push(<Text size="caption" dimColor>{dueLine(v)}</Text>)
+  } else if (g.ctx_wait) {
+    rows.push(kv(ui, 'Context', 'Compacted'), <Text size="caption" dimColor>{COMPACT_WAIT}</Text>)
   }
   if (g.task) {
-    rows.push(kv(ui, 'This task', `${plural(g.task.spawns, 'spawn')} · $${g.task.usd.toFixed(2)}`))
+    rows.push(kv(ui, 'This task', `${plural(g.task.spawns, 'agent')} · $${g.task.usd.toFixed(2)}`))
     if (g.task.left != null) rows.push(kv(ui, 'Agent budget', g.task.budget != null ? `${g.task.left} of ${g.task.budget} left` : `${g.task.left} left`))
   }
-  const main = g.main?.replace(/^\s*main:\s*/i, '').replace(/^suggest\s+/i, '').trim()
-  if (main) rows.push(kv(ui, 'Suggest', main))
+  const mm = mainFact(g.main)
+  if (mm) {
+    rows.push(kv(ui, mm.label, mm.value))
+    if (mm.sub) rows.push(<Text size="caption" dimColor>{mm.sub}</Text>)
+  }
   return rows
 }
+
+// Near a context mark with nothing else open: the next step, in the words of the button under it.
+const dueLine = (v: GuideView) => (v.memoAuto ? 'Near the next mark: run /compact. The memo saves itself.' : 'Near the next mark: save the memo, then /compact.')
 
 // The guide's actions, right under the items they act on, all buttons in one wrapping row: one primary (Check all when 2+ items
 // are open, else Use; Save memo when nothing else is open), the rest secondary, then `extra` (the card's Full details, Show all).
@@ -161,7 +176,7 @@ function guideActions($: EngineInterface, ui: Ui, g: Guide, v: GuideView, look: 
     v.done ? null : <Button key="use" label={glyph(look, GLYPH.use, 'Use')} variant={all ? 'secondary' : 'primary'} onPress={() => fillPrompt($, g, v.prompt)} />,
     v.recheck ? <Button key="recheck" label={glyph(look, GLYPH.recheck, 'Re-check')} variant="secondary" onPress={() => fillPrompt($, g, v.recheck as string)} /> : null,
     v.done ? null : <Button key="copy" label={glyph(look, GLYPH.copy, 'Copy')} variant="secondary" onPress={press => copyPrompt($, v.prompt, press.surface)} />,
-    v.memo ? <Button key="memo" label={glyph(look, GLYPH.memo, 'Save memo')} variant={v.done ? 'primary' : 'secondary'} onPress={() => fillPrompt($, g, '/abofles:memo')} /> : null,
+    v.memo ? <Button key="memo" label={glyph(look, GLYPH.memo, v.memoAuto ? 'Compact' : 'Save memo')} variant={v.done ? 'primary' : 'secondary'} onPress={() => fillPrompt($, g, v.memoAuto ? '/compact' : '/abofles:memo')} /> : null,
     ...extra,
   ])
 }
@@ -191,32 +206,39 @@ function clearRows($: EngineInterface, ui: Ui, g: Guide, top: GuideItem | undefi
 }
 
 // The guide's numbers for the HTML card, as two-edge facts, and the same facts as label/value lines for its alt text.
-// The main-session line as a two-row fact: the model to use as the value, what it is now (and where to switch) under it.
-// "main: suggest Opus 5.5 · High for this 🔴 Critical task (now Opus 5.5 · Extra). Switch …" → Main model · Opus 5.5 · High,
-// "now Opus 5.5 · Extra · switch in the model picker"; "main: Opus 5.5 · Medium fits this 🟠 Sensitive task" → … · "fits this Sensitive task".
+// The main-session line as a two-row fact: the model in use as the value, like the other facts, what to do about it under it.
+// "main: suggest Opus 5.5 · High for this 🔴 Critical task (now Opus 5.5 · Extra). Switch …" → Main model · Opus 5.5 · Extra,
+// "Use Opus 5.5 · High for this task. Switch in the model picker."; "main: Opus 5.5 · Medium fits this 🟠 Sensitive task" → … · "Fits this Sensitive task".
 function mainFact(line: string | null | undefined): Fact | null {
   const raw = (line ?? '').replace(/^\s*main:\s*/i, '').replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]\uFE0F?\s*/gu, '').trim()
   if (!raw) return null
   const fits = /^(.+?)\s+fits this (.+?) task/i.exec(raw)
-  if (fits) return { label: 'Main model', value: fits[1], tone: 'green', sub: `fits this ${fits[2]} task` }
+  if (fits) return { label: 'Main model', value: fits[1], sub: `Fits this ${fits[2]} task` }
+  const yours = /^(.+?)\s+fits your setting/i.exec(raw)
+  if (yours) return { label: 'Main model', value: yours[1], sub: 'Fits your setting' }
+  const set = /^suggest\s+(.+?),\s+your setting\s*\(now ([^)]+)\)/i.exec(raw)
+  if (set) return { label: 'Main model', value: set[2], sub: `Your setting is ${set[1]}. Switch in the model picker.`, subMark: set[1] }
   const sug = /^suggest\s+(.+?)(?:\s+for this (.+?) task)?\s*\(now ([^)]+)\)/i.exec(raw)
-  if (sug) return { label: 'Main model', value: sug[1], tone: 'amber', sub: `now ${sug[3]} · switch in the model picker` }
-  return { label: 'Main model', value: raw.replace(/^suggest\s+/i, '').split(/\s+for this |\s*\(/)[0] }
+  if (sug) return { label: 'Main model', value: sug[3], sub: `Use ${sug[1]} for this task. Switch in the model picker.`, subMark: sug[1] }
+  return { label: 'Suggested model', value: raw.replace(/^suggest\s+/i, '').split(/\s+for this |\s*\(/)[0] }
 }
 
 function guideFacts(g: Guide, v: GuideView): { facts: Fact[]; alt: string[] } {
   const facts: Fact[] = []
   const alt: string[] = []
-  const due = v.memo && v.done ? 'Near the next mark: save the memo, then /compact.' : undefined
+  const due = v.memo && v.done ? dueLine(v) : undefined
   if (g.ctx) {
     const k = Math.round(g.ctx.tokens / 1000)
     const value = g.ctx.mark == null ? `${k}K` : `${k}K / ${g.ctx.mark}K`
     const meter = g.ctx.mark ? { pct: (100 * k) / g.ctx.mark, tone: (v.memo ? 'amber' : 'blue') as Tone } : undefined
-    facts.push({ label: 'Context', value, tone: v.memo ? 'amber' : undefined, meter, sub: due ? 'Save the memo, then /compact.' : undefined })
+    facts.push({ label: 'Context', value, tone: v.memo ? 'amber' : undefined, meter, sub: due ? (v.memoAuto ? 'Run /compact. The memo saves itself.' : 'Save the memo, then /compact.') : undefined })
     alt.push('Context', value, ...(meter ? [`Context ${Math.round(meter.pct)}% of the next mark`] : []), ...(due ? [due] : []))
+  } else if (g.ctx_wait) {
+    facts.push({ label: 'Context', value: 'Compacted', sub: COMPACT_WAIT })
+    alt.push('Context', 'Compacted', COMPACT_WAIT)
   }
   if (g.task) {
-    const value = `${plural(g.task.spawns, 'spawn')} · $${g.task.usd.toFixed(2)}`
+    const value = `${plural(g.task.spawns, 'agent')} · $${g.task.usd.toFixed(2)}`
     facts.push({ label: 'This task', value })
     alt.push('This task', value)
     if (g.task.left != null) {
@@ -317,17 +339,35 @@ export function headParts(head: string): { memo: string | null; away: string | n
 
 // A receipt line of the journal as a table row: `10-22 07:19 · 1 Spawn · 319K Tokens · $0.28 · Saved 46% ($0.24) vs Opus 5.5 · done: …`
 // gives the time, `1 spawn`, `$0.28`, `46%`; `done`, `check` and `open` are its details. A line without the numbers keeps its text.
-export function receiptOf(line: string): { time: string | null; spawns: string | null; usd: string | null; saved: string | null; text: string; details: string[] } {
+const RECEIPT_FIELD = /^(done|why|workflow|check|open|next|largest):\s/i
+
+export function receiptOf(line: string): { time: string | null; spawns: string | null; usd: string | null; saved: string | null; tokens: string | null; money: string | null; text: string; details: string[] } {
   const parts = plain(line).split(' · ')
   const time = /^\d\d-\d\d \d\d:\d\d$/.test(parts[0] ?? '') ? (parts.shift() as string) : null
   const at = parts.findIndex(x => /^[a-z]+:\s/i.test(x))
   const stats = at < 0 ? parts : parts.slice(0, at)
-  const details = at < 0 ? [] : parts.slice(at)
-  const n = stats.map(x => /^(\d+) Spawns?$/i.exec(x)).find(Boolean)
+  // a value may hold ` · ` itself: a part with no field of its own goes on the one before
+  const details: string[] = []
+  for (const x of at < 0 ? [] : parts.slice(at)) {
+    if (details.length === 0 || RECEIPT_FIELD.test(x) || /^[a-z]+:\s/.test(x)) details.push(x)
+    else details[details.length - 1] += ` · ${x}`
+  }
+  const n = stats.map(x => /^(\d+) (?:Agents?|Spawns?)(?: \+ (.+))?$/i.exec(x)).find(Boolean)
   const usd = stats.map(x => /^(\$[\d.,]+)$/.exec(x)).find(Boolean)
   const saved = stats.map(x => /^Saved (\d+%)/i.exec(x)).find(Boolean)
-  if (!n) return { time, spawns: null, usd: null, saved: null, text: stats.join(' · ') || details.shift() || '', details }
-  return { time, spawns: plural(Number(n[1]), 'spawn'), usd: usd ? usd[1] : null, saved: saved ? saved[1] : null, text: '', details }
+  const tokens = stats.map(x => /^([\d.,]+[KMB]?) Tokens$/i.exec(x)).find(Boolean)
+  const money = stats.find(x => /^(Saved|Cost) /i.test(x))
+  if (!n) return { time, spawns: null, usd: null, saved: null, tokens: null, money: null, text: stats.join(' · ') || details.shift() || '', details }
+  return {
+    time,
+    spawns: `${plural(Number(n[1]), 'agent')}${n[2] ? ` + ${n[2]}` : ''}`,
+    usd: usd ? usd[1] : null,
+    saved: saved ? saved[1] : null,
+    tokens: tokens ? `${tokens[1]} tokens` : null,
+    money: money ? money.replace(/^Saved (\d+%)/i, '$1 saved') : null,
+    text: '',
+    details,
+  }
 }
 
 // A receipt as one row, as the app lists its own: the grey caret that opens the details, the time, the spawns, and at the right
@@ -379,10 +419,20 @@ function group(ui: Ui, head: JSX.Element, rows: (JSX.Element | null)[]) {
 
 // Resume on the desktop: where the work stands (Now, Next), what needs the owner with its Check all and Show all right under it,
 // what is left (Full details joins the last card's row), and the last receipts, each with its own Full details, with the memo's facts.
-function resumeHtml($: EngineInterface, ui: Ui, r: Pane['resume'], folds: Folds, look: Look, g: Guide | null) {
+const NO_MEMO = 'No memo yet — it starts at the first receipt'
+
+// What the memo's last tidy-up moved, as one fact; nothing moved lately: no fact.
+function healthFact(h: Pane['memo_health']): Fact | null {
+  if (!h) return null
+  const moved = h.archived_items + h.archived_sessions + h.trimmed
+  const parts = [moved ? `${moved} archived` : '', h.deduped ? `${h.deduped} duplicate${h.deduped === 1 ? '' : 's'} removed` : ''].filter(Boolean)
+  return parts.length > 0 ? { label: 'Tidied', value: parts.join(' · ') } : null
+}
+
+function resumeHtml($: EngineInterface, ui: Ui, r: Pane['resume'], folds: Folds, look: Look, g: Guide | null, health: Pane['memo_health']) {
   const { Button } = ui
   const head = { icon: 'bookmark' as const, tone: 'blue' as const, title: 'Resume' }
-  if (r === null) return htmlSection(ui, look, head, [emptyPic(ui, look, 'No memo yet — run /abofles:memo')])
+  if (r === null) return htmlSection(ui, look, head, [emptyPic(ui, look, NO_MEMO)])
   const hp = headParts(r.head)
   const needs = isOpen(folds, 'more:needs', false) ? r.needs : r.needs.slice(0, 3)
   const left = isOpen(folds, 'more:left', false) ? r.left : r.left.slice(0, 3)
@@ -390,23 +440,31 @@ function resumeHtml($: EngineInterface, ui: Ui, r: Pane['resume'], folds: Folds,
     const x = receiptOf(l)
     return { ...x, time: x.time ? fmtWhen(x.time) : '' }
   })
-  const facts: Fact[] = [hp.session ? { label: 'Session', value: hp.session } : null, hp.memo ? { label: 'Memo saved', value: fmtWhen(hp.memo, true) } : null, hp.away ? { label: 'Away', value: hp.away } : null].filter(
+  const facts: Fact[] = [hp.session ? { label: 'Session', value: hp.session } : null, hp.memo ? { label: 'Memo saved', value: fmtWhen(hp.memo, true) } : null, hp.away ? { label: 'Away', value: hp.away } : null, healthFact(health)].filter(
     (x): x is Fact => x !== null,
   )
   const nums = needs.map((n, i) => String(n.n ?? i + 1))
+  const others = r.others_items ?? []
+  const othersN = r.others ? r.others.sessions + r.others.projects : others.length
   const w = paneW(look)
-  const b = resumeBlocks({ paneW: w, now: r.now.map(plain), next: r.next.map(plain), needs: needs.map((n, i) => ({ n: nums[i], text: plain(n.text) })), needsOpen: r.needs_open, left: left.map(plain), facts })
+  const b = resumeBlocks({ paneW: w, now: r.now.map(plain), next: r.next.map(plain), needs: needs.map((n, i) => ({ n: nums[i], text: plain(n.text), other: n.other })), needsOpen: r.needs_open, left: left.map(plain), facts })
   const body: (JSX.Element | null)[] = []
   if (b.status) body.push(pic(ui, look, b.status, [...(r.now.length ? ['Now', ...r.now.map(plain)] : []), ...(r.next.length ? ['Next', ...r.next.map(plain)] : [])]))
   const needsRow = [
     // secondary: the Guide's action is the pane's one primary (its first item is usually this same ask)
     r.needs_fill ? <Button key="check-needs" label={glyph(look, GLYPH.all, `Check all (${r.needs_open})`)} variant="secondary" onPress={() => fillPrompt($, g, r.needs_fill as string)} /> : null,
     moreButton($, ui, folds, 'needs', r.needs.length, 3, look),
+    others.length > 0 ? othersToggle($, ui, folds, 'needs', othersN, look) : null,
   ]
   const leftRow = [moreButton($, ui, folds, 'left', r.left.length, 3, look)]
   // Full details joins the last card's row, so the block ends in one line of buttons
   const detail = b.status || b.needs || b.left ? <Button key="detail:resume" label={glyph(look, GLYPH.detail, 'Full details')} variant="secondary" onPress={() => openDetail($, 'resume')} /> : null
-  if (b.needs) body.push(pic(ui, look, b.needs, ['Needs you', `${r.needs_open} open`, ...needs.flatMap((n, i) => [nums[i], plain(n.text)])]), buttonRow(ui, b.left ? needsRow : [...needsRow, detail]))
+  if (b.needs) body.push(pic(ui, look, b.needs, ['Needs you', `${r.needs_open} open`, ...needs.map(n => (n.other ? `${plain(n.text)} · other` : plain(n.text)))]), buttonRow(ui, b.left ? needsRow : [...needsRow, detail]))
+  if (!b.needs && others.length > 0) body.push(buttonRow(ui, needsRow))
+  if (others.length > 0 && isOpen(folds, 'others:needs', false)) {
+    const rows = others.map(n => ({ text: plain(n.text) }))
+    body.push(pic(ui, look, othersBlock(othersN, rows, w), ['Other sessions and projects', String(othersN), ...rows.map(x => x.text)]))
+  }
   if (b.left) body.push(pic(ui, look, b.left, ['Left', ...left.map(plain)]), buttonRow(ui, [...leftRow, detail]))
   if (detail && !b.needs && !b.left) body.push(buttonRow(ui, [detail]))
   // the last receipts: a card each, with its Full details right under it (every line of the receipt on a page of its own)
@@ -422,10 +480,10 @@ function resumeHtml($: EngineInterface, ui: Ui, r: Pane['resume'], folds: Folds,
   return htmlSection(ui, look, { ...head, summary, summaryTone: r.needs_open > 0 ? 'amber' : null }, body)
 }
 
-function resumeCard($: EngineInterface, ui: Ui, r: Pane['resume'], folds: Folds, look: Look, g: Guide | null) {
+function resumeCard($: EngineInterface, ui: Ui, r: Pane['resume'], folds: Folds, look: Look, g: Guide | null, health: Pane['memo_health']) {
   const { Box, Button, Text } = ui
-  if (hasSvg(ui, look)) return resumeHtml($, ui, r, folds, look, g)
-  if (r === null) return card($, ui, { id: 'resume', title: 'Resume', def: false, folds, icon: 'bookmark', look }, emptyLine(ui, look, 'No memo yet — run /abofles:memo', 'bookmark'))
+  if (hasSvg(ui, look)) return resumeHtml($, ui, r, folds, look, g, health)
+  if (r === null) return card($, ui, { id: 'resume', title: 'Resume', def: false, folds, icon: 'bookmark', look }, emptyLine(ui, look, NO_MEMO, 'bookmark'))
   const head = headParts(r.head) // not `h`: that name is the JSX factory
   const ic = (name: IconName, color?: string) => ({ look, name, color })
   const lines = (key: string, list: string[], n: number) => list.map((t, i) => longText($, ui, look, folds, `resume:${key}:${i}`, plain(t), { lines: n }))
@@ -439,9 +497,9 @@ function resumeCard($: EngineInterface, ui: Ui, r: Pane['resume'], folds: Folds,
       return row(
         ui,
         <Box width={2} justifyContent="flex-end">
-          <Text color="warning" tabular>{num}</Text>
+          {n.other ? <Text dimColor>•</Text> : <Text color="warning">•</Text>}
         </Box>,
-        longText($, ui, look, folds, `resume:needs:${num}`, plain(n.text), { indent: 3, lines: 2 }),
+        longText($, ui, look, folds, `resume:needs:${num}`, n.other ? `${plain(n.text)} · other` : plain(n.text), { indent: 3, lines: 2, dim: n.other === true }),
       )
     })
     parts.push(
@@ -456,13 +514,27 @@ function resumeCard($: EngineInterface, ui: Ui, r: Pane['resume'], folds: Folds,
       ]),
     )
   }
+  const othersList = r.others_items ?? []
+  if (othersList.length > 0) {
+    const n = r.others ? r.others.sessions + r.others.projects : othersList.length
+    const rows = isOpen(folds, 'others:needs', false)
+      ? othersList.map((x, i) => {
+          const num = String(x.n ?? i + 1)
+          return row(ui, <Box width={2} justifyContent="flex-end"><Text dimColor>•</Text></Box>, longText($, ui, look, folds, `resume:others:${num}`, plain(x.text), { indent: 3, lines: 2, dim: true }))
+        })
+      : []
+    parts.push(<Box flexDirection="column">{rows}{othersToggle($, ui, folds, 'needs', n)}</Box>)
+  }
   if (r.left.length > 0) {
     const shown = isOpen(folds, 'more:left', false) ? r.left : r.left.slice(0, 3)
     const rows = shown.map((t, i) => row(ui, <Text dimColor>•</Text>, longText($, ui, look, folds, `resume:left:${i}`, plain(t), { indent: 2 })))
     parts.push(group(ui, heading(ui, 'Left', undefined, undefined, ic('list')), [...rows, moreButton($, ui, folds, 'left', r.left.length, 3)]))
   }
   if (r.last.length > 0) parts.push(group(ui, heading(ui, 'Last receipts', undefined, undefined, ic('receipt')), ruled(ui, look, r.last.map((l, i) => receiptRow($, ui, look, folds, l, i)))))
-  const facts = [head.session ? kv(ui, 'Session', head.session) : null, head.memo ? kv(ui, 'Memo saved', fmtWhen(head.memo, true)) : null, head.away ? kv(ui, 'Away', head.away) : null].filter(
+  const facts = [head.session ? kv(ui, 'Session', head.session) : null, head.memo ? kv(ui, 'Memo saved', fmtWhen(head.memo, true)) : null, head.away ? kv(ui, 'Away', head.away) : null, (() => {
+    const f = healthFact(health)
+    return f ? kv(ui, f.label, f.value) : null
+  })()].filter(
     (x): x is JSX.Element => x !== null,
   )
   if (facts.length > 0) parts.push(rule(ui, look, 'row divider', true), <Box flexDirection="column">{facts}</Box>)
@@ -486,14 +558,6 @@ export function rowStatus(r: PaneRow): { tone: string; alt: string; word: string
 
 // `Sonnet 5.5 · Medium`, as the app names its models: the label the totals give, else the app's name for the id (else the id
 // capitalised), and `Extra` for xhigh.
-const EFFORT: Record<string, string> = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra', max: 'Max' }
-const MODEL_NAME: Record<string, string> = { haiku: 'Haiku 5.5', sonnet: 'Sonnet 5.5', opus: 'Opus 5.5', fable: 'Fable 5.1' }
-const cap = (t: string): string => (t ? t[0].toUpperCase() + t.slice(1) : t)
-export function modelName(model: string, effort: string, labels: Record<string, string> = {}): string {
-  const m = model ? labels[model] ?? MODEL_NAME[model] ?? cap(model) : '?'
-  return effort ? `${m} · ${EFFORT[effort] ?? cap(effort)}` : m
-}
-
 // `Today`, `Yesterday`, else `Nov 3`: the caption over a day's rows (local time); '' for a row without a start.
 export function dayLabel(ts: number | null, now: number = Date.now()): string {
   if (ts === null) return ''
@@ -510,7 +574,7 @@ export function rowMeta(parts: { time: string; model: string; tokens: number | n
 
 // The card's summary: `43 spawns · $4.10`.
 export function spawnsSummary(s: PaneSpawns): string {
-  return s.totals.usd > 0 ? `${plural(s.totals.spawns, 'spawn')} · ${fmtUsd(s.totals.usd)}` : plural(s.totals.spawns, 'spawn')
+  return s.totals.usd > 0 ? `${plural(s.totals.spawns, 'agent')} · ${fmtUsd(s.totals.usd)}` : plural(s.totals.spawns, 'agent')
 }
 
 // The newest history rows the card shows before its "Show all".
@@ -554,19 +618,42 @@ function spendBlock(ui: Ui, s: PaneSpawns, look: Look) {
         <Text dimColor tabular>{versus}</Text>
       </Box>
       {models.length > 0 ? bar(ui, look, models.map(m => ({ pct: m.pct, color: MODEL_COLOR[m.model] ?? GREY })), `Spend by model: ${models.map(m => `${m.label} ${m.pct}%`).join(', ')}`) : null}
+      {models.length > 0 ? (
+        <Box flexDirection="row" columnGap={1}>
+          <Text>{' '}</Text>
+          <Box flexGrow={1} flexShrink={1}>
+            <Text dimColor>Model</Text>
+          </Box>
+          <Box width={6} justifyContent="flex-end">
+            <Text dimColor>Tokens</Text>
+          </Box>
+          <Box width={6} justifyContent="flex-end">
+            <Text dimColor>Agents</Text>
+          </Box>
+          <Box width={7} justifyContent="flex-end">
+            <Text dimColor>Cost</Text>
+          </Box>
+          <Box width={4} justifyContent="flex-end">
+            <Text dimColor>%</Text>
+          </Box>
+        </Box>
+      ) : null}
       {models.map(m => (
         <Box flexDirection="row" columnGap={1}>
           <Text color={themeOf(MODEL_COLOR[m.model] ?? GREY)}>■</Text>
           <Box flexGrow={1} flexShrink={1}>
             <Text>{m.label}</Text>
           </Box>
-          <Box width={4} justifyContent="flex-end">
+          <Box width={6} justifyContent="flex-end">
+            <Text dimColor tabular>{m.tokens > 0 ? fmtTokens(m.tokens) : '—'}</Text>
+          </Box>
+          <Box width={6} justifyContent="flex-end">
             <Text dimColor tabular>{String(m.spawns)}</Text>
           </Box>
-          <Box width={8} justifyContent="flex-end">
+          <Box width={7} justifyContent="flex-end">
             <Text dimColor tabular>{fmtUsd(m.usd)}</Text>
           </Box>
-          <Box width={5} justifyContent="flex-end">
+          <Box width={4} justifyContent="flex-end">
             <Text tabular>{`${m.pct}%`}</Text>
           </Box>
         </Box>
@@ -577,24 +664,13 @@ function spendBlock(ui: Ui, s: PaneSpawns, look: Look) {
   )
 }
 
-// Spawns on the desktop: the saving and the spend split by model, the running agents, the history by day (newest first) with its
-// Show all and the section's Full details under it.
-function spawnsHtml($: EngineInterface, ui: Ui, s: PaneSpawns, folds: Folds, look: Look, ts: number, now: number) {
-  const { Button } = ui
-  const t = s.totals
-  const head = { icon: 'fork' as const, tone: 'violet' as const, title: 'Spawns' }
-  if (s.live.length === 0 && s.rows.length === 0) return htmlSection(ui, look, head, [emptyPic(ui, look, 'No spawns yet')])
-  const labels = Object.fromEntries(t.by_model.map(m => [m.model, m.label]))
-  const models = t.by_model.filter(m => m.spawns > 0)
-  const versus = t.base_usd > 0 ? `${fmtUsd(t.usd)} of ${fmtUsd(t.base_usd)}${t.base_label ? ` on ${t.base_label}` : ''}` : fmtUsd(t.usd)
-  const facts: Fact[] = [t.tokens > 0 ? { label: 'Tokens', value: fmtTokens(t.tokens) } : null, t.open_fail > 0 ? { label: 'Open FAIL', value: String(t.open_fail), tone: 'red' as Tone } : null].filter((x): x is Fact => x !== null)
+// The rows of the Agents page and of its detail page: the given rows by day, and their alt text. What runs now has its own page (running.tsx).
+function spawnRowsOf(s: PaneSpawns, rows: PaneRow[], now: number) {
+  const labels = Object.fromEntries(s.totals.by_model.map(m => [m.model, m.label]))
   const wordTone = (tone: string): Tone | null => (tone === 'success' ? 'green' : tone === 'error' ? 'red' : tone === 'warning' ? 'amber' : tone === ORANGE ? 'orange' : null)
-  const live: SpawnRow[] = s.live.map(l => ({ tone: 'blue', side: l.side, desc: plain(l.description), cost: '', meta: rowMeta({ time: l.ts === null ? '' : fmtStart(l.ts), model: modelName(l.model, l.effort, labels), tokens: null, word: '' }), word: 'running', wordTone: 'blue' }))
-  const newest = [...s.rows].reverse()
-  const shown = isOpen(folds, 'more:history', false) ? newest : newest.slice(0, HISTORY_ROWS)
   const days: { label: string; rows: SpawnRow[] }[] = []
   const alt: string[] = []
-  for (const r of shown) {
+  for (const r of rows) {
     const st = rowStatus(r)
     const row: SpawnRow = { tone: toneOf(st.tone), side: r.side, desc: plain(r.description), cost: r.usd !== null ? fmtUsd(r.usd) : '', meta: rowMeta({ time: r.ts === null ? '' : fmtStart(r.ts), model: modelName(r.model, r.effort, labels), tokens: r.tokens, word: '' }), word: st.word, wordTone: wordTone(st.tone) }
     const label = dayLabel(r.ts, now)
@@ -606,18 +682,40 @@ function spawnsHtml($: EngineInterface, ui: Ui, s: PaneSpawns, folds: Folds, loo
     }
     alt.push(row.side, row.desc, row.cost, rowMeta({ time: r.ts === null ? '' : fmtStart(r.ts), model: modelName(r.model, r.effort, labels), tokens: r.tokens, word: st.word }))
   }
-  const updated = ts > 0 ? `Updated ${fmtStart(ts)} · refreshes when a turn ends` : null
-  const b = spawnsBlocks({ paneW: paneW(look), saved: `${t.saved_pct}% saved`, versus, models: models.map(m => ({ label: m.label, tone: toneOf(MODEL_COLOR[m.model] ?? GREY), spawns: m.spawns, usd: fmtUsd(m.usd), pct: m.pct })), facts, live, days, updated })
-  const body: (JSX.Element | null)[] = [
-    pic(ui, look, b.spend, [
-      `${t.saved_pct}% saved`,
-      versus,
-      models.length ? `Spend by model: ${models.map(m => `${m.label} ${m.pct}%`).join(', ')}` : null,
-      ...models.map(m => `${m.label}: ${m.spawns} spawn${m.spawns === 1 ? '' : 's'}, ${fmtUsd(m.usd)}, ${m.pct}% of spend`),
-      ...facts.flatMap(f => [f.label, f.value]),
-    ]),
+  return { days, alt }
+}
+
+// The spend card's content and alt text, for the Spawns page and Home. Home's At a glance already holds the open FAIL.
+function spendOf(t: PaneTotals, openFail: boolean) {
+  const models = t.by_model.filter(m => m.spawns > 0)
+  const saved = `${t.saved_pct}% saved`
+  const versus = t.base_usd > 0 ? `${fmtUsd(t.usd)} of ${fmtUsd(t.base_usd)}${t.base_label ? ` on ${t.base_label}` : ''}` : fmtUsd(t.usd)
+  const facts: Fact[] = [t.tokens > 0 ? { label: 'Tokens', value: fmtTokens(t.tokens) } : null, openFail && t.open_fail > 0 ? { label: 'Open FAIL', value: String(t.open_fail), tone: 'red' as Tone } : null].filter((x): x is Fact => x !== null)
+  const alt = [
+    saved,
+    versus,
+    models.length ? `Spend by model: ${models.map(m => `${m.label} ${m.pct}%`).join(', ')}` : null,
+    ...models.map(m => `${m.label}: ${m.tokens > 0 ? `${fmtTokens(m.tokens)} tokens, ` : ''}${plural(m.spawns, 'agent')}, ${fmtUsd(m.usd)}, ${m.pct}% of spend`),
+    ...facts.flatMap(f => [f.label, f.value]),
   ]
-  if (b.running) body.push(pic(ui, look, b.running, ['Running', String(s.live.length), ...live.flatMap(l => [l.side, l.desc, `${l.meta} · running`.replace(/^ · /, '')])]))
+  return { saved, versus, facts, alt, models: models.map(m => ({ label: m.label, tone: toneOf(MODEL_COLOR[m.model] ?? GREY), tokens: m.tokens > 0 ? fmtTokens(m.tokens) : '', spawns: m.spawns, usd: fmtUsd(m.usd), pct: m.pct })) }
+}
+
+// Agents on the desktop: the saving and the spend split by model, the history by day (newest first) with its
+// Show all and the section's Full details under it.
+function spawnsHtml($: EngineInterface, ui: Ui, s: PaneSpawns, folds: Folds, look: Look, ts: number, now: number) {
+  const { Button } = ui
+  const t = s.totals
+  const head = { icon: 'fork' as const, tone: 'violet' as const, title: 'Agents' }
+  if (s.rows.length === 0) return htmlSection(ui, look, head, [emptyPic(ui, look, 'No agents yet')])
+  const spend = spendOf(t, true)
+  const newest = [...s.rows].reverse()
+  const { days, alt } = spawnRowsOf(s, isOpen(folds, 'more:history', false) ? newest : newest.slice(0, HISTORY_ROWS), now)
+  const updated = ts > 0 ? `Updated ${fmtStart(ts)} · refreshes when a turn ends` : null
+  const b = spawnsBlocks({ ...spend, paneW: paneW(look), days, updated })
+  const body: (JSX.Element | null)[] = [
+    pic(ui, look, b.spend, spend.alt),
+  ]
   // a long history is split into cards: the first carries the whole list's alt, so it is read once
   b.history.forEach((c, i) => body.push(pic(ui, look, c, i === 0 ? ['History', 'newest first', ...alt, updated] : [])))
   body.push(
@@ -632,17 +730,10 @@ function spawnsHtml($: EngineInterface, ui: Ui, s: PaneSpawns, folds: Folds, loo
 function spawnsCard($: EngineInterface, ui: Ui, s: PaneSpawns, folds: Folds, look: Look, ts: number, now: number) {
   const { Box, Text } = ui
   if (hasSvg(ui, look)) return spawnsHtml($, ui, s, folds, look, ts, now)
-  if (s.live.length === 0 && s.rows.length === 0) return card($, ui, { id: 'spawns', title: 'Spawns', def: false, folds, icon: 'fork', look }, emptyLine(ui, look, 'No spawns yet', 'fork'))
+  if (s.rows.length === 0) return card($, ui, { id: 'spawns', title: 'Agents', def: false, folds, icon: 'fork', look }, emptyLine(ui, look, 'No agents yet', 'fork'))
   const t = s.totals
   const labels = Object.fromEntries(t.by_model.map(m => [m.model, m.label]))
   const parts: (JSX.Element | null)[] = [spendBlock(ui, s, look)]
-  if (s.live.length > 0) {
-    const ids = uniqueIds(s.live.map(l => `spawn:live:${l.ts ?? 'x'}:${shortHash(askOf(l.side, l.description))}`))
-    const rows = s.live.map((l: PaneLive, i: number) =>
-      spawnRow($, ui, look, folds, ids[i], { tone: BLUE, alt: 'running' }, l.side, plain(l.description), '', rowMeta({ time: l.ts === null ? '' : fmtStart(l.ts), model: modelName(l.model, l.effort, labels), tokens: null, word: 'running' })),
-    )
-    parts.push(rule(ui, look, 'row divider', true), group(ui, heading(ui, 'Running', String(s.live.length), undefined, { look, name: 'activity', color: BLUE }), ruled(ui, look, rows)))
-  }
   if (s.rows.length > 0) {
     const newest = [...s.rows].reverse()
     const ids = uniqueIds(newest.map(r => `spawn:${r.ts ?? 'x'}:${shortHash(askOf(r.side, r.description))}`))
@@ -671,7 +762,7 @@ function spawnsCard($: EngineInterface, ui: Ui, s: PaneSpawns, folds: Folds, loo
     parts.push(rule(ui, look, 'row divider', true), group(ui, heading(ui, 'History', 'newest first', undefined, { look, name: 'clock' }), [...daysOut, moreButton($, ui, folds, 'history', Math.max(t.spawns, s.rows.length), HISTORY_ROWS)]))
   }
   if (ts > 0) parts.push(<Text size="caption" dimColor>{`Updated ${fmtStart(ts)} · refreshes when a turn ends`}</Text>)
-  return card($, ui, { id: 'spawns', title: 'Spawns', def: false, summary: spawnsSummary(s), tone: t.open_fail > 0 ? 'error' : undefined, folds, icon: 'fork', look }, <Box flexDirection="column" rowGap={1}>{parts}</Box>)
+  return card($, ui, { id: 'spawns', title: 'Agents', def: false, summary: spawnsSummary(s), tone: t.open_fail > 0 ? 'error' : undefined, folds, icon: 'fork', look }, <Box flexDirection="column" rowGap={1}>{parts}</Box>)
 }
 
 // ---- Decisions
@@ -682,17 +773,17 @@ const DECISION_ROWS = 5
 // A decision as every view reads it: the Judge's question loses its "judge: " lead; a note (`memo.py note`) has no question.
 function decisionOf(d: PaneDecision, judge: boolean): DecisionRow {
   const q = plain(judge ? d.q.replace(/^\s*judge:\s*/i, '') : d.q)
-  return { when: fmtWhen(d.ts), q, a: plain(d.a), note: q.toLowerCase() === 'note' || q === '' }
+  return { when: d.other ? `${fmtWhen(d.ts)} · other` : fmtWhen(d.ts), q, a: plain(d.a), note: q.toLowerCase() === 'note' || q === '' }
 }
 
 // A decision: its time as a small muted headline, the question, and the answer under it after an arrow, in semibold — what was
 // decided reads at a glance. A note is its text alone.
 function decisionRow($: EngineInterface, ui: Ui, look: Look, folds: Folds, id: string, d: PaneDecision, judge: boolean) {
   const { Box, Text } = ui
-  const { q, a, note } = decisionOf(d, judge)
+  const { when, q, a, note } = decisionOf(d, judge)
   return (
     <Box flexDirection="column" rowGap={0}>
-      <Text size="caption" dimColor tabular>{fmtWhen(d.ts)}</Text>
+      <Text size="caption" dimColor tabular>{when}</Text>
       {note ? null : longText($, ui, look, folds, `${id}:q`, q, { lines: 2 })}
       {note
         ? longText($, ui, look, folds, `${id}:a`, a, { lines: 2 })
@@ -726,6 +817,12 @@ function decisionsHtml($: EngineInterface, ui: Ui, d: NonNullable<Pane['decision
   }
   group('dec-you', 'By you', d.you, d.n_you, false)
   group('dec-judge', 'By Judge', d.judge, d.n_judge, true)
+  const others = d.others_rows ?? []
+  if (others.length > 0) {
+    const n = d.others ? d.others.sessions + d.others.projects : others.length
+    body.push(buttonRow(ui, [othersToggle($, ui, folds, 'decisions', n, look)]))
+    if (isOpen(folds, 'others:decisions', false)) group('dec-others', 'Other sessions and projects', others, n, false)
+  }
   if (total > 0) body.push(buttonRow(ui, [<Button key="detail:decisions" label={glyph(look, GLYPH.detail, 'Full details')} variant="secondary" onPress={() => openDetail($, 'decisions')} />]))
   return htmlSection(ui, look, { icon: 'scale', tone: 'teal', title: 'Decisions', summary: total > 0 ? `${total} · ${d.n_judge} by Judge` : null }, body)
 }
@@ -742,137 +839,114 @@ function decisionsCard($: EngineInterface, ui: Ui, d: NonNullable<Pane['decision
       {decisionGroup($, ui, look, folds, 'dec-you', 'By you', d.you, d.n_you, false)}
       {rule(ui, look, 'row divider', true)}
       {decisionGroup($, ui, look, folds, 'dec-judge', 'By Judge', d.judge, d.n_judge, true)}
+      {(d.others_rows ?? []).length > 0 && isOpen(folds, 'others:decisions', false) ? decisionGroup($, ui, look, folds, 'dec-others', 'Other sessions and projects', d.others_rows ?? [], d.others ? d.others.sessions + d.others.projects : (d.others_rows ?? []).length, false) : null}
+      {(d.others_rows ?? []).length > 0 ? othersToggle($, ui, folds, 'decisions', d.others ? d.others.sessions + d.others.projects : (d.others_rows ?? []).length) : null}
     </Box>,
   )
 }
 
 // ---- the detail page
 
-// Text for markdown: the marks that would style or link it escaped, so a memo line reads as written.
-// Text for the detail page's Markdown: every mark escaped, a leading list or rule mark too, and links, www. names and emails broken
-// with a zero-width space, so a memo line (which a prompt could have written) never turns into a link or a list.
-const md = (t: string): string =>
-  plain(t)
-    .replace(/([\\`*_[\]<>#|~])/g, '\\$1')
-    .replace(/^(\s*)([-+=])/, '$1\\$2')
-    .replace(/^(\s*\d+)([.)])/, '$1\\$2')
-    .replace(/\b(https?|ftp)(?=:\/\/)/gi, '$1\u200b')
-    .replace(/\bwww\./gi, 'www\u200b.')
-    .replace(/@/g, '@\u200b')
-const cap1 = (t: string): string => (t ? t[0].toUpperCase() + t.slice(1) : t)
+type Detail = { icon: IconName; tone: Tone; title: string; sub: string | null; subTone?: Tone | null; cards: Block[]; alt: (string | null | undefined)[] }
 
-// One receipt in full: the time, the cost, the spawns and the saving, then every detail under its kind.
-function receiptMd(line: string): string {
-  const x = receiptOf(line)
-  const head = [x.time ? `**${md(fmtWhen(x.time, true))}**` : null, x.usd ? `**${md(x.usd)}**` : null, x.spawns, x.saved ? `${x.saved} saved` : null].filter(Boolean).join(' · ')
-  const parts = x.details.map(d => {
-    const m = /^([a-z][a-z ]{1,14}):\s*(.*)$/i.exec(d)
-    return m ? `**${cap1(m[1].toLowerCase())}**\n\n${md(m[2])}` : md(d)
-  })
-  return [head, x.text ? md(x.text) : null, ...parts].filter(Boolean).join('\n\n')
-}
-
-// A card's whole text as markdown, for the detail page: the receipt, or every item of the Guide, Resume, Spawns, Decisions.
-function detailOf(id: string, p: Pane | null, g: Guide | null, now: number): { icon: IconName; tone: Tone; title: string; sub: string | null; text: string } | null {
+// What a Full details button opens: the page's own cards with nothing cut, and their whole text for the alt and for Copy.
+function detailOf(id: string, p: Pane | null, g: Guide | null, look: Look, now: number): Detail | null {
+  const w = paneW(look)
   if (id.startsWith('receipt:')) {
     const line = p?.resume?.last[Number(id.slice(8))]
     if (!line) return null
     const x = receiptOf(line)
-    return { icon: 'receipt', tone: 'blue', title: 'Receipt', sub: x.time ? fmtWhen(x.time, true) : null, text: receiptMd(line) }
+    const time = x.time ? fmtWhen(x.time, true) : ''
+    return { icon: 'receipt', tone: 'blue', title: 'Receipt', sub: null, cards: receiptDetail({ ...x, time }, w), alt: [time, x.usd, x.spawns, x.tokens, x.money, x.text, ...x.details] }
   }
   if (id === 'guide' && g) {
     const v = viewOf(g)
-    // nothing open: the card's note (what the memo says next), whole
-    const items = v.items.length ? v.items.map(it => `**${cap1(priority(it.p).word)}** · ${md(it.text)}`) : [md(v.top?.text ?? g.line.replace(/^\s*🧭\s*/, ''))]
-    const t = guideFacts(g, v).facts.map(f => `- ${md(f.label)}: **${md(f.value)}**`)
-    return { icon: 'compass', tone: 'coral', title: 'Guide', sub: `${v.items.length} item${v.items.length === 1 ? '' : 's'}`, text: [...items, ...(t.length ? ['', ...t] : [])].join('\n\n') }
+    const items = v.items.map(it => ({ text: plain(it.text), word: priority(it.p).word, tone: toneOf(priority(it.p).tone) }))
+    const note = items.length ? null : clearNote(g, v)
+    const f = guideFacts(g, v)
+    const open = v.items.filter(i => i.p !== '✅').length
+    return {
+      icon: 'compass',
+      tone: 'coral',
+      title: 'Guide',
+      sub: open > 0 ? `${open} open` : null,
+      subTone: open > 0 ? 'amber' : null,
+      cards: guideDetail({ paneW: w, items, note, facts: f.facts }),
+      alt: [...items.flatMap((x, i) => [i === 0 ? `Next up, ${x.word} priority` : `Then, ${x.word} priority`, x.text]), note?.title, note?.text, ...f.alt],
+    }
   }
   if (id === 'resume' && p?.resume) {
     const r = p.resume
-    const sec = (title: string, lines: string[]) => (lines.length ? `#### ${title}\n\n${lines.join('\n\n')}` : null)
+    const needs = r.needs.map((n, i) => ({ n: String(n.n ?? i + 1), text: plain(n.text), other: n.other }))
+    const list = (title: string, lines: string[]) => (lines.length ? [title, ...lines] : [])
     return {
       icon: 'bookmark',
       tone: 'blue',
       title: 'Resume',
       sub: r.needs_open > 0 ? `${r.needs_open} need you` : null,
-      text: [
-        sec('Now', r.now.map(md)),
-        sec('Next', r.next.map(md)),
-        sec('Needs you', r.needs.map((n, i) => `**${n.n ?? i + 1}** · ${md(n.text)}`)),
-        sec('Left', r.left.map(t => `- ${md(t)}`)),
-      ]
-        .filter(Boolean)
-        .join('\n\n'),
+      subTone: r.needs_open > 0 ? 'amber' : null,
+      cards: resumeDetail({ paneW: w, now: r.now.map(plain), next: r.next.map(plain), needs, needsOpen: r.needs_open, left: r.left.map(plain), facts: [] }),
+      alt: [...list('Now', r.now.map(plain)), ...list('Next', r.next.map(plain)), ...list('Needs you', needs.map(n => `${n.text}${n.other ? ' · other' : ''}`)), ...list('Left', r.left.map(plain))],
     }
   }
   if (id === 'spawns' && p?.spawns) {
     const s = p.spawns
-    const labels = Object.fromEntries(s.totals.by_model.map(m => [m.model, m.label]))
-    const live = s.live.map(l => `**${md(l.side || '?')}** · running\n\n${md(l.description)}\n\n*${md(rowMeta({ time: l.ts === null ? '' : fmtStart(l.ts), model: modelName(l.model, l.effort, labels), tokens: null, word: '' }))}*`)
-    const rows: string[] = []
-    let day = ''
-    for (const r of [...s.rows].reverse()) {
-      const label = dayLabel(r.ts, now)
-      if (label && label !== day) rows.push(`#### ${label}`)
-      day = label
-      const st = rowStatus(r)
-      const head = [`**${md(r.side || '?')}**`, r.usd !== null ? fmtUsd(r.usd) : null, st.word || null].filter(Boolean).join(' · ')
-      rows.push(`${head}\n\n${md(r.description)}\n\n*${md(rowMeta({ time: r.ts === null ? '' : fmtStart(r.ts), model: modelName(r.model, r.effort, labels), tokens: r.tokens, word: '' }))}*`)
-    }
-    return { icon: 'fork', tone: 'violet', title: 'Spawns', sub: spawnsSummary(s), text: [live.length ? `#### Running\n\n${live.join('\n\n---\n\n')}` : null, ...rows].filter(Boolean).join('\n\n') }
+    const { days, alt } = spawnRowsOf(s, [...s.rows].reverse(), now)
+    return { icon: 'fork', tone: 'violet', title: 'Agents', sub: spawnsSummary(s), subTone: s.totals.open_fail > 0 ? 'red' : null, cards: spawnsDetail({ paneW: w, days }), alt: ['History', ...alt] }
   }
   if (id === 'decisions' && p?.decisions) {
     const d = p.decisions
-    const row = (x: PaneDecision, judge: boolean) => {
-      const { when, q, a, note } = decisionOf(x, judge)
-      return `*${md(when)}*\n\n${note ? md(a) : `${md(q)}\n\n→ **${md(a)}**`}`
+    const group = (title: string, n: number, list: PaneDecision[], judge: boolean) => {
+      const rows = list.map(x => decisionOf(x, judge))
+      return { cards: decisionCards(title, n, rows, w, WHOLE), alt: [title, String(n), ...rows.flatMap(x => [x.when, x.note ? null : x.q, x.a])] }
     }
-    const grp = (title: string, list: PaneDecision[], judge: boolean) => `#### ${title}\n\n${list.length ? list.map(x => row(x, judge)).join('\n\n---\n\n') : '*No decisions yet*'}`
-    return { icon: 'scale', tone: 'teal', title: 'Decisions', sub: `${d.n_you + d.n_judge} · ${d.n_judge} by Judge`, text: [grp('By you', d.you, false), grp('By Judge', d.judge, true)].join('\n\n') }
+    const you = group('By you', d.n_you, d.you, false)
+    const judge = group('By Judge', d.n_judge, d.judge, true)
+    return { icon: 'scale', tone: 'teal', title: 'Decisions', sub: `${d.n_you + d.n_judge} · ${d.n_judge} by Judge`, cards: [...you.cards, ...judge.cards], alt: [...you.alt, ...judge.alt] }
   }
   return null
 }
 
-// The detail page: ‹ <the page it returns to> (Home when opened from Home), the section's header strip, and the card's whole text as markdown — drawn by the app as it
-// draws a reply, so it wraps at the real width and nothing is cut.
+// The detail page: ‹ <the page it returns to> (Home when opened from Home), Copy (a picture's text cannot be selected), the section's header strip and its cards.
 async function detailPage($: EngineInterface, ui: Ui, p: Pane | null, g: Guide | null, look: Look, now: number) {
   const { Box, Button, Text } = ui
   const id = await getPaneDetail($)
-  const d = id ? detailOf(id, p, g, now) : null
+  const d = !id ? null : id.startsWith('run:') ? await runningDetail($, id.slice(4), p, look) : detailOf(id, p, g, look, now)
   const tab = await getPaneTab($)
-  const back = (
-    <Box flexDirection="row" alignItems="center">
-      <Button key="detail-back" label={glyph(look, '‹', NAV.find(n => n.id === tab)?.label ?? 'Back')} variant="secondary" onPress={() => setPaneView($, 'main')} />
-    </Box>
-  )
-  if (d === null) return <Box flexDirection="column" rowGap="sm">{back}<Text dimColor>Nothing to show here any more.</Text></Box>
-  const { Markdown } = ui as Ui & { Markdown: NonNullable<Ui['Markdown']> }
+  const back = <Button key="detail-back" label={glyph(look, '‹', NAV.find(n => n.id === tab)?.label ?? 'Back')} variant="secondary" onPress={() => setPaneView($, 'main')} />
+  if (d === null) return <Box flexDirection="column" rowGap="sm"><Box flexDirection="row" alignItems="center">{back}</Box><Text dimColor>Nothing to show here any more.</Text></Box>
+  const text = d.alt.filter(Boolean).join('\n')
   return (
     <Box flexDirection="column" rowGap="md">
-      {back}
-      {htmlSection(ui, look, { icon: d.icon, tone: d.tone, title: d.title, summary: d.sub }, [<Markdown key="detail-text" text={d.text} />])}
+      <Box flexDirection="row" alignItems="center" columnGap="sm">
+        {back}
+        <Button key="detail-copy" label={glyph(look, GLYPH.copy, 'Copy')} variant="secondary" onPress={press => copyText($, text, press.surface)} />
+      </Box>
+      {htmlSection(ui, look, { icon: d.icon, tone: d.tone, title: d.title, summary: d.sub, summaryTone: d.subTone ?? null }, d.cards.map((c, i) => pic(ui, look, c, i === 0 ? d.alt : [])))}
     </Box>
   )
 }
 
 // ---- Home
 
+// Nothing open: what the memo says next, or that all is clear.
+function clearNote(g: Guide | null, v: GuideView | null): { title: string; text: string } {
+  const text = g ? plain(v?.top?.text ?? g.line.replace(/^\s*🧭\s*/, '')) : 'Nothing from the guide yet'
+  const m = /memo:\s*(.+)$/i.exec(text)
+  return { title: m ? 'Next from the memo' : 'All clear', text: m ? m[1] : text }
+}
+
 // The Home page of the desktop: the one thing to do next with its buttons, the numbers that matter from every section at a glance,
-// where the work stands, and the latest decision and receipt. The nav bar's other pages hold the detail.
+// what runs now, the spend card, where the work stands, and the latest decision and receipt. The nav bar's other pages hold the detail.
 // Only the sections the pane holds feed it: one placed in the band or the chat is not summed up here (`p` and `g` come filtered).
-function homeHtml($: EngineInterface, ui: Ui, p: { resume: Pane['resume']; spawns: PaneSpawns | null; decisions: Pane['decisions'] | null }, g: Guide | null, look: Look, hidden: boolean) {
+function homeHtml($: EngineInterface, ui: Ui, p: { resume: Pane['resume']; spawns: PaneSpawns | null; decisions: Pane['decisions'] | null }, g: Guide | null, look: Look, hidden: boolean, running: JSX.Element | null) {
   const { Button } = ui
   const v = g ? viewOf(g) : null
   const open = v ? v.items.filter(i => i.p !== '✅').length : 0
   const clear = !v || v.done || v.items.length === 0
   const top = !clear && v ? v.items[0] : undefined
   const topItem: CardItem | null = top ? { text: plain(top.text), word: priority(top.p).word, tone: toneOf(priority(top.p).tone) } : null
-  let note: { title: string; text: string } | null = null
-  if (clear) {
-    const text = g ? plain(v?.top?.text ?? g.line.replace(/^\s*🧭\s*/, '')) : 'Nothing from the guide yet'
-    const m = /memo:\s*(.+)$/i.exec(text)
-    note = { title: m ? 'Next from the memo' : 'All clear', text: m ? m[1] : text }
-  }
+  const note = clear ? clearNote(g, v) : null
   // the numbers that matter now, one from each section where it says something
   const glance: Fact[] = []
   const gf = g && v ? guideFacts(g, v).facts : []
@@ -881,11 +955,10 @@ function homeHtml($: EngineInterface, ui: Ui, p: { resume: Pane['resume']; spawn
   const r = p?.resume ?? null
   if (r && r.needs_open > 0) glance.push({ label: 'Needs you', value: String(r.needs_open), tone: 'amber' })
   const s = p?.spawns ?? null
-  if (s && s.live.length > 0) glance.push({ label: 'Running', value: plural(s.live.length, 'agent'), tone: 'blue' })
   if (s && s.totals.open_fail > 0) glance.push({ label: 'Open FAIL', value: String(s.totals.open_fail), tone: 'red' })
   const task = gf.find(f => f.label === 'This task')
   if (task) glance.push(task)
-  if (s && s.totals.spawns > 0) glance.push({ label: 'Saved', value: `${s.totals.saved_pct}% · ${fmtUsd(s.totals.usd)} spent`, tone: 'green' })
+  const spend = s && s.totals.spawns > 0 ? { ...spendOf(s.totals, false), spawns: s.totals.spawns } : null // the saving and the split by model: its own card under the glance
   // the newest decision of either group (the times sort as written)
   const d = p?.decisions ?? null
   const newest = d ? [d.you[0], d.judge[0]].filter((x): x is PaneDecision => !!x).sort((a, b) => (a.ts < b.ts ? 1 : -1))[0] : undefined
@@ -898,6 +971,7 @@ function homeHtml($: EngineInterface, ui: Ui, p: { resume: Pane['resume']; spawn
     top: topItem,
     clear: note,
     glance,
+    spend,
     now: r?.now[0] ? plain(r.now[0]) : null,
     next: r?.next[0] ? plain(r.next[0]) : null,
     decision,
@@ -918,6 +992,8 @@ function homeHtml($: EngineInterface, ui: Ui, p: { resume: Pane['resume']; spawn
         ]),
   ]
   if (b.glance) body.push(pic(ui, look, b.glance, ['At a glance', ...glance.flatMap(f => [f.label, f.value])]))
+  if (running) body.push(running)
+  if (b.spend && spend) body.push(pic(ui, look, b.spend, ['Agents', String(spend.spawns), ...spend.alt]))
   if (b.where) body.push(pic(ui, look, b.where, [r?.now[0] ? 'Now' : null, r?.now[0] ? plain(r.now[0]) : null, r?.next[0] ? 'Next' : null, r?.next[0] ? plain(r.next[0]) : null]))
   if (b.latest) body.push(pic(ui, look, b.latest, [decision ? 'Last decision' : null, decision?.when, decision && !decision.note ? decision.q : null, decision?.a, done ? 'Last receipt' : null, done ? plain(done) : null]))
   if (body.length === 0) body.push(emptyPic(ui, look, 'Nothing to sum up yet'))
@@ -959,6 +1035,7 @@ export async function renderPane($: EngineInterface, e: RenderEvent) {
     const now = await $.clock.now()
     const tabs = [
       'home',
+      ...(p?.places.running !== 'off' ? ['running'] : []),
       ...(p?.places.guide === 'pane' && g !== null ? ['guide'] : []),
       ...(p?.places.resume === 'pane' ? ['resume'] : []),
       ...(p?.decisions ? ['decisions'] : []),
@@ -969,10 +1046,12 @@ export async function renderPane($: EngineInterface, e: RenderEvent) {
     const tab = tabs.includes(want) ? want : 'home'
     const lk: Look = now - (await getPaneNavTs($)) < 1500 ? { ...look, enter: { n: 0 } } : look // just moved here: the cards slide in
     const page =
-      tab === 'guide'
+      tab === 'running'
+        ? await runningPage($, ui, p, lk)
+        : tab === 'guide'
         ? await guideHere(lk)
         : tab === 'resume' && p
-          ? resumeCard($, ui, p.resume, folds, lk, g)
+          ? resumeCard($, ui, p.resume, folds, lk, g, p.memo_health)
           : tab === 'decisions' && p?.decisions
             ? decisionsCard($, ui, p.decisions, folds, lk)
             : tab === 'spawns' && p
@@ -986,11 +1065,12 @@ export async function renderPane($: EngineInterface, e: RenderEvent) {
                     p?.places.guide === 'pane' ? g : null,
                     lk,
                     g !== null && hideKeyOf(g) === (await getHiddenKey($)),
+                    p?.places.running !== 'off' ? await runningHomeCard($, ui, p, lk) : null,
                   )
     const { Box } = ui
     return (
       <Box flexDirection="column" rowGap="lg">
-        {navBar($, ui, look, tab, tabs)}
+        {navBar($, ui, look, tab, tabs, await getWorkBusy($))}
         {page}
         {brandFoot(ui, look)}
       </Box>
@@ -999,7 +1079,11 @@ export async function renderPane($: EngineInterface, e: RenderEvent) {
   const cards: JSX.Element[] = []
   const gc = await guideHere(look)
   if (gc) cards.push(gc)
-  if (p?.places.resume === 'pane') cards.push(resumeCard($, ui, p.resume, folds, look, g))
+  if (p?.places.running !== 'off') {
+    const rc = await runningTerminal($, ui, p, folds, look, e)
+    if (rc) cards.push(rc)
+  }
+  if (p?.places.resume === 'pane') cards.push(resumeCard($, ui, p.resume, folds, look, g, p.memo_health))
   if (p?.decisions) cards.push(decisionsCard($, ui, p.decisions, folds, look))
   if (p?.places.spawns === 'pane') cards.push(spawnsCard($, ui, p.spawns, folds, look, p.ts, await $.clock.now())) // the engine's clock: Today / Yesterday
   cards.push(await overridesCard($, ui, p, folds, look))

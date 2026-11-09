@@ -233,7 +233,7 @@ def main():
 
     files = ledger_files(all_sessions, sess)
     if not files:
-        print("abofles: no spawns logged yet." if all_sessions else "abofles: no ledger for this session yet")
+        print("abofles: no agents logged yet." if all_sessions else "abofles: no ledger for this session yet")
         return
 
     rows = [r for _, rs in load(files) for r in rs]
@@ -249,18 +249,18 @@ def main():
     if real:
         tokens = sum(r["tokens"] for r in real); rcost = sum(r.get("usd") or 0 for r in real); rbase = sum(r.get("base_usd") or 0 for r in real)
         pct = f" ({100 * (rbase - rcost) / rbase:.0f}%)" if rbase else ""
-        print(f"Abo Fles (ابو فليس) — status, {scope}: {len(rows)} spawn{'' if len(rows) == 1 else 's'} · {fmt_tokens(tokens)} tokens · {fmt_usd(rcost)} · saved {fmt_usd(rbase - rcost)}{pct} vs all {label(bm)}")
+        print(f"Abo Fles (ابو فليس) — status, {scope}: {len(rows)} agent{'' if len(rows) == 1 else 's'} · {fmt_tokens(tokens)} tokens · {fmt_usd(rcost)} · saved {fmt_usd(rbase - rcost)}{pct} vs all {label(bm)}")
     else:
-        print(f"Abo Fles (ابو فليس) — status, {scope}: {len(rows)} spawn{'' if len(rows) == 1 else 's'} · {units} u · saved {100 * (1 - total / base):.0f}% vs all {baseline}")
+        print(f"Abo Fles (ابو فليس) — status, {scope}: {len(rows)} agent{'' if len(rows) == 1 else 's'} · {units} u · saved {100 * (1 - total / base):.0f}% vs all {baseline}")
     if context_tokens and not all_sessions:
         tp = newest_transcript()
         tk = context_tokens(str(tp)) if tp else None
         if tk is not None:
             marks = context_marks(newest_state(os.getcwd(), sess).get("root") or os.getcwd())
             nxt = next((m for m in marks if tk < m * 1000), None)
-            print(f"Context:    {tk // 1000}K tokens · " + (f"next compact warning at {nxt}K" if nxt else "past the last mark — run /abofles:memo, then /compact"))
+            print(f"Context:    {tk // 1000}K tokens · " + (f"next compact warning at {nxt}K" if nxt else "past the last mark — run /compact at a task boundary"))
     print()
-    print("Spawns per model")
+    print("Agents per model")
     mx = max(by_model.values()) if by_model else 1
     for m in ("haiku", "sonnet", "opus", "fable"):
         if by_model.get(m):
@@ -270,7 +270,7 @@ def main():
     print("Confidence: " + "  ".join(f"{c} {n}" for c, n in conf.most_common()))
     pend = sum(1 for r in rows if r.get("status") == "pending")
     if pend:
-        print(f"Pending:    {pend} background spawn(s) not yet filled")
+        print(f"Pending:    {pend} background agent(s) not yet filled")
     print()
     fu = follow_ups(rows)
     if fu:

@@ -22,7 +22,7 @@ Two inputs pick the workflow: the **topic** gives the tier, the **intent** (what
 | 🟠 Sensitive (T3) | Read → Analyse → Plan → Work → Verify → Review |
 | 🔴 Critical (T4) | Read → Analyse → Plan → Work → Verify → Review (every reviewer required) |
 
-`Review` = the specialist reviewers of the topic's domain at that tier (table below; `scripts/topic.py find` prints them per topic), spawned **in parallel after Verify passes**, each with the tier's Verify cell (model · effort · cap) unless `- Review: <Name> / T<tier> = model·effort` overrides it. A reviewer FAIL → a Work spawn fixes it → re-run **that reviewer only**. 🟢/🟡: the generic verifier alone.
+`Review` = the specialist reviewers of the topic's domain at that tier (table below; `scripts/topic.py find` prints them per topic), started **in parallel after Verify passes**, each with the tier's Verify cell (model · effort · cap) unless `- Review: <Name> / T<tier> = model·effort` overrides it. A reviewer FAIL → a Work agent fixes it → re-run **that reviewer only**. 🟢/🟡: the generic verifier alone.
 
 **Review gate** (hook, at the receipt): a 🔴 change closed with a required reviewer missing is refused once, naming the missing reviewers; a 🟠 change gets a 🟠 guide item instead. A reviewer you skip on purpose is named in the receipt's `workflow` line — `Security skipped: <reason>` — and the gate lets it pass. `- Review gate = auto | on | warn | off` (auto = this; on = refuse on T3 too; warn = never refuse; off = silent).
 

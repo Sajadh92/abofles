@@ -1,5 +1,5 @@
 ---
-description: "One line per spawn of this session — time, side, status, confidence, model·effort, tokens, $ and saved — plus the totals line (the pane's Spawns card as text)"
+description: "One line per agent of this session — time, side, status, confidence, model·effort, tokens, $ and saved — plus the totals line (the pane's Agents card as text)"
 argument-hint: "[--all]"
 allowed-tools: Bash(bash *)
 ---

@@ -1,8 +1,8 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface } from 'claude-code'
 
-import type { Guide, GuideItem, Pane, PaneDecision, PaneDecisions, PaneLive, PaneModel, PaneOverrideKey, PaneOverrides, PanePlaces, PaneResume, PaneRow, PaneSpawns, PaneTotals } from '../types'
-import { ICONS, emptyCard, headerBlock, paneWidth, svgOf, tileSvg } from './html'
+import type { Guide, GuideItem, Pane, PaneDecision, PaneDecisions, PaneHealth, PaneLive, PaneModel, PaneOverrideKey, PaneOverrides, PanePlaces, PaneResume, PaneRow, PaneSpawns, PaneTotals } from '../types'
+import { ICONS, emptyCard, headerBlock, headerWidth, paneWidth, svgOf, textOf, tileSvg } from './html'
 import type { Block, IconName, Tone } from './html'
 
 // What the band (register.tsx) and the pane (pane.tsx) share: the state atoms, the cleaning of the state file's
@@ -17,6 +17,8 @@ const dismissedTs = atom({ plugin: 'abofles-guide', key: 'dismissedTs' } as cons
 const running = atom({ plugin: 'abofles-guide', key: 'running' } as const, false)
 // The ids of the red items already toasted: a toast fires only for a red id not in it (kept across reloads).
 const toasted = atom({ plugin: 'abofles-guide', key: 'toasted' } as const, [] as string[])
+// The size `session.compact` resolved with; null before a compact is done or when the engine recorded none.
+const compactedTo = atom({ plugin: 'abofles-guide', key: 'compactedTo' } as const, null as number | null)
 
 // The pane payload of the state file (null: older hooks, or none yet), see cleanPane.
 const pane = atom({ plugin: 'abofles-guide', key: 'pane' } as const, null)
@@ -425,10 +427,15 @@ function strip(ui: Ui, look: Look, height: number, alt: string, body: string) {
 // `light` (between the rows of a list) is fainter than the rule between sections.
 export function rule(ui: Ui, look: Look, alt = 'divider', light = false) {
   const { Text } = ui
-  return strip(ui, look, 1, alt, `<rect width="1200" height="1" fill="#808080" fill-opacity="${light ? '0.15' : '0.3'}"/>`) ?? <Text dimColor>{'─'.repeat(look.width)}</Text>
+  return strip(ui, look, 1, alt, `<rect width="1200" height="1" fill="#808080" fill-opacity="${light ? '0.14' : '0.3'}"/>`) ?? <Text dimColor>{'─'.repeat(look.width)}</Text>
 }
 
 // The rows of a list with a light rule between each pair (not above the first, not below the last).
+// A line between groups: thicker and stronger than the light one between the rows inside them, so the two levels read apart.
+export function heavyRule(ui: Ui, look: Look, alt = 'group divider') {
+  const { Text } = ui
+  return strip(ui, look, 2, alt, `<rect width="1200" height="2" fill="#808080" fill-opacity="0.5"/>`) ?? <Text>{'━'.repeat(look.width)}</Text>
+}
 export function ruled(ui: Ui, look: Look, rows: JSX.Element[]): JSX.Element[] {
   return rows.flatMap((r, i) => (i === 0 ? [r] : [rule(ui, look, 'row divider', true), r]))
 }
@@ -467,6 +474,15 @@ export function bar(ui: Ui, look: Look, parts: { pct: number; color: string }[],
 }
 
 // The "Show all N" / "Show fewer" button of a list longer than `limit` (id `more:<id>`, folded by default), or null.
+// Items of other sessions and projects stay out of the way until asked for: this button shows them, or hides them again (a view choice, nothing is saved).
+export function othersToggle($: EngineInterface, ui: Ui, folds: Folds, id: string, n: number, look?: Look) {
+  const { Button } = ui
+  const open = isOpen(folds, `others:${id}`, false)
+  const label = open ? 'Hide others' : `Show others (${n})`
+  if (look && hasSvg(ui, look)) return <Button key={`others:${id}`} label={glyph(look, open ? GLYPH.less : GLYPH.more, label)} variant="secondary" onPress={() => setFold($, `others:${id}`, !open)} />
+  return <Button key={`others:${id}`} label={label} plain dimColor onPress={() => setFold($, `others:${id}`, !open)} />
+}
+
 export function moreButton($: EngineInterface, ui: Ui, folds: Folds, id: string, total: number, limit: number, look?: Look) {
   const { Button } = ui
   if (total <= limit) return null
@@ -483,18 +499,18 @@ export const hasSvg = (ui: Ui, look: Look): boolean => look.svg && 'Svg' in ui &
 
 // The glyph before a button's label, one single-tone set for the whole pane: a glyph is text, so it takes the button's own colour
 // and state (primary, secondary, hover) as its label does. The terminal's buttons keep the label alone.
-export const GLYPH = { all: '✓', use: '↵', recheck: '↻', copy: '⧉', memo: '⤓', more: '↓', less: '↑', edit: '✎', show: '↺', other: '⋯', detail: '≡' } as const
+export const GLYPH = { all: '✓', use: '↵', recheck: '↻', copy: '⧉', memo: '⤓', more: '↓', less: '↑', edit: '✎', show: '↺', other: '⋯', detail: '≡', open: '↗', stop: '■' } as const
 export const glyph = (look: Look, g: string, label: string): string => (look.svg ? `${g} ${label}` : label)
 
 // The pane's width in px, as its cards are laid out.
 export const paneW = (look: Look): number => paneWidth(look.width + 4)
 
 // An HTML block as a picture laid out at the pane's width and scaled to the slot keeping its ratio (a 4096 px width capped at
-// the slot, no height); `alt` is every text in it, one per line.
-export function pic(ui: Ui, look: Look, b: Block, alt: (string | null | undefined)[]) {
+// the slot, no height); `alt` is every text in it, one per line, or the block's own text when none is given: later cards with a blank alt did not show on the desktop.
+export function pic(ui: Ui, look: Look, b: Block, alt: (string | null | undefined)[], width?: number) {
   const { Svg } = ui as Ui & { Svg: NonNullable<Ui['Svg']> }
   const enter = look.enter ? look.enter.n++ * 50 : -1 // one after another, 50 ms apart
-  return <Svg source={svgOf(b, paneW(look), enter)} alt={alt.filter((x): x is string => !!x).join('\n') || ' '} width={4096} />
+  return <Svg source={svgOf(b, width ?? paneW(look), enter)} alt={alt.filter((x): x is string => !!x).join('\n') || textOf(b.html) || ' '} width={width ?? 4096} />
 }
 
 // An empty or error state: a muted text in a card of its own, wrapped (never cut before its instruction).
@@ -509,10 +525,11 @@ export function buttonRow(ui: Ui, buttons: (JSX.Element | null)[]) {
 // The desktop's pages, in the nav bar's order: each with the icon and tone its section's header strip draws, and its name.
 export const NAV: readonly { id: string; icon: IconName; tone: Tone; label: string }[] = [
   { id: 'home', icon: 'house', tone: 'mint', label: 'Home' },
+  { id: 'running', icon: 'activity', tone: 'blue', label: 'Running' },
   { id: 'guide', icon: 'compass', tone: 'coral', label: 'Guide' },
   { id: 'resume', icon: 'bookmark', tone: 'blue', label: 'Resume' },
   { id: 'decisions', icon: 'scale', tone: 'teal', label: 'Decisions' },
-  { id: 'spawns', icon: 'fork', tone: 'violet', label: 'Spawns' },
+  { id: 'spawns', icon: 'fork', tone: 'violet', label: 'Agents' },
   { id: 'overrides', icon: 'sliders', tone: 'grey', label: 'Overrides' },
 ]
 
@@ -522,13 +539,22 @@ export const NAV: readonly { id: string; icon: IconName; tone: Tone; label: stri
 // line it is about the 36 px tile, which is drawn 2 px low to sit on the button's centre — the press lands on the icon and the
 // desktop's ghost fill matches the tile under the pointer. The shown page's Button is the one not dimmed.
 const BLANK = '\u2007'
-export function navBar($: EngineInterface, ui: Ui, look: Look, tab: string, tabs: string[]) {
+// Always one row: a full bar holds the row's two edges, the cards' own edges, with the free space between the tiles; a few tiles sit together in the middle.
+// A pane too narrow for full tiles gets smaller ones rather than a second row.
+const NAV_TILE = 36
+const NAV_MIN = 24
+const NAV_CELL = 9 // px per unit of a Box's width: a 36 px tile fills 4
+const NAV_SPREAD = 5
+export function navBar($: EngineInterface, ui: Ui, look: Look, tab: string, tabs: string[], busy = 0) {
   const { Box, Button, Svg } = ui as Ui & { Svg: NonNullable<Ui['Svg']> }
+  const shown = NAV.filter(n => tabs.includes(n.id))
+  const size = Math.max(NAV_MIN, Math.min(NAV_TILE, Math.floor(paneW(look) / Math.max(1, shown.length))))
+  const spread = shown.length >= NAV_SPREAD
   return (
-    <Box flexDirection="row" flexWrap="wrap" justifyContent="center" alignItems="center" gap="xs">
-      {NAV.filter(n => tabs.includes(n.id)).map(n => (
-        <Box key={`navitem:${n.id}`} position="relative" width={4} height={2} alignItems="center" justifyContent="center">
-          <Svg source={tileSvg(n.icon, n.tone, 36, n.id === tab, 2)} alt={n.id === tab ? `${n.label}, shown` : n.label} width={36} />
+    <Box key="navbar" flexDirection="row" flexWrap="nowrap" justifyContent={spread ? 'space-between' : 'center'} alignItems="center" {...(spread ? {} : { gap: 'xs' as const })}>
+      {shown.map(n => (
+        <Box key={`navitem:${n.id}`} position="relative" width={size / NAV_CELL} height={2} alignItems="center" justifyContent="center">
+          <Svg source={tileSvg(n.icon, n.tone, size, n.id === tab, 2, n.id === 'running' && busy > 0)} alt={[n.label, n.id === 'running' && busy > 0 ? `${busy} running` : '', n.id === tab ? 'shown' : ''].filter(Boolean).join(', ')} width={size} />
           <Box position="absolute" top={0} left={0} right={0} bottom={0} alignItems="center" justifyContent="center">
             <Button key={`nav:${n.id}`} label={BLANK} plain dimColor={n.id !== tab} onPress={() => goTab($, n.id)} />
           </Box>
@@ -540,14 +566,35 @@ export function navBar($: EngineInterface, ui: Ui, look: Look, tab: string, tabs
 
 // A section on the desktop: its header strip (the icon on a tile in `tone`, the title, the summary at the right in `summaryTone`
 // when it carries meaning) and its body, the cards and their buttons. Sections do not fold here: everything is in view.
-export function htmlSection(ui: Ui, look: Look, head: { icon: IconName; tone: Tone; title: string; summary?: string | null; summaryTone?: Tone | null }, body: (JSX.Element | null)[]) {
+// `action`: a button on the header's own row, at its end. A picture takes no press, so the strip is drawn at its own size beside the button, which keeps the card's inset on its side.
+export function htmlSection(ui: Ui, look: Look, head: { icon: IconName; tone: Tone; title: string; summary?: string | null; summaryTone?: Tone | null; action?: JSX.Element | null }, body: (JSX.Element | null)[]) {
   const { Box } = ui
+  const strip = headerBlock(head.icon, head.tone, head.title, head.summary, head.summaryTone)
+  const alt = [head.title, head.summary]
   return (
     <Box flexDirection="column" rowGap="sm">
-      {pic(ui, look, headerBlock(head.icon, head.tone, head.title, head.summary, head.summaryTone), [head.title, head.summary])}
+      {head.action ? (
+        <Box key="section-head" flexDirection="row" flexWrap="nowrap" justifyContent="space-between" alignItems="center" columnGap="sm" paddingRight="md">
+          {pic(ui, look, strip, alt, headerWidth(head.title, head.summary))}
+          {head.action}
+        </Box>
+      ) : (
+        pic(ui, look, strip, alt)
+      )}
       {body}
     </Box>
   )
+}
+
+export const fmtTokens = (n: number): string => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1000 ? `${Math.round(n / 1000)}K` : String(n))
+export const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`
+
+const EFFORT: Record<string, string> = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra', max: 'Max' }
+const MODEL_NAME: Record<string, string> = { haiku: 'Haiku 5.5', sonnet: 'Sonnet 5.5', opus: 'Opus 5.5', fable: 'Fable 5.1' }
+const capFirst = (t: string): string => (t ? t[0].toUpperCase() + t.slice(1) : t)
+export function modelName(model: string, effort: string, labels: Record<string, string> = {}): string {
+  const m = model ? labels[model] ?? MODEL_NAME[model] ?? capFirst(model) : '?'
+  return effort ? `${m} · ${EFFORT[effort] ?? capFirst(effort)}` : m
 }
 
 export const isStr = (v: unknown): v is string => typeof v === 'string'
@@ -591,8 +638,9 @@ export function cleanGuide(raw: unknown): Guide | null {
   if (!isObj(raw) || !isStr(raw.line) || !raw.line) return null
   let ctx: Guide['ctx'] = null
   if (isObj(raw.ctx) && isNum(raw.ctx.tokens) && (raw.ctx.mark == null || isNum(raw.ctx.mark))) {
-    ctx = { tokens: raw.ctx.tokens, mark: raw.ctx.mark ?? null }
+    ctx = { tokens: raw.ctx.tokens, mark: raw.ctx.mark ?? null, auto: raw.ctx.auto === true }
   }
+  const wait = isObj(raw.ctx_wait) && Array.isArray(raw.ctx_wait.marks) ? { marks: raw.ctx_wait.marks.filter(isNum), auto: raw.ctx_wait.auto === true } : null
   let task: Guide['task'] = null
   if (isObj(raw.task) && isNum(raw.task.spawns) && isNum(raw.task.usd)) {
     task = {
@@ -613,7 +661,7 @@ export function cleanGuide(raw: unknown): Guide | null {
     if (unresolve) lastResolved = { text: lr.text, unresolve, ts: lr.ts }
   }
   const items = Array.isArray(raw.items) ? raw.items.map(cleanItem).filter((i): i is GuideItem => i !== null) : []
-  return { line: raw.line, ts: isNum(raw.ts) ? raw.ts : 0, root: isStr(raw.root) ? raw.root : '', items, ctx, task, all, main: isStr(raw.main) ? raw.main : null, last_resolved: lastResolved }
+  return { line: raw.line, ts: isNum(raw.ts) ? raw.ts : 0, root: isStr(raw.root) ? raw.root : '', items, ctx, ctx_wait: wait, task, all, main: isStr(raw.main) ? raw.main : null, last_resolved: lastResolved }
 }
 
 // Where each thing shows; a missing or unknown place is today's view (guide in the band, resume and spawns in the output).
@@ -623,22 +671,34 @@ function cleanPlaces(raw: unknown): PanePlaces {
     guide: p.guide === 'pane' ? 'pane' : 'band',
     resume: p.resume === 'pane' ? 'pane' : 'output',
     spawns: p.spawns === 'pane' ? 'pane' : 'output',
+    running: p.running === 'off' ? 'off' : 'pane',
   }
+}
+
+const OTHERS_MAX = 20
+
+// How many items of other sessions and projects were left out (Other items = hide); none left out: null.
+function cleanOthers(raw: unknown): { sessions: number; projects: number } | null {
+  if (!isObj(raw)) return null
+  const sessions = isNum(raw.sessions) ? raw.sessions : 0
+  const projects = isNum(raw.projects) ? raw.projects : 0
+  return sessions + projects > 0 ? { sessions, projects } : null
 }
 
 function cleanResume(raw: unknown): PaneResume | null {
   if (!isObj(raw)) return null
   const needs = Array.isArray(raw.needs)
-    ? raw.needs.filter(isObj).filter(n => isStr(n.text)).map(n => ({ n: numOrNull(n.n), text: n.text as string }))
+    ? raw.needs.filter(isObj).filter(n => isStr(n.text)).map(n => ({ n: numOrNull(n.n), text: n.text as string, ...(n.other === true ? { other: true } : {}) }))
     : []
+  const othersItems = Array.isArray(raw.others_items) ? raw.others_items.filter(isObj).filter(n => isStr(n.text)).map(n => ({ n: numOrNull(n.n), text: n.text as string })).slice(0, OTHERS_MAX) : []
   const needsFill = isStr(raw.needs_fill) && raw.needs_fill.trim() ? raw.needs_fill : null
-  return { head: strOr(raw.head, ''), now: strsOf(raw.now), left: strsOf(raw.left), next: strsOf(raw.next), needs, needs_open: isNum(raw.needs_open) ? raw.needs_open : needs.length, needs_fill: needsFill, last: strsOf(raw.last) }
+  return { head: strOr(raw.head, ''), now: strsOf(raw.now), left: strsOf(raw.left), next: strsOf(raw.next), needs, needs_open: isNum(raw.needs_open) ? raw.needs_open : needs.length, needs_fill: needsFill, others: cleanOthers(raw.others), others_items: othersItems, last: strsOf(raw.last) }
 }
 
 // One decision (the owner's or the Judge's): the time, the question and the answer are text; a malformed entry is dropped.
 function cleanDecision(v: unknown): PaneDecision | null {
   if (!isObj(v) || !isStr(v.ts) || !isStr(v.q) || !isStr(v.a)) return null
-  return { ts: v.ts, q: v.q, a: v.a, sid: strOr(v.sid, '') }
+  return { ts: v.ts, q: v.q, a: v.a, sid: strOr(v.sid, ''), ...(v.other === true ? { other: true } : {}) }
 }
 
 const DECISIONS_MAX = 50
@@ -649,7 +709,13 @@ function cleanDecisions(raw: unknown): PaneDecisions | null {
   const group = (v: unknown): PaneDecision[] => (Array.isArray(v) ? v.map(cleanDecision).filter((d): d is PaneDecision => d !== null).slice(0, DECISIONS_MAX) : [])
   const you = group(raw.you)
   const judge = group(raw.judge)
-  return { you, judge, n_you: isNum(raw.n_you) ? raw.n_you : you.length, n_judge: isNum(raw.n_judge) ? raw.n_judge : judge.length }
+  return { you, judge, n_you: isNum(raw.n_you) ? raw.n_you : you.length, n_judge: isNum(raw.n_judge) ? raw.n_judge : judge.length, others: cleanOthers(raw.others), others_rows: group(raw.others_rows).slice(0, OTHERS_MAX) }
+}
+
+function cleanHealth(v: unknown): PaneHealth | null {
+  if (!isObj(v)) return null
+  const n = (x: unknown) => (isNum(x) && x > 0 ? x : 0)
+  return { archived_items: n(v.archived_items), archived_sessions: n(v.archived_sessions), trimmed: n(v.trimmed), deduped: n(v.deduped), line: strOr(v.line, '') }
 }
 
 function cleanLive(v: unknown): PaneLive | null {
@@ -680,7 +746,7 @@ function cleanRow(v: unknown): PaneRow | null {
 
 function cleanModel(v: unknown): PaneModel | null {
   if (!isObj(v) || !isStr(v.model)) return null
-  return { model: v.model, label: strOr(v.label, v.model), spawns: isNum(v.spawns) ? v.spawns : 0, usd: isNum(v.usd) ? v.usd : 0, pct: isNum(v.pct) ? v.pct : 0 }
+  return { model: v.model, label: strOr(v.label, v.model), spawns: isNum(v.spawns) ? v.spawns : 0, tokens: isNum(v.tokens) ? v.tokens : 0, usd: isNum(v.usd) ? v.usd : 0, pct: isNum(v.pct) ? v.pct : 0 }
 }
 
 function cleanSpawns(raw: unknown): PaneSpawns {
@@ -695,7 +761,11 @@ function cleanSpawns(raw: unknown): PaneSpawns {
 
 function cleanOverrideKey(v: unknown): PaneOverrideKey | null {
   if (!isObj(v) || !isStr(v.key) || !v.key) return null
-  return { key: v.key, kind: strOr(v.kind, 'text'), options: strsOf(v.options), value: strOr(v.value, ''), source: strOr(v.source, 'default'), default: strOr(v.default, '') }
+  const source = strOr(v.source, 'default')
+  const value = strOr(v.value, '')
+  // older hooks name only the winning file: the other one reads as setting nothing
+  const own = (file: 'project' | 'user'): string | null => (isStr(v[file]) ? (v[file] as string) : v[file] === undefined && source === file ? value : null)
+  return { key: v.key, kind: strOr(v.kind, 'text'), options: strsOf(v.options), value, source, default: strOr(v.default, ''), project: own('project'), user: own('user') }
 }
 
 function cleanOverrides(raw: unknown): PaneOverrides | null {
@@ -722,6 +792,7 @@ export function cleanPane(raw: unknown): Pane | null {
       spawns: cleanSpawns(raw.spawns),
       overrides: cleanOverrides(raw.overrides),
       decisions: cleanDecisions(raw.decisions),
+      memo_health: cleanHealth(raw.memo_health),
       cmd: { overrides: scriptArgv(cmd.overrides, ['overrides.py']) },
     }
   } catch {
@@ -750,6 +821,22 @@ async function claim($: EngineInterface): Promise<boolean> {
 }
 
 // Reads the session's state file: the guide and the pane. Toasts a new red item.
+// Right after a compact the state file has no size: the engine writes it for the hooks only after they ran. Its own figure stands in.
+function withCompactSize(g: Guide | null, tokens: number | null): Guide | null {
+  if (!g || g.ctx || !g.ctx_wait || tokens == null) return g
+  return { ...g, ctx: { tokens, mark: g.ctx_wait.marks.find(m => m * 1000 > tokens) ?? null, auto: g.ctx_wait.auto } }
+}
+
+// Keeps the size of a compact and redraws. Never throws: it runs around the compact itself, which a failure here must not touch.
+export async function noteCompact($: EngineInterface, tokens: number | null) {
+  try {
+    await update($, compactedTo, () => tokens)
+    if (tokens != null) await refresh($)
+  } catch {
+    // the pane keeps what it shows until the next refresh
+  }
+}
+
 export async function refresh($: EngineInterface) {
   try {
     const home = (await $.env.get('HOME')) ?? ''
@@ -759,7 +846,7 @@ export async function refresh($: EngineInterface) {
     const st = JSON.parse(text) as { guide?: unknown; pane?: unknown }
     const nextPane = cleanPane(isObj(st) ? st.pane : null)
     await update($, pane, () => nextPane)
-    const next = cleanGuide(isObj(st) ? st.guide : null)
+    const next = withCompactSize(cleanGuide(isObj(st) ? st.guide : null), await read($, compactedTo))
     if (!next) {
       await update($, guide, () => null)
       return
@@ -864,7 +951,7 @@ export function meterOf(g: Guide): string {
   const parts: string[] = []
   if (g.ctx) parts.push(g.ctx.mark == null ? `ctx ${Math.round(g.ctx.tokens / 1000)}K` : `ctx ${Math.round(g.ctx.tokens / 1000)}K / ${g.ctx.mark}K`)
   if (g.task) {
-    parts.push(`task ${g.task.spawns} spawns`, `$${g.task.usd.toFixed(2)}`)
+    parts.push(`task ${g.task.spawns} agents`, `$${g.task.usd.toFixed(2)}`)
     if (g.task.left != null) parts.push(`budget ${g.task.left} left`)
   }
   const main = g.main?.replace(/^\s*main:\s*/i, '').trim()
@@ -892,7 +979,7 @@ export function promptFor(line: string): string {
 }
 
 // What the guide shows, worked out once: the items, the top one, whether nothing is open, and the texts the buttons hand over.
-export type GuideView = { items: GuideItem[]; top: GuideItem | undefined; done: boolean; memo: boolean; prompt: string; recheck: string | null; meter: string }
+export type GuideView = { items: GuideItem[]; top: GuideItem | undefined; done: boolean; memo: boolean; memoAuto: boolean; prompt: string; recheck: string | null; meter: string }
 
 export function viewOf(g: Guide): GuideView {
   // A value an earlier build kept in $.state survives a reload: every newer field is optional here too.
@@ -901,7 +988,7 @@ export function viewOf(g: Guide): GuideView {
   // Nothing open: every item is ✅ (an old state file without items: the line's only priority is ✅).
   const done = items.length > 0 ? items.every(i => i.p === '✅') : keyOf(g.line) === '✅'
   const recheck = !done && typeof top?.recheck === 'string' && top.recheck.trim() ? top.recheck : null
-  return { items, top, done, memo: needsMemo(g.ctx ?? null), prompt: top?.fill || promptFor(g.line), recheck, meter: meterOf(g) }
+  return { items, top, done, memo: needsMemo(g.ctx ?? null), memoAuto: g.ctx?.auto === true, prompt: top?.fill || promptFor(g.line), recheck, meter: meterOf(g) }
 }
 
 // Show: the hidden guide comes back at once (the pane's "Show" button).
@@ -927,6 +1014,11 @@ export async function fillPrompt($: EngineInterface, g: Guide | null, text: stri
 export async function copyPrompt($: EngineInterface, text: string, surface: Parameters<EngineInterface['ui']['copy']>[0]['surface']) {
   const r = await $.ui.copy({ text, surface })
   $.ui.toast(r.isCopied ? 'Guide copied — paste it in the prompt box' : `Copy failed (${r.reason})`)
+}
+
+export async function copyText($: EngineInterface, text: string, surface: Parameters<EngineInterface['ui']['copy']>[0]['surface']) {
+  const r = await $.ui.copy({ text, surface })
+  $.ui.toast(r.isCopied ? 'Copied' : `Copy failed (${r.reason})`)
 }
 
 // Undo: runs the argv the hook published as last_resolved (cwd = the project root), then reads the state again.
@@ -969,7 +1061,7 @@ export function guideButtons($: EngineInterface, ui: Ui, g: Guide, v: GuideView,
     <Box flexDirection="row" flexWrap="wrap" gap={1} marginTop={1}>
       {v.done ? null : <Button key="use" label="Use" onPress={() => fillPrompt($, g, v.prompt)} />}
       {v.recheck ? <Button key="recheck" label="Re-check" onPress={() => fillPrompt($, g, v.recheck as string)} /> : null}
-      {v.memo ? <Button key="memo" label="Memo" {...memoLook} onPress={() => fillPrompt($, g, '/abofles:memo')} /> : null}
+      {v.memo ? <Button key="memo" label={v.memoAuto ? 'Compact' : 'Memo'} {...memoLook} onPress={() => fillPrompt($, g, v.memoAuto ? '/compact' : '/abofles:memo')} /> : null}
       {v.done ? null : <Button key="copy" label="Copy" onPress={press => copyPrompt($, v.prompt, press.surface)} />}
       <Button key="hide" label="Hide" onPress={() => hideGuide($, g)} />
       {extra as never}

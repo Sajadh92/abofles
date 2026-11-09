@@ -1,5 +1,5 @@
 ---
-description: "Session summary from the ledger: spawns per model as bars, confidence, and the open follow-ups (partial, blocked, low, ATTENTION, FAIL); --resolve <id> --trace <evidence> closes one"
+description: "Session summary from the ledger: agents per model as bars, confidence, and the open follow-ups (partial, blocked, low, ATTENTION, FAIL); --resolve <id> --trace <evidence> closes one"
 argument-hint: "[--all] [--resolve <agent id> --trace <evidence>] [--unresolve <agent id>] [--session <sid>] [--trace <text>]"
 allowed-tools: Bash(bash *)
 ---

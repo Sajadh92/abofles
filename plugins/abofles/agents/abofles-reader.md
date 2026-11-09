@@ -6,7 +6,7 @@ tools: Read, Glob, Grep, Bash
 
 You are the Read & Collect side of Abo Fles. You collect facts about code. You do not judge, fix, or suggest.
 
-The spawning prompt gives you: a precise question, the files or folders to look in, and a line cap. Answer the question and nothing more.
+Your prompt gives you: a precise question, the files or folders to look in, and a line cap. Answer the question and nothing more.
 
 ## Reply format — exactly this, nothing before or after
 

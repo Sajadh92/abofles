@@ -17,26 +17,26 @@ The route line is the skill's line, unchanged (plain markdown, outside any code 
 ▶ <agent> running · <what, ≤ 8 words>
 ✓ <agent> done · <one-line result> · <n> lines · <units> u
 ⚠ follow-up: <what is open> · <where>
-Σ <spawns> spawns · <units> u · saved <pct>% vs <baseline>   (a 0% or a negative number on a T4 chain is normal — say `T4 chain, saving is in the tier routing` / `T4 chain, effort raised on purpose`)
+Σ <agents> agents · <units> u · saved <pct>% vs <baseline>   (a 0% or a negative number on a T4 chain is normal — say `T4 chain, saving is in the tier routing` / `T4 chain, effort raised on purpose`)
 ```
 
-The receipt header carries real tokens and dollars (from the subagent transcripts); `u` = the routing estimate (haiku·low = 0.5, sonnet·medium = 20, opus·high = 60, opus·xhigh = 100), used before a spawn runs and when no transcript exists.
+The receipt header carries real tokens and dollars (from the subagent transcripts); `u` = the routing estimate (haiku·low = 0.5, sonnet·medium = 20, opus·high = 60, opus·xhigh = 100), used before an agent runs and when no transcript exists.
 
 ## During a task
 
-Before each spawn: one route line (the abofles skill's format). While a chain runs, keep one **progress line** current and reprint it only when it changes:
+Before each agent: one route line (the abofles skill's format). While a chain runs, keep one **progress line** current and reprint it only when it changes:
 
 ```
 abofles [■■■□□] 3/5 · Plan ✓ · Work ✓ · Work ▶ · Verify · 142 u
 ```
 
-Nothing else between spawns. No "Now I will…", no restating the plan, no quoting the subagent's reply — you read it, you act, you print the next shape.
+Nothing else between agents. No "Now I will…", no restating the plan, no quoting the subagent's reply — you read it, you act, you print the next shape.
 
 ## At the end of a task — the receipt
 
-A task that spawned agents and ends in a prose paragraph instead of the receipt is a format error; a `Stop` hook sends you back to print it. Plain markdown, never in a code block:
+A task that started agents and ends in a prose paragraph instead of the receipt is a format error; a `Stop` hook sends you back to print it. Plain markdown, never in a code block:
 
-🧾 **4 Spawns · 2.1M Tokens · $1.12 · Saved 71% ($2.74)** vs Opus 5.5   (or `Cost +P% ($Z)`; ` · N unpriced` when a transcript was missing)
+🧾 **4 Agents · 2.1M Tokens · $1.12 · Saved 71% ($2.74)** vs Opus 5.5   (or `Cost +P% ($Z)`; ` · N unpriced` when a transcript was missing)
 - `done` → <what changed, one line, files named>
 - `why` → <the reason or the rule that drove it, one line>
 - `check` → <the command that proves it → its decisive result>
@@ -51,11 +51,11 @@ Copy the first line exactly from the hook's newest `Receipt at task end` note �
 
 ## Context watch block
 
-When the abofles hook hands you a `CONTEXT WATCH` block (at 500K, 600K, 700K, 750K, 800K, 850K, 900K tokens), print it verbatim — heading, bold, all four lines — as the last output of the turn (it comes from the Stop hook, when the turn ends). It is the one block this style never compresses; it must be impossible to miss.
+When the abofles hook hands you a `CONTEXT WATCH` block (at 500K, 600K, 700K, 750K, 800K, 850K, 900K, 950K tokens), print it verbatim — heading, bold, all four lines — as the last output of the turn (it comes from the Stop hook, when the turn ends). It is the one block this style never compresses; it must be impossible to miss.
 
 ## Session summary on request
 
-When the user asks how the session is going, or every ~10 spawns, print the session block: a bar chart of spawns per model (text bars: `opus  ████ 4`), confidence counts, open follow-ups. `/abofles:status` prints the same from the ledger — prefer it over writing the block by hand.
+When the user asks how the session is going, or every ~10 agents, print the session block: a bar chart of agents per model (text bars: `opus  ████ 4`), confidence counts, open follow-ups. `/abofles:status` prints the same from the ledger — prefer it over writing the block by hand.
 
 ## Everything else
 

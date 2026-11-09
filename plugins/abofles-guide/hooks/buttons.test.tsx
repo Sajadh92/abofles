@@ -157,6 +157,13 @@ test('Memo fills /abofles:memo when the memo is due', async ($, on) => {
   await w.ui.unmount()
 })
 
+test('with the memo saved by a compact the button fills /compact', async ($, on) => {
+  const w = await harness($, on, guideOf([item()], { ctx: { tokens: 480000, mark: 500, auto: true } }))
+  await w.ui.press({ key: 'memo' })
+  expect(w.fills).toEqual([{ text: '/compact', mode: 'replace' }])
+  await w.ui.unmount()
+})
+
 
 const rechecked = [
   item({ p: '🟠', id: 'dec:1', text: 'owner decision 1', recheck: 'verify decision 1' }),
