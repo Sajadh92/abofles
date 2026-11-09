@@ -172,9 +172,9 @@ def memo_health_tests(check):
         put_sess(r2, "idle0002", now="Written   2020-01-01 00:00\nTask      almost three days", age=3 - 1 / 24)
         res = HM.memo_health(str(r2), sid="caller01-aaaa-bbbb")
         a2 = arch_txt(r2)
-        check("health: idle sessions past 3 days with nothing open -> abofles-memo.d/archive/<sid8>.md (the 3d1h and the never-indexed one too), compact file with them",
+        check("health: idle sessions past 3 days with nothing open -> abofles-memo.d/archive/<sid8>.md (the 3d1h and the never-indexed one too); a compact summary an older hook left in the project goes to the state folder",
               res["archived_sessions"] == 3 and all(mdir(r2).joinpath("archive", f"{k}.md").exists() for k in ("idle0001", "idle0003", "idle0004"))
-              and not any(mdir(r2).joinpath(f"{k}.md").exists() for k in ("idle0001", "idle0003", "idle0004")) and mdir(r2).joinpath("archive", "idle0001.compact.md").read_text().count("raw old summary") == 1
+              and not any(mdir(r2).joinpath(f"{k}.md").exists() for k in ("idle0001", "idle0003", "idle0004")) and HM.compact_path("idle0001").read_text().count("raw old summary") == 1 and not mdir(r2).joinpath("archive", "idle0001.compact.md").exists()
               and not mdir(r2).joinpath("idle0001.compact.md").exists() and "old work of idle0001" in mdir(r2).joinpath("archive", "idle0001.md").read_text())
         check("health: ... their index lines are in the `## Archive` list of archive.md, first group, linking archive/<sid8>.md",
               all(f"](archive/{k}.md)" in a2 for k in ("idle0001", "idle0003", "idle0004")) and re.search(r"\n## Archive\n- \[idle0001\]\(archive/idle0001\.md\).* · archived \d{4}-\d\d-\d\d", a2)
@@ -237,11 +237,11 @@ def memo_health_tests(check):
         r5 = mkroot()
         notes = [f"- {stamp(ago(30 - i / 10))} · by:you · note → settled point number {i:03d} " + "x" * 60 + f" (s:cap00001 p:{HM.proj_tag(r5)})" for i in range(130)]
         put_main(r5, [nline(1, "recent resolved", "cap00001", r5, done=1, age=2), nline(2, "owner decision: still open?", "cap00001", r5, age=2)], notes)
-        jl = [f"- {stamp(ago(0, 100 - i))} · {i:02d} Agents · done: journal entry number {i:02d} " + "y" * 90 for i in range(60)][::-1]  # newest first
+        jl = [f"- {stamp(ago(0, 100 - i))} · {i:02d} Agents · done: journal entry number {i:02d} " + "y" * 330 for i in range(60)][::-1]  # newest first, over SESSION_CAP
         put_sess(r5, "cap00001", now="Written   2020-01-01 00:00\nTask      big journal", journal=jl, age=0)
         res = HM.memo_health(str(r5), sid="cap00001")
         sz_main, sz_sess = mainf(r5).stat().st_size, mdir(r5).joinpath("cap00001.md").stat().st_size
-        check("health: main memo <= 8 KB and session file <= 6 KB after the run", sz_main <= 8 * 1024 and sz_sess <= 6 * 1024 and res["trimmed"] > 0)
+        check("health: main memo <= 8 KB and session file <= SESSION_CAP (16 KB) after the run", sz_main <= 8 * 1024 and sz_sess <= HM.SESSION_CAP == 16 * 1024 and res["trimmed"] > 0)
         a5 = arch_txt(r5); js = HM.sess_read(str(r5), "cap00001")["Journal"].splitlines()
         check("health: session cap — the oldest Journal lines left, the newest kept (in order), the cut ones are in archive.md", js == jl[:len(js)] and 0 < len(js) < 60 and f"journal entry number {int(js[-1].split('number ')[1][:2]) - 1:02d}" in a5
               and "· journal · cap00001" in a5 and all(l in a5 for l in jl[len(js):]))
@@ -527,20 +527,20 @@ def memo_health_tests(check):
         CA = "cmpAAAA1-1111-2222"
         HM.memo_journal(str(rc), CA, HM.parse_receipt("🧾 **1 Agent · 1 u · Saved 1%** vs Opus 5.5\n- `done` → started the cap\n- `check` → ok"))
         sf_ = lambda r, sid: Path(r, ".claude", "abofles-memo.d", f"{sid[:8]}.md")
-        cf_ = lambda r, sid: Path(r, ".claude", "abofles-memo.d", f"{sid[:8]}.compact.md")
+        cf_ = lambda r, sid: HM.compact_path(sid)
         out = hrun("postcompact", {"session_id": CA, "cwd": str(rc), "trigger": "auto", "compact_summary": SUMMARY})
         now_blk = HM.sess_read(str(rc), CA)["Now"]
         check("compact: postcompact prints nothing, writes Now stamped `· from compact` with task, left and next from the summary",
               out is None and re.match(r"Written   \d{4}-\d\d-\d\d \d\d:\d\d · from compact\n", now_blk) and "Task      Capping the surcharge in AqsatiRules.cs." in now_blk
               and "Left      Add FE tests" in now_blk and "Left      Update the docs page" in now_blk and "Next      Run the FE suite and fix what breaks." in now_blk)
-        check("compact: ... the raw summary is saved in <sid8>.compact.md (header with trigger), the journal is kept", cf_(rc, CA).exists() and "It was half done when the context filled." in cf_(rc, CA).read_text() and "· auto" in cf_(rc, CA).read_text().splitlines()[0]
+        check("compact: ... the raw summary is saved in the state folder, compact/<sid8>.md (header with trigger), never in the project; the journal is kept", cf_(rc, CA).exists() and not list(mdir(rc).glob("*.compact.md")) and "It was half done when the context filled." in cf_(rc, CA).read_text() and "· auto" in cf_(rc, CA).read_text().splitlines()[0]
               and "started the cap" in HM.sess_read(str(rc), CA)["Journal"])
         stc = json.loads(Path(sdir, f"{CA}.json").read_text())
         check("compact: ... memo_semantic_due is set in the session state", stc.get("memo_semantic_due") is True)
         check("compact: ... the index line of the session says the new task", "task: Capping the surcharge" in mainf(rc).read_text())
         hrun("postcompact", {"session_id": CA, "cwd": str(rc), "trigger": "manual", "compact_summary": "7. Pending Tasks:\n   - SECOND left\n8. Current Work:\n   SECOND task.\n"})
         cc = cf_(rc, CA).read_text()
-        check("compact: a second compact replaces the raw summary (one file, latest only) and the Now", "SECOND task." in cc and "half done" not in cc and cc.count("# Compact summary") == 1 and len(list(mdir(rc).glob("*.compact.md"))) == 1
+        check("compact: a second compact replaces the raw summary (one file, latest only) and the Now", "SECOND task." in cc and "half done" not in cc and cc.count("# Compact summary") == 1 and len(list(HM.COMPACT_DIR.glob(f"{CA[:8]}*"))) == 1
               and "Task      SECOND task." in HM.sess_read(str(rc), CA)["Now"] and "Left      SECOND left" in HM.sess_read(str(rc), CA)["Now"] and "Add FE tests" not in HM.sess_read(str(rc), CA)["Now"])
         before_s = sf_(rc, CA).read_bytes()
         hrun("postcompact", {"session_id": CA, "cwd": str(rc), "trigger": "auto", "compact_summary": "We talked about many things.\nNo numbered headings at all."})
@@ -559,6 +559,73 @@ def memo_health_tests(check):
         sb = sf_(rc, CB).read_bytes()
         hrun("postcompact", {"session_id": CB, "cwd": str(rc), "trigger": "auto", "compact_summary": "7. Pending Tasks:\n   - fe TESTS\n   - docs PAGE!\n"})
         check("compact: ... a Left line that is already there (case / punctuation aside) is not added again, nothing is rewritten", HM.sess_read(str(rc), CB)["Now"].count("Docs page") == 1 and HM.sess_read(str(rc), CB)["Now"].count("FE tests") == 1 and "PAGE!" not in HM.sess_read(str(rc), CB)["Now"])
+        # ── review fixes: Needs-you dedup, lock per thread, archive on trim, summary notes, caps ──
+        rx = mkroot(); HM.memo_write(str(rx), {"Needs you": "", "Decisions": "", "Sessions": ""})
+        XA, XB = "xa000000-1111-2222-3333-444444444444", "xb000000-1111-2222-3333-444444444444"
+        HM.memo_needs(str(rx), XA, "ATTENTION: integration tests fail on the payments module")
+        HM.memo_resolve(str(rx), 1, "fixed", XA)
+        for who in (XA, XA, XB):
+            HM.memo_needs(str(rx), who, "ATTENTION: integration tests fail on the payments module")
+        ox = [l for l in HM.memo_read(str(rx))["Needs you"].splitlines() if "[ ]" in l]
+        check("needs: a fixed problem report never hides the same problem when it comes back, nor does another session's item; a repeat of this session's open item stays one",
+              len(ox) == 2 and len(HM.need_split(ox, XB, str(rx), "session")[0]) == 1 and len(HM.need_split(ox, XA, str(rx), "session")[0]) == 1
+              and len({HM.need_id(l) for l in HM.memo_read(str(rx))["Needs you"].splitlines()}) == 3)
+        held_, waited_ = threading.Event(), {}
+        def _hold():
+            with HM.memo_lock(str(rx)):
+                held_.set(); time.sleep(0.5)
+        th_ = threading.Thread(target=_hold); th_.start(); held_.wait()
+        t0_ = time.time()
+        with HM.memo_lock(str(rx)):
+            waited_["s"] = time.time() - t0_
+        th_.join()
+        check("lock: a memo lock another thread of this process holds still excludes this one (the tidy-up runs in a thread)", waited_["s"] >= 0.3 or _fcntl is None)
+        for i in range(HM.DECISIONS_KEEP + 2):
+            HM.memo_decision(str(rx), XA, "note", f"settled point {i:03d}")
+            HM.memo_decision(str(rx), XA, f"question {i:03d}?", "yes")
+        for i in range(HM.JOURNAL_KEEP + 2):
+            HM.memo_trace(str(rx), XA, f"trace line {i:03d}")
+        ax = HM.archive_path(str(rx)).read_text()
+        check("trim: decisions and journal lines past their count go to archive.md first (nothing is lost)",
+              "settled point 000" in ax and "settled point 000" not in HM.memo_read(str(rx))["Decisions"] and "question 000?" in ax and "question 000?" not in HM.sess_read(str(rx), XA)["Decisions"]
+              and "trace line 000" in ax and "trace line 000" not in HM.sess_read(str(rx), XA)["Journal"] and f"settled point {HM.DECISIONS_KEEP + 1:03d}" in HM.memo_read(str(rx))["Decisions"])
+        q = HM.parse_compact_summary("7. Pending Tasks:\n   - None. Optionally, the user may check the pane live.\n   - Context is about 463K, so /compact is due soon.\n8. Current Work:\n   Moved the file.\n9. Optional Next Step:\n   - Start no new work.\n")
+        check("compact: parse — `None.` with more after it is nothing pending; a note on the context size or on starting no work is no work", q == {"task": "Moved the file.", "left": [], "next": "", "done": []})
+        q = HM.parse_compact_summary("7. Pending Tasks:\n   - None of the exports retry yet: add it\n")
+        check("compact: parse — a real task that starts with `None of` stays", bool(q) and q["left"] == ["None of the exports retry yet: add it"])
+        rcx = HM.parse_receipt("🧾 **1 Agent · 1 u · Saved 1%** vs Opus 5.5\n- `done` → " + "d " * 200 + "\n- `why` → " + "w " * 150 + "\n- `check` → " + "c " * 200 + "\n- `open` → none\n- `next` → " + "n " * 150)
+        for _ in range(6):
+            HM.memo_journal(str(rx), "xc000000-1111", rcx)
+        HM.memo_health(str(rx), sid="zzzzzzzz")
+        check("cap: a session file keeps six whole receipts (16 KB)", len([l for l in HM.sess_read(str(rx), "xc000000-1111")["Journal"].splitlines() if l.strip()]) == 6)
+        calls_, orig_sc = [], HM.session_closed
+        HM.session_closed = lambda root, k: calls_.append(k) or False
+        try:
+            HM.need_split([f"{i}. [ ] 11-01 10:00 · item {i} (s:yy000000 p:{HM.proj_tag(str(rx))})" for i in range(1, 6)], XA, str(rx))
+        finally:
+            HM.session_closed = orig_sc
+        check("needs: need_split asks once per other session whether it is closed", calls_ == ["yy000000"])
+        orig_lf = HM.lock_file
+        def _boom(fh):
+            raise OSError("disk says no")
+        HM.lock_file = _boom
+        try:
+            with HM.memo_lock(str(rx)) as lk_:
+                open_after = lk_.fh
+        finally:
+            HM.lock_file = orig_lf
+        check("lock: a lock that cannot be taken fails open, closes its file and says so in the health line",
+              open_after is None and "memo lock failed (OSError: disk says no)" in (HM.health_info(str(rx)) or {}).get("line", ""))
+        HM._LOCK_FAIL.clear()
+        rcm = mkroot(); HM.memo_write(str(rcm), {"Needs you": "", "Decisions": "", "Sessions": ""})
+        HM.memo_dir(str(rcm)).mkdir(parents=True, exist_ok=True); (HM.memo_dir(str(rcm)) / "lg000000.compact.md").write_text("# Compact summary\nlegacy")
+        HM.COMPACT_DIR.mkdir(parents=True, exist_ok=True)
+        stale_ = HM.COMPACT_DIR / "st000000.md"; stale_.write_text("# Compact summary\nstale"); os.utime(stale_, (time.time() - 40 * 86400,) * 2)
+        HM.memo_health(str(rcm), sid="zzzzzzzz")
+        HM._save_compact_summary(str(rcm), "nw000000-1111", "manual", "8. Current Work:\n   x.\n")
+        check("compact: a summary an older hook left in the project moves to the state folder; one not replaced for 30 days goes",
+              "legacy" in HM.compact_path("lg000000").read_text() and not list(HM.memo_dir(str(rcm)).rglob("*.compact.md")) and not stale_.exists() and HM.compact_path("nw000000").exists())
+
         # Memo on compact = off
         roff = mkroot(["Memo on compact = off"])
         CO = "cmpOFF01-1111-2222"
@@ -776,7 +843,7 @@ def compact_refresh_tests(check):
         st = HM.load_state(SA)
         check("compact pane: PostCompact puts the new size in the state the pane reads", (st.get("guide") or {}).get("ctx", {}).get("tokens") == 33060)
         check("compact pane: PostCompact puts the new Now in the pane payload", "Working on the cap" in json.dumps(st.get("pane") or {}))
-        check("compact pane: the summary is saved and upkeep is due", (HM.memo_dir(str(r)) / "aa000000.compact.md").exists() and st.get("memo_semantic_due") is True)
+        check("compact pane: the summary is saved and upkeep is due", HM.compact_path("aa000000").exists() and not (HM.memo_dir(str(r)) / "aa000000.compact.md").exists() and st.get("memo_semantic_due") is True)
         off = F.mkroot(overrides=["Memo on compact = off"])
         tpo = transcript(usage(462000), boundary())
         F.mkstate(SB, off, transcript_path=tpo)
@@ -784,7 +851,7 @@ def compact_refresh_tests(check):
         hrun("postcompact", {"session_id": SB, "cwd": str(off), "trigger": "manual", "compact_summary": SUMMARY, "transcript_path": tpo})
         st = HM.load_state(SB)
         check("compact pane: Memo on compact = off still refreshes the number, and leaves the Now alone",
-              (st.get("guide") or {}).get("ctx", {}).get("tokens") == 33060 and "hand written" in HM.sess_read(str(off), SB)["Now"] and not (HM.memo_dir(str(off)) / "ab000000.compact.md").exists())
+              (st.get("guide") or {}).get("ctx", {}).get("tokens") == 33060 and "hand written" in HM.sess_read(str(off), SB)["Now"] and not HM.compact_path("ab000000").exists())
         hrun("postcompact", {"session_id": SB, "cwd": str(off), "trigger": "manual", "compact_summary": "", "transcript_path": tpo})
         check("compact pane: an empty summary does not fail", "hand written" in HM.sess_read(str(off), SB)["Now"])
 
@@ -835,7 +902,7 @@ def compact_refresh_tests(check):
         d = HM.resume_data(str(r), session_id=OLD, elsewhere=False)
         check("restore: an archived session still reads its own Now (a session left open while another one tidied)", "old task" in str(d["now"]) and arch.exists())
         out = subprocess.run([sys.executable, str(HOOK), "start"], input=json.dumps({"session_id": OLD, "cwd": str(r), "source": "resume"}), capture_output=True, text=True, env=dict(os.environ, ABOFLES_LEDGER_DIR=F.led)).stdout
-        check("restore: a resume brings the file and the compact summary back", active.exists() and not arch.exists() and (HM.memo_dir(str(r)) / "af000000.compact.md").exists() and not (HM.archive_dir(str(r)) / "af000000.compact.md").exists())
+        check("restore: a resume brings the file back; the compact summary waits in the state folder, never in the project", active.exists() and not arch.exists() and HM.compact_path("af000000").exists() and not (HM.memo_dir(str(r)) / "af000000.compact.md").exists() and not (HM.archive_dir(str(r)) / "af000000.compact.md").exists())
         check("restore: the resume block shows its Now", "old task" in out)
         check("restore: the index lists it, archive.md does not", "[af000000](" in HM.memo_read(str(r))["Sessions"] and "[af000000](archive/" not in HM.archive_path(str(r)).read_text())
         check("restore: its Journal is intact", "old receipt" in HM.sess_read(str(r), OLD)["Journal"])
@@ -894,7 +961,7 @@ def memo_agent_tests(check):
         F.put_sess(r, CB, now="Written   2020-01-01 00:00 · from receipt\nTask      old task\nDone      did x\nLeft      old left\nNext      old next\nVerify    ran y",
                    journal=[f"- {stamp(1)} · 1 Agent · done: newer receipt"], decisions=[f"- {stamp(3)} · by:you · Should we use the new export? → Yes, use it", f"- {stamp(2)} · by:judge · judge: keep the cap? → yes"])
         F.put_sess(r, CC, now="Written   2020-01-01 00:00 · from receipt\nTask      none — between tasks", age=9)
-        (HM.memo_dir(str(r)) / "cc000000.compact.md").write_text("# Compact summary\nclosed")
+        HM.compact_path("cc000000").parent.mkdir(parents=True, exist_ok=True); HM.compact_path("cc000000").write_text("# Compact summary\nclosed")
         # ── list --json ──
         out = F.cli(r, CA, "list", "--json")
         L = json.loads(out.stdout) if out.returncode == 0 else {}
@@ -905,7 +972,7 @@ def memo_agent_tests(check):
               len(L["decisions"]) == 4 and {d["file"] for d in L["decisions"]} == {"abofles-memo.md", "ca000000.md", "bb000000.md"} and all(d["stamp"] and d["ref"] for d in L["decisions"])
               and {s_["sid"]: s_ for s_ in L["sessions"]}["bb000000"]["now_age_min"] > 1000 and {s_["sid"]: s_ for s_ in L["sessions"]}["bb000000"]["task"] == "old task"
               and {s_["sid"]: s_ for s_ in L["sessions"]}["bb000000"]["left"] == ["old left"] and {s_["sid"]: s_ for s_ in L["sessions"]}["bb000000"]["next"] == ["old next"]
-              and {s_["sid"]: s_ for s_ in L["sessions"]}["ca000000"]["caller"] is True and {s_["sid"]: s_ for s_ in L["sessions"]}["cc000000"]["compact"].endswith("cc000000.compact.md"))
+              and {s_["sid"]: s_ for s_ in L["sessions"]}["ca000000"]["caller"] is True and {s_["sid"]: s_ for s_ in L["sessions"]}["cc000000"]["compact"] == str(HM.compact_path("cc000000")))
         nostate = dict(os.environ, ABOFLES_STATE_DIR=str(Path(F.hh, "nostate")))
         check("memoagent: a subcommand with no session exits 4 and writes nothing", all(subprocess.run([sys.executable, F.memopy, *a], cwd=str(r), capture_output=True, text=True, env=nostate).returncode == 4
               for a in (["list", "--json"], ["drop-item", "#abcd", "--reason", "x"], ["archive-session", "cc000000"])))
@@ -937,15 +1004,18 @@ def memo_agent_tests(check):
         mt = HM.memo_read(str(r))["Decisions"].splitlines()
         check("memoagent: merging notes keeps the oldest stamp and its `(s: p:)` tag", len(mt) == 1 and mt[0].startswith(f"- {s8} · by:you · note → one note") and mt[0].endswith(f"(s:bb000000 p:{HM.proj_tag(r)})"))
         # ── move-item ──
-        tgt = F.mkroot()
+        tgt = F.mkroot(); HM.memo_write(str(tgt), {"Needs you": "", "Decisions": "", "Sessions": ""})
         plain = F.mkroot(git=False)
+        bare = F.mkroot()  # a git repository the memo never saw
         withmemo = F.mkroot(git=False); HM.memo_write(str(withmemo), {"Needs you": "", "Decisions": "", "Sessions": ""})
         shipid = by_text("ship the export")["id"]
         line_before = next(l for l in HM.memo_read(str(r))["Needs you"].splitlines() if "ship the export" in l)
         sb = F.snap(r, tgt)
         a = F.cli(r, CA, "move-item", shipid, str(Path(F.hh, "nope")))
         b = F.cli(r, CA, "move-item", shipid, str(plain))
-        check("memoagent: move-item refuses a missing folder and a folder that is neither a git repository nor holds a memo (exit 2); nothing moves", a.returncode == 2 and b.returncode == 2 and F.snap(r, tgt) == sb)
+        c_ = F.cli(r, CA, "move-item", shipid, str(bare))
+        check("memoagent: move-item refuses a missing folder, a plain folder and a git repository the memo never saw (exit 2); nothing moves",
+              a.returncode == 2 and b.returncode == 2 and c_.returncode == 2 and F.snap(r, tgt) == sb and not Path(bare, ".claude", "abofles-memo.md").exists())
         mv = F.cli(r, CA, "move-item", shipid, str(tgt))
         tl = [l for l in HM.memo_read(str(tgt))["Needs you"].splitlines()]
         check("memoagent: move-item moves the item to the other project with text, stamp, #id and tags unchanged; it is gone here and the rest is renumbered",
@@ -975,8 +1045,8 @@ def memo_agent_tests(check):
         check("memoagent: archive-session refuses a session with an open item of its own and the calling session (exit 5); both files stay", x1.returncode == 5 and x2.returncode == 5
               and HM.session_memo_path(str(r), "bb000000").exists() and HM.session_memo_path(str(r), "ca000000").exists())
         x3 = F.cli(r, CA, "archive-session", "cc000000")
-        check("memoagent: archive-session moves a closed session's file and compact summary to archive/, drops its index line and lists it in archive.md",
-              x3.returncode == 0 and not HM.session_memo_path(str(r), "cc000000").exists() and (HM.archive_dir(str(r)) / "cc000000.md").exists() and (HM.archive_dir(str(r)) / "cc000000.compact.md").exists()
+        check("memoagent: archive-session moves a closed session's file to archive/ (its compact summary stays in the state folder), drops its index line and lists it in archive.md",
+              x3.returncode == 0 and not HM.session_memo_path(str(r), "cc000000").exists() and (HM.archive_dir(str(r)) / "cc000000.md").exists() and HM.compact_path("cc000000").exists() and not (HM.archive_dir(str(r)) / "cc000000.compact.md").exists()
               and "cc000000" not in [k for k, _ in HM.index_entries(HM.memo_read(str(r)))] and "(archive/cc000000.md)" in HM.archive_path(str(r)).read_text())
         check("memoagent: archive-session of an unknown session exits 1", F.cli(r, CA, "archive-session", "zz999999").returncode == 1)
         # ── rewrite-now ──
@@ -1014,13 +1084,19 @@ def memo_agent_tests(check):
         allowed = [ok_cmd, f"python3 {mp} list --json --session {CA}", f"python3 {mp} merge-decisions 'a@01-01T00:00' 'b@01-02T00:00' --into 'Q → A' --session {CA}",
                    HM.shell_cmd("memo.py", "drop-item", "#a1b2", "--reason", "noise, a duplicate", "--session", CA), HM.shell_cmd("memo.py", "move-item", "#a1b2", str(R), "--session", CA),
                    HM.shell_cmd("memo.py", "archive-session", "cc000000", "--session", CA),
-                   f"python3 {mp} rewrite-now ca000000 --session {CA} <<'EOF'\nTask      do a; b | c && `d` $(e)\nLeft      x > y\nEOF", mp + " list --json"]
+                   f"python3 {mp} rewrite-now ca000000 --session {CA} <<'EOF'\nTask      do a; b | c && `d` $(e)\nLeft      x > y\nEOF", mp + f" list --json --session {CA}"]
         check("memoagent: ... and allows one call of this plugin's memo.py (through scripts/py, python or directly), a quoted heredoc with any text in its body", not any(g("Bash", {"command": c}) for c in allowed))
         planted = str(Path(F.hh, "python3"))
         check("memoagent: ... refuses a planted interpreter (any file named python3 or bash), and show and path (`show --scope all` reads other projects)",
               all(g("Bash", {"command": c}) for c in (f"{planted} {mp} list --json", f"{Path(F.hh, 'bash')} {HM.SCRIPTS_DIR / 'py'} {mp} list", HM.shell_cmd("memo.py", "show", "--scope", "all"), HM.shell_cmd("memo.py", "path", "mine"))))
         check("memoagent: ... other agent types and the main session are left alone (rm, git, chains)",
               not any(g("Bash", {"command": c}, agent_type=t) for t in ("abofles:abofles-worker", "abofles:abofles-reader", "x:abofles-memo-not", None) for c in ("rm -rf .claude", "git status", f"{ok_cmd}; ls")))
+        check("memoagent: ... refuses a --session that is not the starting session's: another session's id, `--session=`, a second id, or none (memo.py trusts a session id before the folder)",
+              all(g("Bash", {"command": c}) for c in (HM.shell_cmd("memo.py", "list", "--json", "--session", "bbbbbbbb-1111-2222-3333-444444444444"), f"python3 {mp} list --json --session={CA}",
+                                                      f"python3 {mp} list --json", HM.shell_cmd("memo.py", "list", "--json", "--session", CA, "--session", "x"))))
+        HM.compact_path(CA).parent.mkdir(parents=True, exist_ok=True); HM.compact_path(CA).write_text("# Compact summary\nx")
+        check("memoagent: Read — a compact summary in the state folder only for this project's own sessions",
+              not g("Read", {"file_path": str(HM.compact_path(CA))}) and g("Read", {"file_path": str(HM.compact_path("zz999999"))}) and g("Read", {"file_path": str(HM.COMPACT_DIR / ".." / "x.json")}))
         mf = Path(R, ".claude", "abofles-memo.md"); sf = HM.session_memo_path(str(R), CA)
         check("memoagent: Read — only .claude/abofles-memo* of this project: allowed for the main memo and a session file; denied for settings, /etc/passwd, a ../ escape, another project's memo, a sibling `abofles-memo-x`",
               not g("Read", {"file_path": str(mf)}) and not g("Read", {"file_path": str(sf)}) and not g("Read", {"file_path": str(HM.memo_dir(str(R)) / "x.compact.md")})
@@ -1199,8 +1275,8 @@ def memo_repair_tests(check):
         bdir = HM.memo_dir(str(DRP)) / bk[0]
         check("repair: ... the backup holds the main memo and the memo folder as they were before (bytes equal), no earlier backup nested",
               (bdir / "abofles-memo.md").read_bytes() == main_before and (bdir / "abofles-memo.d" / "jj000001.md").read_bytes() == jj_before and not list(bdir.rglob("backup-*")))
-        check("repair: a Jamkhana-style session (launched in a non-git folder, its edits in a repository) moves there: file, compact summary, index line; gone from the old project",
-              HM.session_memo_path(str(JAM), JJ).exists() and (HM.memo_dir(str(JAM)) / "jj000001.compact.md").read_text().endswith("of jj000001") and not HM.session_memo_path(str(DRP), JJ).exists()
+        check("repair: a Jamkhana-style session (launched in a non-git folder, its edits in a repository) moves there: file, index line (its compact summary goes to the state folder); gone from the old project",
+              HM.session_memo_path(str(JAM), JJ).exists() and HM.compact_path(JJ).read_text().endswith("of jj000001") and not (HM.memo_dir(str(JAM)) / "jj000001.compact.md").exists() and not HM.session_memo_path(str(DRP), JJ).exists()
               and not (HM.memo_dir(str(DRP)) / "jj000001.compact.md").exists() and "jj000001" in [k for k, _ in HM.index_entries(HM.memo_read(str(JAM)))] and "jj000001" not in [k for k, _ in HM.index_entries(HM.memo_read(str(DRP)))])
         moved_line = next((l for l in HM.memo_read(str(JAM))["Needs you"].splitlines() if "jj000001 export" in l), "")
         check("repair: ... its open item moves with its text, #id, stamp and tags kept; the session's Journal and Decisions are intact with a `moved here from DRP` line",
@@ -4006,7 +4082,7 @@ def main():
         check("README: ... and every COMPLEX_FORMS form (one row each)", len(form_marks) == len(HG.COMPLEX_FORMS) and all(re.search(r"^\| `" + re.escape(m), sec_, re.M) for m in form_marks))
         check("README: ... with defaults from the code, the pane editor, /abofles:pane and /abofles:history", all(f"| `{k}` |" in sec_ and (v["default"] in sec_ if v["default"] else True) for k, v in HG.OVERRIDE_KEYS.items()) and "/abofles:pane" in sec_ and "/abofles:history" in sec_ and "pane" in sec_.split("| `Main session`")[0])
         check("overrides.md: the five place forms are described and the form count matches the code", all(f"`{w} place = " in (HOOK.parent.parent / "skills/abofles/references/overrides.md").read_text() for w in ("Guide", "Resume", "Agents", "Receipt", "Running"))
-              and f"Thirty-seven forms" in (HOOK.parent.parent / "skills/abofles/references/overrides.md").read_text() and len(HG.OVERRIDE_KEYS) + len(HG.COMPLEX_FORMS) == 37)
+              and f"Thirty-eight forms" in (HOOK.parent.parent / "skills/abofles/references/overrides.md").read_text() and len(HG.OVERRIDE_KEYS) + len(HG.COMPLEX_FORMS) == 38)
 
         # a receipt's Journal line keeps every field, and reads back
         rc_ = HG.parse_receipt("🧾 **1 Agent · 63K Tokens · $0.03**\n- `done` → the page\n- `why` → asked\n- `workflow` → Read ✓ · Work ✓\n- `check` → 181 pass\n- `open` → none\n- `next` → run /compact")

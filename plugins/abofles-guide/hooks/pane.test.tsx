@@ -2,7 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 
 import { fmtWhen, headParts, receiptOf } from './pane'
 import { fmtElapsed, toolLabel } from './running'
-import { COLOR_PAIRS, shortHash } from './shared'
+import { COLOR_PAIRS, CONTINUE_PROMPT, shortHash } from './shared'
 
 const SURFACES = ['terminal', 'desktop'] as const
 const NOW = 1_700_000_000 // epoch seconds the mocked clock stands at
@@ -520,6 +520,26 @@ test('a compact with no recorded size shows Compacted, a size past a mark takes 
   expect(await said(ui, /520K \/ 600K/)).toBe(true)
   expect(runs).toBe(3)
   await ui.unmount()
+})
+
+test('after the person\'s /compact one turn picks the work up; not after an automatic compact or a subagent\'s, not with Continue after compact = off, not without abofles state', async ($, on) => {
+  const sent: string[] = []
+  on('prompt.submit', ($: any, e: any) => (sent.push(e.text), { text: e.text }))
+  on('session.compact', () => ({ messages: COMPACT_MESSAGES, tokensAfter: 34000 }))
+  const w = await harness($, on, { guide: guideOf([item()]), pane: panePayload(), compact_continue: true })
+  const settle = async () => { for (let i = 0; i < 10; i++) await Promise.resolve() }
+  await compactNow($, { trigger: 'manual' })
+  await settle()
+  expect(sent).toEqual([CONTINUE_PROMPT])
+  expect(CONTINUE_PROMPT).toMatch(/nothing is left to continue, say so/)
+  await compactNow($, { trigger: 'auto' })
+  await compactNow($, { trigger: 'manual', agentId: 'a1' })
+  w.state = { guide: guideOf([item()]), pane: panePayload(), compact_continue: false }
+  await compactNow($, { trigger: 'manual' })
+  w.state = null
+  await compactNow($, { trigger: 'manual' })
+  await settle()
+  expect(sent.length).toBe(1)
 })
 
 test('the classic PostToolUse and SubagentStop refresh the pane, so the agent history updates', async ($, on) => {

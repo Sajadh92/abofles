@@ -2,6 +2,19 @@
 
 All notable changes to the plugins in this marketplace.
 
+## Unreleased
+
+- abofles + abofles-guide: **the session goes on after `/compact`.** After your own `/compact` the mod sends one turn: Claude continues what the summary shows open, or says in a line or two that nothing is left to continue. Never after an automatic compact (its turn goes on by itself) or while you are typing. New key `Continue after compact = auto | off` (default `auto`), in the editor's Session group.
+- abofles: **Needs you keeps a problem that comes back.** An ATTENTION or FAIL that was fixed is added again when a later receipt reports it, and another session's open item no longer hides this session's own (with `Other items = hide` this session never saw it). A decision or question once answered stays settled.
+- abofles: **the memo agent works on this project only.** Each `memo.py` call must name the session that started it with `--session`: another session's id opened that session's project memo.
+- abofles: **the memo lock holds across threads.** The tidy-up runs in a background thread; a write in the same process now waits for it instead of running alongside. A lock that cannot be taken still lets the hook go on, closes its file, and says so in the health line (`memo lock failed …`).
+- abofles: **nothing leaves the memo without the archive.** Decisions past 60 and Journal lines past 40 go to `archive.md` first; before, they were dropped.
+- abofles: **Claude's own notes stay out of Now after a compact.** `None. …` under Pending Tasks counts as nothing left, and a note on the context size or "start no new work" is no task.
+- abofles: **a session file holds about six whole receipts.** Its cap is 16 KB (was 6 KB): one receipt line holds up to ~2.6 KB, so the pane's receipt history no longer shrank to two or three.
+- abofles: **the raw compact summary is kept in `~/.abofles/state/compact/<session>.md`**, never in the project: it holds the conversation, and a folder outside git (or a synced one) would carry it. A summary an older version left in the project moves there at the next tidy-up; one not replaced for 30 days is removed. The memo agent reads only the summaries of this project's sessions.
+- abofles: **`move-item` moves only to a project the memo knows** (one with a memo, as `memo.py list` gives), never into any git repository.
+- abofles: the Needs-you split checks once per other session whether it is closed, not once per item.
+
 ## abofles 2.4.0 · abofles-guide 0.7.0 — 2026-11-09
 
 - abofles-guide: **Needs you shows a bullet per item.** The number in front of an item was only its place in the memo. The count stays on the card's title, and `resolve` still takes the number or the `#id`. The Show others card and Copy follow.

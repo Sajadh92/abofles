@@ -40,6 +40,7 @@ const KEY_INFO: Record<string, { group: (typeof GROUPS)[number]; help: string }>
   'Sub session': { group: 'Session', help: 'Same, for a session started by another' },
   'Session cap': { group: 'Session', help: 'Units before it stops to ask' },
   'Context marks': { group: 'Session', help: 'K tokens that suggest /compact' },
+  'Continue after compact': { group: 'Session', help: 'After /compact, picks the work up or says nothing is left' },
   Break: { group: 'Session', help: 'Minutes away before the resume' },
   Pace: { group: 'Session', help: 'fast: fewer stops, short receipts' },
   Agents: { group: 'Agents', help: 'Agents per task: ask, auto, N, off' },

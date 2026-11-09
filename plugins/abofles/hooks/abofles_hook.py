@@ -431,7 +431,8 @@ OVERRIDE_KEYS = {
     "Receipt place": {"kind": "select", "options": ["pane", "output"], "default": "pane"},  # pane: the receipt is recorded by a command, not printed
     "Memo agent": {"kind": "select", "options": ["auto", "manual", "off"], "default": "auto"},  # the memo-keeping agent: auto offers it in the background when a by-meaning check is due, manual only /abofles:memo, off never
     "Memo agent every": {"kind": "number", "options": [], "default": "6"},  # hours between two runs of the memo agent per project
-    "Memo on compact": {"kind": "select", "options": ["auto", "off"], "default": "auto"},  # auto: PreCompact/PostCompact save the Now section by themselves; off: only /abofles:memo does
+    "Memo on compact": {"kind": "select", "options": ["auto", "off"], "default": "auto"},
+    "Continue after compact": {"kind": "select", "options": ["auto", "off"], "default": "auto"},  # auto: after the person's /compact the abofles-guide mod sends one turn that picks the work up, or says nothing is left; off: the session waits  # auto: PreCompact/PostCompact save the Now section by themselves; off: only /abofles:memo does
     "Archive items": {"kind": "number", "options": [], "default": "7"},  # days a resolved Needs-you item stays in the main memo before memo_health moves it to archive.md
     "Archive sessions": {"kind": "number", "options": [], "default": "3"},  # days a session file may sit idle (no open item of its own) before memo_health archives it
     "Other items": {"kind": "select", "options": ["hide", "show"], "default": "hide"},  # hide: the resume block and the pane leave out other sessions' and projects' items and count them; show: listed, flagged `other`
@@ -986,7 +987,9 @@ def guide_line(root, st, sid, scope=None):
 
 def refresh_guide(root, st, sid):
     """Compute the guide, keep it in the state (the band mod reads it there), return its one-line form. The pane payload
-    (`st["pane"]`) is refreshed with it — also when `Guide = off`, which only empties the guide."""
+    (`st["pane"]`) is refreshed with it — also when `Guide = off`, which only empties the guide. `compact_continue` tells the mod whether a
+    /compact is followed by a turn that picks the work up (`Continue after compact`)."""
+    st["compact_continue"] = select_override(root, "Continue after compact") != "off"
     rows = ledger_rows(sid)  # one ledger read for the ladder and the pane
     if not guide_on(root):
         st["guide"] = None
@@ -1403,18 +1406,8 @@ def _op_move(old, session_id, new, why=""):
             (moved_need if need_tag_of(l)[0] == sid and "[ ]" in l else keep).append(l)  # the session's open items go with it; resolved ones stay as the old project's record
     has = any(s.values()) or bool(moved_need)
     if has:  # added there before it leaves here: a process killed between the two writes leaves a copy, never a gap
-        cp = memo_dir(old) / f"{sid}.compact.md"
-        if cp.exists():  # the raw compact summary goes with its session
-            try:
-                memo_dir(new).mkdir(parents=True, exist_ok=True)
-                try:
-                    replace_file(cp, memo_dir(new) / cp.name)
-                except OSError:  # another volume: a rename cannot cross it
-                    shutil.copy2(cp, memo_dir(new) / cp.name)
-                    cp.unlink()
-            except Exception:
-                pass
-        journal_add(s, f"- {time.strftime('%m-%d %H:%M')} · moved here from {Path(old).name}: {why}")
+        compact_migrate(old)  # a raw summary an older hook left in the project goes to the state folder, not along with the session
+        journal_add(s, f"- {time.strftime('%m-%d %H:%M')} · moved here from {Path(old).name}: {why}", new, session_id)
         sec_new = memo_read(new)
         need = [l for l in sec_new["Needs you"].splitlines() if l.strip()] + [need_with_project(l, proj_tag(new)) for l in moved_need]
         sec_new["Needs you"] = "\n".join(renumber(need))
@@ -1552,6 +1545,38 @@ def session_memo_path(cwd, session_id):
     return memo_dir(cwd) / f"{sid8(session_id) or 'legacy'}.md"
 
 
+COMPACT_DIR = STATE_DIR / "compact"  # raw compact summaries, one per session: never in the project, where a folder outside git (or a synced one) would carry the conversation
+COMPACT_KEEP_DAYS = 30  # a summary not replaced for this long is removed (it is a copy of a conversation, not memo text)
+
+
+def compact_path(session_id):
+    """The raw compact summary of a session: ~/.abofles/state/compact/<sid8>.md (the latest only)."""
+    return COMPACT_DIR / f"{sid8(session_id) or 'legacy'}.md"
+
+
+def compact_migrate(root):
+    """Raw compact summaries older hooks kept in the project (abofles-memo.d/<sid8>.compact.md, archive/ too) move to compact_path; where one is there
+    already the newer is kept. Returns how many left the project."""
+    n = 0
+    for d in (memo_dir(root), memo_dir(root) / "archive"):
+        try:
+            files = list(d.glob("*.compact.md"))
+        except Exception:
+            continue
+        for f in files:
+            try:
+                dest = compact_path(f.name[:-len(".compact.md")])
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                if dest.exists() and dest.stat().st_mtime >= f.stat().st_mtime:
+                    f.unlink()
+                else:
+                    shutil.move(str(f), str(dest))
+                n += 1
+            except Exception:
+                continue
+    return n
+
+
 def git_exclude_memo(cwd):
     """Keep the memo out of `git status` without touching the project's .gitignore: `.git/info/exclude` is local."""
     try:
@@ -1586,29 +1611,51 @@ def break_minutes(cwd):
     return int(m.group(1)) if m else 10
 
 
-_MEMO_HELD = set()  # lock paths this process holds (memo_lock is re-entrant)
+_MEMO_TLS = threading.local()  # the lock paths this thread holds: memo_lock is re-entrant per thread. A flock belongs to one open file, so a lock another
+                               # thread of this process holds (memo_health in its daemon thread) still excludes this one.
+
+
+def _memo_held():
+    h = getattr(_MEMO_TLS, "held", None)
+    if h is None:
+        h = _MEMO_TLS.held = set()
+    return h
+
+
+_LOCK_FAIL = {}  # the memo lock's last failure in this process: {root, at, why} (lock_failure)
 
 
 class memo_lock:
-    """The memo is shared by every session in a project; serialise read-modify-write."""
+    """The memo is shared by every session in a project; serialise read-modify-write. A lock that cannot be taken fails open (the hook never
+    stalls) and says so: lock_failure gives the health line its note."""
     def __init__(self, cwd):
+        self.root = os.path.realpath(cwd or os.getcwd())
         key = re.sub(r"[^A-Za-z0-9]", "_", os.path.realpath(cwd or os.getcwd()))[-120:]
         self.path = STATE_DIR / "memo-locks" / f"{key}.lock"  # never inside the project: a stray .lock there shows in git status
         self.fh = None
     def __enter__(self):
-        if str(self.path) in _MEMO_HELD:  # already held by this process (a migration inside a locked write): no second flock
+        if str(self.path) in _memo_held():  # already held by this thread (a migration inside a locked write): no second flock
             return self
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             self.fh = open(self.path, "w")
             lock_file(self.fh)
-            _MEMO_HELD.add(str(self.path))
-        except Exception:
+            _memo_held().add(str(self.path))
+        except Exception as e:
+            if self.fh:  # opened but not locked: close it, no handle is left open
+                try:
+                    self.fh.close()
+                except Exception:
+                    pass
             self.fh = None
+            fail = {"at": int(time.time()), "why": f"{type(e).__name__}: {e}"[:160]}
+            _LOCK_FAIL.clear()
+            _LOCK_FAIL.update(root=self.root, **fail)
+            registry_set(self.root, lock_failed=fail)
         return self
     def __exit__(self, *a):
         if self.fh:
-            _MEMO_HELD.discard(str(self.path))
+            _memo_held().discard(str(self.path))
             try:
                 unlock_file(self.fh)
                 self.fh.close()
@@ -1765,7 +1812,7 @@ def memo_migrate(cwd, txt):
             s["Journal"] += re.sub(r" · s:[0-9a-z_-]{1,12} ·", " ·", l) + "\n"
         sec = {"Needs you": old["Needs you"], "Decisions": old["Decisions"], "Sessions": ""}
         for sid, s in files.items():
-            s["Journal"] = "\n".join(s["Journal"].splitlines()[:JOURNAL_KEEP])
+            s["Journal"] = "\n".join(trim_to_archive(cwd, [l for l in s["Journal"].splitlines() if l.strip()], JOURNAL_KEEP, f"journal · {sid or 'legacy'}", newest_first=True))
             sess_write(cwd, sid, s)
             wm = re.search(r"^Written\s+\d{4}-(\d\d-\d\d \d\d:\d\d)", s["Now"], re.M)
             jm = re.match(r"- (\d\d-\d\d \d\d:\d\d)", s["Journal"])
@@ -1838,10 +1885,27 @@ def needs_items(open_line, cands=None):
 TRACE_RE = re.compile(r"· ((resolved|reopened) by hand|moved here from \S+):")  # a hand-trace journal line is not a receipt: receipt counters skip it
 
 
-def journal_add(sec, entry):
-    """Prepend one line to a session's Journal, JOURNAL_KEEP kept."""
-    lines = [l for l in sec.get("Journal", "").splitlines() if l.strip()]
-    sec["Journal"] = "\n".join(([entry] + lines)[:JOURNAL_KEEP])
+def journal_add(sec, entry, cwd=None, session_id=""):
+    """Prepend one line to a session's Journal, JOURNAL_KEEP kept; with `cwd` the older lines go to archive.md first (nothing is lost)."""
+    lines = [entry] + [l for l in sec.get("Journal", "").splitlines() if l.strip()]
+    if cwd:
+        lines = trim_to_archive(cwd, lines, JOURNAL_KEEP, f"journal · {sid8(session_id) or 'legacy'}", newest_first=True)
+    else:
+        lines = lines[:JOURNAL_KEEP]
+    sec["Journal"] = "\n".join(lines)
+
+
+def trim_to_archive(cwd, lines, keep, heading, newest_first=False):
+    """`lines` cut to `keep`, the newest kept (the first ones when `newest_first`, else the last); what is cut goes to archive.md under
+    `<date> · heading` first. When the archive cannot be written nothing is cut: no text is lost."""
+    if len(lines) <= keep:
+        return lines
+    kept, cut = (lines[:keep], lines[keep:]) if newest_first else (lines[-keep:], lines[:-keep])
+    try:
+        archive_append(cwd, {f"{time.strftime('%Y-%m-%d')} · {heading}": cut})
+    except Exception:
+        return lines
+    return kept
 
 
 MEMO_OPS = ("now", "needs", "journal", "trace", "decision", "match", "resolve", "reopen", "move", "precompact", "postcompact",
@@ -1902,7 +1966,7 @@ def memo_trace(cwd, session_id, text):
 
 def _op_trace(cwd, session_id, project, text):
     s = sess_read(cwd, session_id)
-    journal_add(s, f"- {time.strftime('%m-%d %H:%M')} · " + clip(text, 200))
+    journal_add(s, f"- {time.strftime('%m-%d %H:%M')} · " + clip(text, 200), cwd, session_id)
     memo_touch(cwd, session_id, s)
 
 
@@ -1923,16 +1987,13 @@ def _op_journal(cwd, session_id, project, rc):
     items added to the main memo's Needs you (tagged with the repository they are about), and the session's index line refreshed."""
     stamp = time.strftime("%m-%d %H:%M")
     s = sess_read(cwd, session_id)
-    journal_add(s, f"- {stamp} · " + " · ".join(journal_bits(rc)))
+    journal_add(s, f"- {stamp} · " + " · ".join(journal_bits(rc)), cwd, session_id)
     s["Now"] = now_text(receipt_now(cwd, s["Now"], rc), " · from receipt")  # the band's "next from the memo" must follow the receipt, not the last /abofles:memo
     sec = memo_read(cwd)
     need = [l for l in sec["Needs you"].splitlines() if l.strip()]
-    have = [need_key(l) for l in need]
     for item in needs_items(rc.get("open"), receipt_items(rc, "open")):
-        key = need_key(item)
-        if not any(h == key or similar(h, key, 0.8) for h in have):
+        if not need_dup(need, need_key(item), session_id):
             need.append(need_line(need, stamp, item, session_id, project))
-            have.append(key)
     sec["Needs you"] = "\n".join(need)
     memo_touch(cwd, session_id, s, sec)
 
@@ -2059,9 +2120,12 @@ def need_split(lines, session_id, root, scope="project"):
     closed = {}
     for l in lines:
         ts, tp = need_tag_of(l)
-        if scope != "session" and me and ts and ts != me and (not tp or proj_same(tp, root)) and closed.setdefault(ts, session_closed(root, ts)):
-            own.append(l)
-            continue
+        if scope != "session" and me and ts and ts != me and (not tp or proj_same(tp, root)):
+            if ts not in closed:
+                closed[ts] = session_closed(root, ts)  # once per session: it reads that session's file
+            if closed[ts]:
+                own.append(l)
+                continue
         (own if me and ts == me else other).append(l)
     return own, ([] if scope == "session" else other)
 
@@ -2085,11 +2149,29 @@ def need_key(line):
     return " ".join(re.findall(r"[\w؀-ۿ]+", t.lower()))[:120]
 
 
+PROBLEM_RE = re.compile(r"^\W*ATTENTION\b|\bATTENTION\s*[:·—-]|VERDICT:? ?FAIL|^\W*FAIL\b|\b(?:open|unresolved)\s+FAIL\b")  # a problem report (NEEDS_RE's first part): it can come back after a fix
+
+
+def need_dup(lines, key, session_id):
+    """True when Needs you already holds what `key` says (or 80% alike): this session's own open item, or a settled decision or question of any session
+    (a later receipt that still lists it is stale). A fixed problem report (ATTENTION, FAIL) never hides the same problem when it comes back, and another
+    session's open item never hides this session's own: that session acts on its own, and this one would never see the item as its own."""
+    me = sid8(session_id)
+    for l in lines:
+        m = re.match(r"\d+\. \[(.)\] ", l.strip())
+        if not m or not (need_key(l) == key or similar(need_key(l), key, 0.8)):
+            continue
+        if m.group(1) == " " and need_tag_of(l)[0] == me:
+            return True
+        if m.group(1) != " " and not PROBLEM_RE.search(need_text(l.split(" → resolved")[0])):
+            return True
+    return False
+
+
 def _op_needs(cwd, session_id, project, item):
     sec = memo_read(cwd)
     need = [l for l in sec["Needs you"].splitlines() if l.strip()]
-    key = need_key(clip(item))
-    if not any(need_key(l) == key or similar(need_key(l), key, 0.8) for l in need):
+    if not need_dup(need, need_key(clip(item)), session_id):
         need.append(need_line(need, time.strftime("%m-%d %H:%M"), item, session_id, project))
     sec["Needs you"] = "\n".join(need)
     memo_write(cwd, sec, session_id)
@@ -2150,12 +2232,12 @@ def _op_decision(cwd, session_id, project, question, answer, by="you"):
     if question != "note":
         s = sess_read(cwd, session_id)
         lines = [l for l in s["Decisions"].splitlines() if l.strip()] + [entry]
-        s["Decisions"] = "\n".join(lines[-DECISIONS_KEEP:])
+        s["Decisions"] = "\n".join(trim_to_archive(cwd, lines, DECISIONS_KEEP, f"decisions · {sid8(session_id)}"))
         memo_touch(cwd, session_id, s)  # the main memo (and its index line) exists from the first decision on
         return
     sec = memo_read(cwd)
     lines = [l for l in sec["Decisions"].splitlines() if l.strip()] + [entry + need_tag_str(session_id, project)]
-    sec["Decisions"] = "\n".join(lines[-DECISIONS_KEEP:])
+    sec["Decisions"] = "\n".join(trim_to_archive(cwd, lines, DECISIONS_KEEP, "notes"))
     memo_write(cwd, sec, session_id)
 
 
@@ -2286,7 +2368,7 @@ def _op_list(cwd, session_id, project, curator=False):
         we, mark = now_written(s["Now"])
         lr = last_receipt(s["Journal"])
         le = stamp_epoch(lr[0]) if lr else None
-        cp = memo_dir(cwd) / f"{k}.compact.md"
+        cp = compact_path(k)
         sessions.append({"sid": k, "file": f"{k}.md", "caller": k == me, "now_age_min": int((now - we) // 60) if we else None, "now_mark": mark or None,
                          "now_manual": bool(s["Now"].strip()) and not mark and (le is None or we is None or we >= le),
                          "task": (f.get("Task") or [""])[0], "left": f.get("Left") or [], "next": f.get("Next") or [],
@@ -2395,10 +2477,11 @@ def _op_merge(cwd, session_id, project, refs, into, curator=False):
 
 def _op_move_item(cwd, session_id, project, ref, curator=False):
     """A Needs-you item that is about another project goes to that project's Needs-you list with its text, stamp, `#id` and tags unchanged (a `p:` is added
-    only to a line that has an `s:` and no `p:`). `project` is the target: an existing folder that is a git repository top or already has a memo."""
+    only to a line that has an `s:` and no `p:`). `project` is the target: a project the memo knows (in the registry, or a folder that already has a memo)."""
     dest = os.path.realpath(project or "")
-    if not os.path.isdir(dest) or (repo_top(dest) != dest and not memo_exists(dest)):
-        return memo_refuse("bad-root", f"{project} is no project: the folder must exist and be a git repository top or already hold a memo")
+    known = {os.path.realpath(r) for r in registry_read()}
+    if not os.path.isdir(dest) or (dest not in known and not memo_exists(dest)):  # the `projects` memo.py list gives: never a repository the memo never saw
+        return memo_refuse("bad-root", f"{project} is no known project: the folder must already hold a memo (the `projects` of `memo.py list`)")
     if dest == os.path.realpath(cwd):
         return memo_refuse("bad-root", "the item is already in that project")
     sec = memo_read(cwd)
@@ -2763,7 +2846,7 @@ HEALTH_EVERY = 6 * 3600  # seconds between two runs from start() per project
 HEALTH_BUDGET = 1.5  # seconds start() waits for memo_health
 HEALTH_SHOW = 24 * 3600  # seconds the resume block / pane keep saying what the last tidy-up moved
 MAIN_CAP = 8 * 1024  # bytes of the main memo
-SESSION_CAP = 6 * 1024  # bytes of one session file
+SESSION_CAP = 16 * 1024  # bytes of one session file: about six whole receipts (one Journal line holds up to ~2.6 KB)
 STALE_NOW_DAYS = 3
 ARCHIVE_NAME = "archive.md"  # under abofles-memo.d/: resolved items, trimmed journal lines, duplicate decisions, the archived sessions' index lines
 SESSION_FILE_RE = re.compile(r"^[A-Za-z0-9_-]{1,8}\.md$")  # <sid8>.md — not archive.md, not <sid8>.compact.md
@@ -2958,6 +3041,8 @@ def memo_health(root, now=None, sid="", budget=None, dry=False):
     d_items, d_sess = number_override(root, "Archive items"), number_override(root, "Archive sessions")
     date = time.strftime("%Y-%m-%d", time.localtime(now))
     with (contextlib.nullcontext() if dry else memo_lock(root)):
+        if not dry:
+            compact_migrate(root)  # a raw summary an older hook left in the project goes to the state folder
         sec = memo_read(root)
         orig = dict(sec)
         ssec, smt, sorig = {}, {}, {}
@@ -3116,16 +3201,26 @@ def memo_health(root, now=None, sid="", budget=None, dry=False):
     return res
 
 
+def lock_failure(root):
+    """One short line when the memo lock of `root` failed within HEALTH_SHOW (in this process, or as the registry saw it), else ''."""
+    real = os.path.realpath(root or os.getcwd())
+    lf = _LOCK_FAIL if _LOCK_FAIL.get("root") == real else ((registry_read().get(real) or {}).get("lock_failed") or {})
+    if not lf or time.time() - (lf.get("at") or 0) > HEALTH_SHOW:
+        return ""
+    return f"memo lock failed ({lf.get('why') or 'unknown'}): writes were not serialised"
+
+
 def health_info(root):
     """The health data for the resume block and the pane: what the last tidy-up that moved something did (kept HEALTH_SHOW seconds), when memo_health last ran
     and whether a by-meaning check is due. None when memo_health never ran for this project. Keys: at, archived_items, archived_sessions, deduped, trimmed,
     orphans, due_semantic, line (one short sentence, '' when there is nothing to say)."""
     e = registry_read().get(os.path.realpath(root or os.getcwd())) or {}
-    if not e.get("last_health_at"):
+    lk = lock_failure(root)
+    if not e.get("last_health_at") and not lk:
         return None
     lh = e.get("last_health") or {}
     fresh = bool(lh) and time.time() - (lh.get("at") or 0) < HEALTH_SHOW
-    d = {"at": int(e["last_health_at"]), "due_semantic": bool(e.get("semantic_due"))}
+    d = {"at": int(e.get("last_health_at") or 0), "due_semantic": bool(e.get("semantic_due"))}
     d.update({k: (lh.get(k, 0) if fresh else 0) for k in HEALTH_KEYS})
     bits = [f"{d['archived_items']} resolved item{'s' if d['archived_items'] != 1 else ''}" if d["archived_items"] else "",
             f"{d['archived_sessions']} idle session{'s' if d['archived_sessions'] != 1 else ''}" if d["archived_sessions"] else "",
@@ -3135,6 +3230,8 @@ def health_info(root):
             f"{d['judge_notes']} Judge note{'s' if d['judge_notes'] != 1 else ''}" if d["judge_notes"] else ""]
     bits = [b for b in bits if b]
     d["line"] = ("memo tidied: " + ", ".join(bits) + f" → {MEMO_DIR_NAME}/{ARCHIVE_NAME}") if bits else ""
+    if lk:
+        d["line"] = (d["line"] + " · " if d["line"] else "") + lk
     return d
 
 
@@ -3510,7 +3607,7 @@ _SUMMARY_HEADS = (  # the numbered headings of Claude Code's compact summary, ma
     ("request", r"primary request|user'?s? request|request and intent"), ("concepts", r"key technical concepts|technical concepts"),
     ("files", r"files and code|code sections"), ("errors", r"errors? and fix"), ("solving", r"problem.?solving"),
     ("messages", r"all user messages|user messages"), ("pending", r"pending tasks?"), ("current", r"current work"), ("next", r"(?:optional )?next steps?"))
-_NONE_RE = re.compile(r"^(?:none(?:\s+(?:explicitly|yet|so far|left|open|pending|remaining)\b.*)?|no (?:pending |open |remaining |more )?tasks?\b.*|n/?a|nothing(?:\s+(?:else|more|pending|left|open|remaining)\b.*)?|-+)[.\s]*$", re.I)  # the whole line says "nothing": never a real task that starts with No or None
+_NONE_RE = re.compile(r"^(?:none(?:\s+(?:explicitly|yet|so far|left|open|pending|remaining)\b.*)?|no (?:pending |open |remaining |more )?tasks?\b.*|n/?a|nothing(?:\s+(?:else|more|pending|left|open|remaining)\b.*)?|(?:none|nothing)(?:\s*[.;:—–]|\s+-)\s.*|-+)[.\s]*$", re.I)  # the line says "nothing" (`None.` or `Nothing —` with more after it too): never a real task that starts with No or None
 
 
 def _summary_heading(line):
@@ -3546,7 +3643,8 @@ def _summary_items(lines):
 
 # Text a compact summary writes for Claude's next turn, not about the work: the reply still to write, a pointer into the summary, a wait on the compact that already ran.
 _SELF_NOTE_RE = re.compile(r"^(?:write|deliver|print|send)\b[^.]{0,60}\b(?:closing|final) (?:message|reply|answer)\b|^the wrap_?up\b|^the work stopped at the compact boundary\b"
-                           r"|^(?:continue the conversation|resume directly)\b|\bwait(?:ing)? (?:for|on) (?:the )?(?:user'?s? )?/?compact\b", re.I)
+                           r"|^(?:continue the conversation|resume directly)\b|\bwait(?:ing)? (?:for|on) (?:the )?(?:user'?s? )?/?compact\b"
+                           r"|^context\b[^.]{0,60}?\b(?:\d+(?:\.\d+)?\s?[km]\b|/?compact\b)|\b/?compact is (?:due|needed|recommended)\b|^(?:start|begin|take on|do) no (?:new|further|more|other) (?:work|tasks?)\b", re.I)
 
 
 def _work_line(lines, one=False):
@@ -3605,7 +3703,7 @@ def precompact(data):
 
 
 def postcompact(data):
-    """PostCompact (input: trigger, compact_summary): `Memo on compact = auto` -> the raw summary saved to abofles-memo.d/<sid8>.compact.md (the latest only),
+    """PostCompact (input: trigger, compact_summary): `Memo on compact = auto` -> the raw summary saved to ~/.abofles/state/compact/<sid8>.md (the latest only),
     Now written from what the summary says (see _op_postcompact), memo_semantic_due set in the session state. Prints nothing."""
     sid = data.get("session_id", "")
     text = data.get("compact_summary") or ""
@@ -3625,14 +3723,19 @@ def postcompact(data):
 
 
 def _save_compact_summary(root, sid, trigger, text):
-    """The raw summary to abofles-memo.d/<sid8>.compact.md (the latest only), Now written from what it says (see _op_postcompact)."""
+    """The raw summary to compact_path (the latest only; summaries older than COMPACT_KEEP_DAYS go), Now written from what it says (see _op_postcompact)."""
     try:
-        p = memo_dir(root) / f"{sid8(sid)}.compact.md"
+        p = compact_path(sid)
         p.parent.mkdir(parents=True, exist_ok=True)
-        tmp = p.with_suffix(".tmp")
-        tmp.write_text(f"# Compact summary · session {sid8(sid)} · {time.strftime('%Y-%m-%d %H:%M')} · {trigger or 'compact'}\n\n{text}\n")
+        tmp = p.with_suffix(f".{os.getpid()}.tmp")
+        tmp.write_text(f"# Compact summary · session {sid8(sid)} · {os.path.realpath(root)} · {time.strftime('%Y-%m-%d %H:%M')} · {trigger or 'compact'}\n\n{text}\n")
         replace_file(tmp, p)
-        git_exclude_memo(root)
+        for f in COMPACT_DIR.glob("*.md"):
+            try:
+                if time.time() - f.stat().st_mtime > COMPACT_KEEP_DAYS * 86400:
+                    f.unlink()
+            except OSError:
+                pass
     except Exception:
         pass
     parsed = parse_compact_summary(text)
@@ -6004,9 +6107,11 @@ MEMO_AGENT_BAD = re.compile(r"[;&|<>`\r\n]|\$[({]")  # a chained command, a pipe
 MEMO_AGENT_HEREDOC = re.compile(r"\s<<-?\s*(['\"])([A-Za-z_]\w*)\1\s*$")  # the one allowed `<`: a quoted heredoc (rewrite-now's text), whose body the shell never expands
 
 
-def memo_agent_cmd_problem(cmd):
+def memo_agent_cmd_problem(cmd, sid=""):
     """Why a Bash command of the memo agent is refused, or None when it is exactly one call of this plugin's scripts/memo.py (through scripts/py,
-    python or directly) with one of MEMO_AGENT_CMDS and no chaining, redirect or substitution. A quoted heredoc may carry text on stdin."""
+    python or directly) with one of MEMO_AGENT_CMDS and no chaining, redirect or substitution. A quoted heredoc may carry text on stdin. With `sid`
+    (the session that started the agent) its `--session` must be that id: memo.py trusts a session id before the folder, so another session's id
+    would open that session's project memo."""
     cmd = (cmd or "").strip()
     first, nl, rest = cmd.partition("\n")
     if nl:
@@ -6036,17 +6141,21 @@ def memo_agent_cmd_problem(cmd):
         return "not a call of this plugin's scripts/memo.py"
     if not args or args[0] not in MEMO_AGENT_CMDS:
         return "memo.py subcommand " + (args[0] if args else "(none)") + " (allowed: " + ", ".join(MEMO_AGENT_CMDS) + ")"
+    if sid:
+        given = [args[i + 1] if i + 1 < len(args) else "" for i, a in enumerate(args) if a == "--session"]
+        if any(a.startswith("--session=") for a in args) or not given or any(g != sid for g in given):
+            return f"--session must name the session that started the agent ({sid})"
     return None
 
 
 def memo_agent_guard(data):
-    """PreToolUse for the memo agent (`agent_type` abofles:abofles-memo): Bash only as one call of memo.py (memo_agent_cmd_problem), Read only of this
-    project's `.claude/abofles-memo*` files, every other tool denied. The hard limit behind the agent's prompt: whatever a memo line says, it cannot
+    """PreToolUse for the memo agent (`agent_type` abofles:abofles-memo): Bash only as one call of memo.py (memo_agent_cmd_problem) with the starting
+    session's `--session`, Read only of this project's `.claude/abofles-memo*` files and its sessions' compact summaries, every other tool denied. The hard limit behind the agent's prompt: whatever a memo line says, it cannot
     run anything else. Denies (and exits) or returns."""
     tool = data.get("tool_name") or ""
     ti = data.get("tool_input") or {}
     if tool == "Bash":
-        bad = memo_agent_cmd_problem(ti.get("command") or "")
+        bad = memo_agent_cmd_problem(ti.get("command") or "", data.get("session_id") or "")
         if bad:
             deny(f"abofles: the memo agent runs memo.py and nothing else — refused: {bad}.")
     elif tool == "Read":
@@ -6056,8 +6165,11 @@ def memo_agent_guard(data):
         path = ti.get("file_path") or ""
         rp = posix(os.path.realpath(path if os.path.isabs(path) else os.path.join(data.get("cwd") or root, path))) if path else ""
         base = posix(os.path.join(root, ".claude"))
-        if not (rp == base + "/abofles-memo.md" or rp.startswith(base + "/abofles-memo.d/")):
-            deny("abofles: the memo agent reads only this project's .claude/abofles-memo.md and abofles-memo.d/ files.")
+        cdir = posix(os.path.realpath(COMPACT_DIR)) + "/"
+        name = rp[len(cdir):] if rp.startswith(cdir) else ""
+        mine = name.endswith(".md") and "/" not in name and name[:-3] in ({p.stem for p in session_files(root)} | archived_sids(root))  # a compact summary of this project's sessions
+        if not (rp == base + "/abofles-memo.md" or rp.startswith(base + "/abofles-memo.d/") or mine):
+            deny("abofles: the memo agent reads only this project's .claude/abofles-memo.md, abofles-memo.d/ files and its sessions' compact summaries.")
     else:
         deny(f"abofles: the memo agent has Read (memo files) and Bash (memo.py) only — {tool or 'this tool'} is refused.")
 

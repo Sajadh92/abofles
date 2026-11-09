@@ -837,13 +837,36 @@ export async function noteCompact($: EngineInterface, tokens: number | null) {
   }
 }
 
+// What the abofles hooks keep for this session (~/.abofles/state/<session>.json). Throws when there is none.
+async function sessionState($: EngineInterface): Promise<Record<string, unknown>> {
+  const home = (await $.env.get('HOME')) ?? ''
+  const dir = (await $.env.get('ABOFLES_STATE_DIR')) ?? `${home}/.abofles/state`
+  const st: unknown = JSON.parse(await $.fs.read(`${dir}/${await $.session.id()}.json`))
+  if (!isObj(st)) throw new Error('no abofles state')
+  return st as Record<string, unknown>
+}
+
+// The turn that follows the person's /compact, so the session does not sit idle: the summary above says what was open.
+export const CONTINUE_PROMPT =
+  'abofles: the compact is done. Continue the work from the summary above: a task or step left open, or what you said you would do after the compact. ' +
+  'If nothing is left to continue, say so in one or two lines (what was last finished) and stop.'
+
+// Sends CONTINUE_PROMPT once the session is idle. Not when `Continue after compact = off`, when no abofles hook keeps this session, or when the
+// person has started typing (their own prompt follows). Never throws: it runs around the compact itself.
+export async function continueAfterCompact($: EngineInterface) {
+  try {
+    const st = await sessionState($)
+    if (st.compact_continue === false) return
+    if ((await $.prompt.read()).text.trim()) return
+    $.prompt.submit({ text: CONTINUE_PROMPT }).catch(() => {})
+  } catch {
+    // no abofles state, or the box could not be read: the session waits, as before
+  }
+}
+
 export async function refresh($: EngineInterface) {
   try {
-    const home = (await $.env.get('HOME')) ?? ''
-    const dir = (await $.env.get('ABOFLES_STATE_DIR')) ?? `${home}/.abofles/state`
-    const id = await $.session.id()
-    const text = await $.fs.read(`${dir}/${id}.json`)
-    const st = JSON.parse(text) as { guide?: unknown; pane?: unknown }
+    const st = (await sessionState($)) as { guide?: unknown; pane?: unknown }
     const nextPane = cleanPane(isObj(st) ? st.pane : null)
     await update($, pane, () => nextPane)
     const next = withCompactSize(cleanGuide(isObj(st) ? st.guide : null), await read($, compactedTo))

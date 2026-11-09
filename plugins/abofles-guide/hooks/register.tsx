@@ -19,6 +19,7 @@ import {
   openPane,
   paneIsPlaced,
   plain,
+  continueAfterCompact,
   noteCompact,
   refresh,
   setPaneOpen,
@@ -129,12 +130,14 @@ export const register: Register = on => {
   }).catch(($, e, next) => next(e))
 
   // The size after a compact. The transcript gets it only after the hooks ran, so PostCompact cannot read it there.
-  // No `.catch` that calls next again: it would compact twice. noteCompact never throws.
+  // After the person's own /compact one turn picks the work up (an automatic compact goes on with its turn by itself).
+  // No `.catch` that calls next again: it would compact twice. noteCompact and continueAfterCompact never throw.
   on('session.compact', async ($, e, next) => {
     const main = !e.agentId && e.trigger !== 'precompute'
     if (main) await noteCompact($, null)
     const result = await next(e)
     if (main) await noteCompact($, result.skip ? null : result.tokensAfter ?? null)
+    if (main && e.trigger === 'manual' && !result.skip) await continueAfterCompact($)
     return result
   })
 
