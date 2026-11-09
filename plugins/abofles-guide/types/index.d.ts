@@ -76,7 +76,7 @@ export type PaneTotals = { spawns: number; tokens: number; usd: number; base_usd
 
 export type PaneSpawns = { live: PaneLive[]; rows: PaneRow[]; totals: PaneTotals } // rows: the last 30, oldest first
 
-export type PaneOverrideKey = { key: string; kind: string; options: string[]; value: string; source: string; default: string; project: string | null; user: string | null } // project, user: that file's own value, null when it sets none
+export type PaneOverrideKey = { key: string; kind: string; options: string[]; value: string; source: string; default: string; project: string | null; user: string | null; invalid?: boolean } // project, user: that file's own value, null when it sets none; invalid: the hooks cannot read the value and use the default
 
 export type PaneOverrides = {
   files: { project: string; user: string }

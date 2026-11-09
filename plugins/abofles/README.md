@@ -156,7 +156,7 @@ Every form the block reads, project `CLAUDE.md` first, then `~/.claude/CLAUDE.md
 | `Language` | a language name | none | The language owner questions are written in. |
 | `Guide` | on, off | on | The 🧭 next line. |
 | `Review gate` | auto, on, warn, off | auto | Refuses a receipt while a required reviewer did not run: auto = 🔴 once, on = 🟠 too, warn = never, off = silent. |
-| `Review memory` | N hours | 2 | A reviewer's PASS still counts for a later 🟠 change on the same topic for this long, and for the whole session on the same ticket key. A 🔴 change needs the same ticket key. A FAIL or a lost reviewer never counts. |
+| `Review memory` | N hours | 2 | A reviewer's PASS still counts for a later 🟠 change on the same topic for this long, and for the whole session on the same ticket key. A 🔴 change needs the same ticket key. A FAIL or a lost reviewer never counts. `0`: only the same ticket key counts. |
 | `Resume` | session, project, all, off | project | What the resume block and the guide show: this session, this project, other projects too, or nothing automatic. `off` only stops the block in the chat; the pane's Resume card still shows. |
 | `Pace` | normal, fast | normal | `fast` = fewer guard stops, no Judge on Minor/Normal questions, one-line receipts. |
 | `Guide place` | pane, band | pane | Where the guide shows: the Abo Fles pane, or the band above the prompt. Without the mod: band. |

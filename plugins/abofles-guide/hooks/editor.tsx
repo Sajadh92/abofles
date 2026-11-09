@@ -291,6 +291,11 @@ function resetNote(k: PaneOverrideKey): string {
   return k.source === 'user' ? 'On save: back to default in every project' : 'On save: back to default'
 }
 
+// A value in the file the hooks cannot read: what they do instead, and the way out.
+function invalidNote(k: PaneOverrideKey): string {
+  return `The hooks cannot read "${k.value}" and use ${k.default ? k.default : 'nothing'} instead. Pick a value or Reset.`
+}
+
 // One key as a settings block, one thing per line: the name (with "· edited" while unsaved) and at its end the badge when a file sets it; what it does; the control; the
 // custom value Input when open; then the key's own target and, at the end of that line, Reset. The name stands above the control, so
 // the control itself carries no label.
@@ -346,7 +351,7 @@ function field($: EngineInterface, ui: Ui, look: Look, k: PaneOverrideKey, d: Dr
           <Input key={`custom:${k.key}`} value={d[k.key] ?? k.value} placeholder={custom?.hint} onInput={v => setDraft($, k.key, v, true)} onSubmit={v => setDraft($, k.key, v, true)} />
         </Box>
       ) : null}
-      {resetting ? <Text size="caption" color="warning">{resetNote(k)}</Text> : null}
+      {resetting ? <Text size="caption" color="warning">{resetNote(k)}</Text> : k.invalid && !edited ? <Text size="caption" color="warning">{invalidNote(k)}</Text> : null}
       {value !== '' || isSet(k) ? (
         <Box flexDirection="row" flexWrap="wrap" justifyContent="space-between" alignItems="center" gap="xs">
           <Box flexDirection="row" alignItems="center" gap="xs">

@@ -765,7 +765,7 @@ function cleanOverrideKey(v: unknown): PaneOverrideKey | null {
   const value = strOr(v.value, '')
   // older hooks name only the winning file: the other one reads as setting nothing
   const own = (file: 'project' | 'user'): string | null => (isStr(v[file]) ? (v[file] as string) : v[file] === undefined && source === file ? value : null)
-  return { key: v.key, kind: strOr(v.kind, 'text'), options: strsOf(v.options), value, source, default: strOr(v.default, ''), project: own('project'), user: own('user') }
+  return { key: v.key, kind: strOr(v.kind, 'text'), options: strsOf(v.options), value, source, default: strOr(v.default, ''), project: own('project'), user: own('user'), ...(v.invalid === true ? { invalid: true } : {}) }
 }
 
 function cleanOverrides(raw: unknown): PaneOverrides | null {

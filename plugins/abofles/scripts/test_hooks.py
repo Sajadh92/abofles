@@ -2615,6 +2615,25 @@ def main():
         Path(po, "CLAUDE.md").write_text("# Project\n- Pace = fast\n- Receipt = off\n\n### Abofles Overrides\n- Break = 7\n#### notes\n- Guide = off\n\n## Other\n- Language = Arabic\n")
         check("override_value: read inside the block (any heading level and case; a deeper heading continues it)", H.override_value(po, "Break") == "7" and H.override_value(po, "Guide") == "off")
         check("override_value: a `- Key = value` line outside the block sets nothing", H.override_value(po, "Pace") is None and H.override_value(po, "Receipt") is None and H.override_value(po, "Language") is None)
+        # 9b. a note after a value, `*` / `+` bullets, examples in a code fence or an HTML comment, K / M marks, Review memory 0
+        def o3p(body):
+            d_ = tempfile.mkdtemp(); Path(d_, "CLAUDE.md").write_text("## abofles overrides\n" + body); return d_
+        o3n_ = o3p("- Git guard = deny  # team rule\n- Review gate = on (strict)\n- Agents = 3 per task\n- Break = off # never\n- Guide = none\n* Pace = fast\n+ Budget raise = ask\n")
+        check("overrides: a note after the value is ignored (`deny  # team rule` is deny, not the weaker default); `*` and `+` bullets read",
+              H.git_guard_mode(o3n_) == "deny" and H.review_gate_mode(o3n_) == "on" and H.gate_setting(o3n_) == ("fixed", 3) and H.break_minutes(o3n_) == 0
+              and not H.guide_on(o3n_) and H.pace(o3n_) == "fast" and H.budget_raise_mode(o3n_) == "ask")
+        o3f_ = o3p("Example:\n```\n- Git guard = off\n```\n<!--\n- Agents = off\n-->\n<!-- - Receipt = off -->\n- Questions = off\n")
+        check("overrides: a line in a code fence or an HTML comment sets nothing; the line after them does",
+              H.git_guard_mode(o3f_) == "warn" and H.gate_setting(o3f_) == ("ask", None) and H.receipt_mode(o3f_) == ("full", 0) and H.questions_setting(o3f_) == "off")
+        o3m_ = o3p("- Context marks = 500K, 1M, 0\n- Review memory = 0\n- Archive items = 0\n")
+        check("overrides: Context marks reads K and M and drops 0; Review memory = 0 is 0 hours; Archive items = 0 is still the default",
+              H.context_marks(o3m_) == (500, 1000) and H.number_override(o3m_, "Review memory", zero=True) == 0 and H.number_override(o3m_, "Archive items") == 7)
+        o3i_ = o3p("- Git guard = strict\n- Agent budgets = 1, 2\n- Main session = big\n- Spawns place = output\n- Language = Arabic\n- Agents = 4\n")
+        o3k_ = {k["key"]: k for k in H.pane_overrides(o3i_, "")["keys"]}
+        check("pane overrides: a value the hooks cannot read is marked invalid (only those); a line under a key's old name is that key, not a raw line",
+              sorted(k for k, v in o3k_.items() if v.get("invalid")) == ["Agent budgets", "Git guard", "Main session"] and H.pane_overrides(o3i_, "")["raw"] == [] and o3k_["Agents place"]["value"] == "output")
+        o3c_ = o3p("- Pace = fast\n"); o3a_ = H.pace(o3c_); Path(o3c_, "CLAUDE.md").write_text("## abofles overrides\n- Pace = slow\n")
+        check("override_blocks: read once per process, read again when the file changed", o3a_ == "fast" and H.pace(o3c_) == "normal")
         # 10. the gate text says what the question text holds
         qt = H.question_gate_text({})
         check("question gate text: question text = QUESTION, blank line, WHY (no option summary); no 'plain summary'", "plain summary" not in qt and "QUESTION, a blank line, WHY (no option summary)" in qt)
@@ -4338,6 +4357,16 @@ def main():
         check("overrides set: Budget raise takes auto | ask (case ignored) and refuses anything else with one line (exit 2)",
               rb_.returncode == 2 and "Budget raise" in rb_.stderr and "auto, ask" in rb_.stderr and len(rb_.stderr.strip().splitlines()) == 1 and rg_.returncode == 0 and (Path(ob_) / "CLAUDE.md").read_text() == "## abofles overrides\n\n- Budget raise = ask\n"
               and {k["key"]: k for k in json.loads(rg_.stdout)["keys"]}["Budget raise"] | {} == {"key": "Budget raise", "kind": "select", "options": ["auto", "ask"], "value": "ask", "source": "project", "default": "auto", "project": "ask", "user": None})
+        # overrides.py: a key's old name, `*` bullets and code fences
+        ol_ = tempfile.mkdtemp(); Path(ol_, "CLAUDE.md").write_text("## abofles overrides\n- Spawns place = output\n- Break = 5\n")
+        rl1_ = ovrun(["set", "--scope", "project", "--cwd", ol_], {"set": {"Agents place": "pane"}}); tl1_ = Path(ol_, "CLAUDE.md").read_text()
+        rl2_ = ovrun(["set", "--scope", "project", "--cwd", ol_], {"set": {"Agents place": ""}}); tl2_ = Path(ol_, "CLAUDE.md").read_text()
+        check("overrides set: a line under the key's old name (Spawns place) is edited in place under the new name, and Reset removes it",
+              rl1_.returncode == 0 and tl1_ == "## abofles overrides\n- Agents place = pane\n- Break = 5\n" and rl2_.returncode == 0 and tl2_ == "## abofles overrides\n- Break = 5\n")
+        of_ = tempfile.mkdtemp(); Path(of_, "CLAUDE.md").write_text("## abofles overrides\n```\n- Pace = normal\n```\n* Break = 5\n")
+        rf_ = ovrun(["set", "--scope", "project", "--cwd", of_], {"set": {"Pace": "fast", "Break": "9"}})
+        check("overrides set: a line in a code fence is not edited (the key is added after the block's last real bullet); a `*` bullet is edited in place",
+              rf_.returncode == 0 and Path(of_, "CLAUDE.md").read_text() == "## abofles overrides\n```\n- Pace = normal\n```\n* Break = 9\n- Pace = fast\n")
 
     # ---- Git agent: the Work cell for a git topic, no fable, Git guard on risky git outside abofles-git, claims.py
     with tempfile.TemporaryDirectory() as led, tempfile.TemporaryDirectory() as cwd, tempfile.TemporaryDirectory() as state:

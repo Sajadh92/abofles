@@ -21,6 +21,10 @@ All notable changes to the plugins in this marketplace.
 - abofles: the memo agent's cell is read like any model and effort (`Haiku` / `Low` passes); a prompt that is not text is refused on the model check instead of failing open; the Parallel refusal says `1 background agent is`; the gate answer `unlimited` means off.
 - abofles: **the Git guard sees more history rewrites.** `checkout <commit> <paths>`, `pull --rebase` and `submodule deinit -f` are flagged, and so is a git whose command name comes from a variable or a substitution (`$G push -f`, `$(echo git) push --force`).
 - abofles: `claims.py` refuses an option as another option's value (`--session --branch x`); the git agent keeps the caller's attribution lines over its own environment's.
+- abofles: **a note after an override value no longer weakens it.** `Git guard = deny  # team rule` was read as an unknown value and fell back to `warn`; every key now reads the value's first word, so `deny (strict)`, `Agents = 3 per task` and `Break = off # never` mean what they say.
+- abofles: **an example in the override block is not a setting.** A line inside a code fence or an HTML comment under `## abofles overrides` sets nothing, and the pane's editor never edits it. `*` and `+` bullets are read like `-`.
+- abofles + abofles-guide: **the editor says when the hooks cannot read a value.** A hand-written value that is none of the key's options (`Git guard = strict`) gets a warning under its control naming what the hooks use instead.
+- abofles: a line under a key's old name (`Spawns place`) is edited and reset as that key; before, Reset left it in place and it kept applying. `Context marks` reads `500K` and `1M` and skips 0; `Review memory = 0` counts only the same ticket (it was read as the 2-hour default). The override files are read once per hook, not once per key.
 
 ## abofles 2.4.0 · abofles-guide 0.7.0 — 2026-11-09
 

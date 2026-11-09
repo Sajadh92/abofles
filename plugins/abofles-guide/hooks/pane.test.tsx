@@ -2046,6 +2046,16 @@ for (const surface of SURFACES) {
     await ui.unmount()
   })
 
+  test(`${surface}: a value the hooks cannot read says what they use instead until it is edited`, async ($, on) => {
+    await harness($, on, ovState([K('Receipt', 'brief', 'project', { invalid: true }), K('Questions', 'off', 'project')]))
+    const ui = await mountEditor($, surface)
+    expect(await said(ui, /^The hooks cannot read "brief" and use full instead\. Pick a value or Reset\.$/)).toBe(true)
+    expect(await said(ui, /cannot read "off"/)).toBe(false) // a value they read has no note
+    await ui.select({ key: 'sel:Receipt', value: 'short' })
+    expect(await said(ui, /cannot read/)).toBe(false)
+    await ui.unmount()
+  })
+
   test(`${surface}: Reset is an edit until Save, can be undone, and says what it will do`, async ($, on) => {
     const w = await harness($, on, ovState([K('Receipt', 'short', 'project')]))
     const ui = await mountEditor($, surface)

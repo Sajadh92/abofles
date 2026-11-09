@@ -21,7 +21,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 import abofles_hook as H  # noqa: E402
 
-_KEY_LINE = lambda key: re.compile(r"^(\s*-\s*" + re.escape(key) + r"\s*=\s*)(.+?)(\s*)$", re.I)
+def _KEY_LINE(key):
+    """`- Key = value` (also `*` / `+` bullets and the key's old name): groups bullet, name, ` = `, value, trailing space."""
+    names = "|".join(re.escape(n) for n in (key, H.OLD_KEY_NAMES.get(key)) if n)
+    return re.compile(r"^(\s*(?:-\s*|[*+]\s+))(" + names + r")(\s*=\s*)(.+?)(\s*)$", re.I)
 _EXTRA = {"Break": ("off",)}  # a number key that also takes a word
 MAX_VALUE = 500  # characters per value or line: an override is one short line
 BOM = b"\xef\xbb\xbf"
@@ -67,7 +70,7 @@ def clean_value(key, spec, value):
 
 
 def bullet(line):
-    m = re.match(r"^\s*-\s*(.+?)\s*$", line.rstrip("\r\n"))
+    m = re.match(r"^\s*(?:-\s*|[*+]\s+)(.+?)\s*$", line.rstrip("\r\n"))
     return m.group(1) if m else None
 
 
@@ -81,7 +84,7 @@ def edit_text(txt, sets, raw):
     nl = "\r\n" if "\r\n" in txt else "\n"
     lines = txt.splitlines(True)
     spans = lambda: H.override_spans([l.rstrip("\r\n") for l in lines])
-    inside = lambda: [i for a, b in spans() for i in range(a, b)]
+    inside = lambda: H.override_indexes([l.rstrip("\r\n") for l in lines])  # not a line in a code fence or an HTML comment
     adds = []
     for key, val in sets.items():
         rx = _KEY_LINE(key)
@@ -89,9 +92,10 @@ def edit_text(txt, sets, raw):
         if val == "":
             for i in reversed(hits):
                 del lines[i]
-        elif hits:
+        elif hits:  # the first line wins when read; a line under the key's old name gets the new name
             body = lines[hits[0]].rstrip("\r\n")
-            lines[hits[0]] = rx.match(body).group(1) + val + lines[hits[0]][len(body):]
+            m = rx.match(body)
+            lines[hits[0]] = m.group(1) + key + m.group(3) + val + lines[hits[0]][len(body):]
         else:
             adds.append(f"- {key} = {val}")
     if raw is not None:
@@ -118,7 +122,8 @@ def edit_text(txt, sets, raw):
         sp = spans()
         if sp:
             a, b = sp[0]
-            last = max([i for i in range(a, b) if bullet(lines[i]) is not None] or [i for i in range(a, b) if lines[i].strip()] or [a - 1])  # after the last bullet, else the last text
+            mine = [i for i in inside() if a <= i < b]
+            last = max([i for i in mine if bullet(lines[i]) is not None] or [i for i in range(a, b) if lines[i].strip()] or [a - 1])  # after the last bullet (not one in a code fence), else the last text
             if last >= 0 and not lines[last].endswith(("\n", "\r")):
                 lines[last] += nl
             lines[last + 1:last + 1] = [x + nl for x in adds]
@@ -185,7 +190,7 @@ def read_request():
     if req.get("raw") is not None:
         raw = []
         for l in req["raw"]:
-            c = re.sub(r"^\s*-\s*", "", " ".join(str(l).split()))
+            c = re.sub(r"^\s*(?:-\s*|[*+]\s+)", "", " ".join(str(l).split()))
             if not c:
                 continue
             if c.endswith("…"):
@@ -244,7 +249,7 @@ def main():
             raise Bad(f"{path.name} is not UTF-8 text — edit it by hand")
         if raw is not None:  # a line that is no complex form must already be in the block (an unknown key the pane lists): it stays where it is
             lines = old.splitlines()
-            unknown = {bullet(l) for a, b in H.override_spans(lines) for l in lines[a:b] if bullet(l) is not None and H.simple_key(bullet(l)) is None and not is_complex(bullet(l))}
+            unknown = {bullet(lines[i]) for i in H.override_indexes(lines) if bullet(lines[i]) is not None and H.simple_key(bullet(lines[i])) is None and not is_complex(bullet(lines[i]))}
             for c in raw:
                 if len(c) > MAX_VALUE:
                     raise Bad(f"'{c[:40]}…' is longer than {MAX_VALUE} characters")

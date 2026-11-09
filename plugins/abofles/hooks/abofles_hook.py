@@ -362,21 +362,61 @@ def override_spans(lines):
     return spans
 
 
+def override_indexes(lines):
+    """Indexes of the lines that can set an override: under an override heading (override_spans), outside a code fence (``` or ~~~) and
+    an HTML comment — an example in the block is not a setting."""
+    out = []
+    for a, b in override_spans(lines):
+        fence = comment = False
+        for i in range(a, b):
+            s = lines[i].strip()
+            if comment:
+                comment = "-->" not in s
+                continue
+            if s.startswith(("```", "~~~")):
+                fence = not fence
+                continue
+            if fence:
+                continue
+            if s.startswith("<!--"):
+                comment = "-->" not in s[4:]
+                continue
+            out.append(i)
+    return out
+
+
 def override_block(txt):
-    """The lines under every `#+ abofles overrides` heading (see override_spans), joined."""
+    """The lines that can set an override (override_indexes), joined."""
     lines = (txt or "").splitlines()
-    return "\n".join(l for a, b in override_spans(lines) for l in lines[a:b])
+    return "\n".join(lines[i] for i in override_indexes(lines))
+
+
+_BLOCKS = {}  # cwd -> (the files' signature, the blocks): a hook reads a dozen keys, the files once
 
 
 def override_blocks(cwd):
-    """[(source, path, block text)] of every CLAUDE.md that can hold overrides, first file wins: project CLAUDE.md, project .claude/CLAUDE.md, user's."""
+    """[(source, path, block text)] of every CLAUDE.md that can hold overrides, first file wins: project CLAUDE.md, project .claude/CLAUDE.md, user's.
+    Read again whenever a file's inode, size or mtime changed (the editor writes, then refreshes the pane, in one process)."""
+    files = (("project", Path(cwd) / "CLAUDE.md"), ("project", Path(cwd) / ".claude" / "CLAUDE.md"), ("user", USER_CLAUDE_MD))
+    sig = []
+    for _, path in files:
+        try:
+            s = path.stat()
+            sig.append((str(path), s.st_ino, s.st_size, s.st_mtime_ns))
+        except Exception:
+            sig.append((str(path), None))
+    sig = tuple(sig)
+    hit = _BLOCKS.get(str(cwd))
+    if hit and hit[0] == sig:
+        return list(hit[1])
     out = []
-    for src, path in (("project", Path(cwd) / "CLAUDE.md"), ("project", Path(cwd) / ".claude" / "CLAUDE.md"), ("user", USER_CLAUDE_MD)):
+    for src, path in files:
         try:
             out.append((src, path, override_block(path.read_text())))
         except Exception:
             continue
-    return out
+    _BLOCKS[str(cwd)] = (sig, out)
+    return list(out)
 
 
 OLD_KEY_NAMES = {"Agents place": "Spawns place"}  # a block written before the rename keeps working
@@ -386,7 +426,7 @@ def block_value(blocks, key):
     """(value, source, path) of `- <key> = <value>` in the first block that has it, else (None, "default", None)."""
     for src, path, txt in blocks:
         for name in (key, OLD_KEY_NAMES.get(key)):
-            m = re.search(r"^\s*-\s*" + re.escape(name) + r"\s*=\s*(.+?)\s*$", txt, re.M | re.I) if name else None
+            m = re.search(r"^\s*(?:-\s*|[*+]\s+)" + re.escape(name) + r"\s*=\s*(.+?)\s*$", txt, re.M | re.I) if name else None
             if m:
                 return m.group(1), src, str(path)
     return None, "default", None
@@ -420,7 +460,7 @@ OVERRIDE_KEYS = {
     "Language": {"kind": "text", "options": [], "default": ""},
     "Guide": {"kind": "select", "options": ["on", "off"], "default": "on"},
     "Review gate": {"kind": "select", "options": ["auto", "on", "warn", "off"], "default": "auto"},
-    "Review memory": {"kind": "number", "options": [], "default": "2"},  # hours a reviewer's pass on a topic still counts for a later change of that topic (the same ticket key counts for the whole session)
+    "Review memory": {"kind": "number", "options": [], "default": "2"},  # hours a reviewer's pass on a topic still counts for a later change of that topic (the same ticket key counts for the whole session); 0: only the same ticket
     "Judge notes": {"kind": "select", "options": ["critical", "sensitive", "off"], "default": "critical"},  # which Judge answers also go to Needs you: critical = 🔴 only, sensitive = 🟠 too, off = none; all stay in the Decisions
     "Resume": {"kind": "select", "options": ["session", "project", "all", "off"], "default": "project"},
     "Pace": {"kind": "select", "options": ["normal", "fast"], "default": "normal"},
@@ -431,8 +471,8 @@ OVERRIDE_KEYS = {
     "Receipt place": {"kind": "select", "options": ["pane", "output"], "default": "pane"},  # pane: the receipt is recorded by a command, not printed
     "Memo agent": {"kind": "select", "options": ["auto", "manual", "off"], "default": "auto"},  # the memo-keeping agent: auto offers it in the background when a by-meaning check is due, manual only /abofles:memo, off never
     "Memo agent every": {"kind": "number", "options": [], "default": "6"},  # hours between two runs of the memo agent per project
-    "Memo on compact": {"kind": "select", "options": ["auto", "off"], "default": "auto"},
-    "Continue after compact": {"kind": "select", "options": ["auto", "off"], "default": "auto"},  # auto: after the person's /compact the abofles-guide mod sends one turn that picks the work up, or says nothing is left; off: the session waits  # auto: PreCompact/PostCompact save the Now section by themselves; off: only /abofles:memo does
+    "Memo on compact": {"kind": "select", "options": ["auto", "off"], "default": "auto"},  # auto: PreCompact/PostCompact save the Now section by themselves; off: only /abofles:memo does
+    "Continue after compact": {"kind": "select", "options": ["auto", "off"], "default": "auto"},  # auto: after the person's /compact the abofles-guide mod sends one turn that picks the work up, or says nothing is left; off: the session waits
     "Archive items": {"kind": "number", "options": [], "default": "7"},  # days a resolved Needs-you item stays in the main memo before memo_health moves it to archive.md
     "Archive sessions": {"kind": "number", "options": [], "default": "3"},  # days a session file may sit idle (no open item of its own) before memo_health archives it
     "Other items": {"kind": "select", "options": ["hide", "show"], "default": "hide"},  # hide: the resume block and the pane leave out other sessions' and projects' items and count them; show: listed, flagged `other`
@@ -448,7 +488,7 @@ COMPLEX_FORMS = [re.compile(p, re.I) for p in (
     r"^Workflow:\s*.+?=\s*\S",  # Workflow: <Domain | Topic> = Read, Work, Verify
     r"^Review:\s*.+?/\s*T[1-4]\s*=\s*\S",  # Review: <Tag> / T<n> = model·effort
 )]
-_OVERRIDE_LINE = re.compile(r"^\s*-\s*(.+?)\s*$")
+_OVERRIDE_LINE = re.compile(r"^\s*(?:-\s*|[*+]\s+)(.+?)\s*$")
 
 
 def override_lines(blocks):
@@ -457,9 +497,46 @@ def override_lines(blocks):
 
 
 def simple_key(line):
-    """The OVERRIDE_KEYS name a bullet line sets, or None (a complex form, a typo, prose)."""
+    """The OVERRIDE_KEYS name a bullet line sets (also under its old name), or None (a complex form, a typo, prose)."""
     m = re.match(r"^(.+?)\s*=", line)
-    return next((k for k in OVERRIDE_KEYS if m and m.group(1).strip().lower() == k.lower()), None)
+    name = m.group(1).strip().lower() if m else None
+    return next((k for k in OVERRIDE_KEYS if name and name in (k.lower(), (OLD_KEY_NAMES.get(k) or "").lower())), None)
+
+
+OFF_WORDS = ("off", "none", "0")
+
+
+def first_word(v):
+    """A value's first word, lower case, without trailing punctuation: `deny  # team rule` and `deny (strict)` read as `deny`."""
+    parts = (v or "").strip().lower().split()
+    return parts[0].rstrip(",;:.") if parts else ""
+
+
+def select_of(key, v):
+    """The option of select key `key` that the value names — the whole value or its first word (a note after it is ignored); `none` and `0`
+    are `off` where `off` is an option — else None."""
+    opts = OVERRIDE_KEYS[key]["options"]
+    v = (v or "").strip().lower()
+    for w in (v, first_word(v)):
+        if w in opts:
+            return w
+        if w in OFF_WORDS and "off" in opts:
+            return "off"
+    return None
+
+
+def override_known(key, v):
+    """False when a file sets `key` to a value the hooks cannot read, so they use the default (the pane's editor says so)."""
+    spec, w = OVERRIDE_KEYS[key], first_word(v)
+    if spec["kind"] == "select":
+        return select_of(key, v) is not None or (key == "Agents" and w.isdigit())
+    if spec["kind"] == "number":
+        return bool(re.match(r"\d+", w)) or (key == "Break" and w in OFF_WORDS)
+    if spec["kind"] == "list":
+        return len(re.findall(r"\d+", v or "")) >= (4 if key == "Agent budgets" else 1)
+    if key in ("Main session", "Sub session"):
+        return pick_of(v) is not None
+    return True
 
 
 def claude_home():
@@ -502,7 +579,7 @@ PLACE_VALUES = {"guide": ("pane", "band"), "running": ("pane", "off")}
 def place(cwd, what):
     """Where a thing is shown: `guide` -> pane | band, `resume`, `agents` and `receipt` -> pane | output (`- Guide place = …` in the override
     block; default and any unknown value: pane). Without the abofles-guide mod there is no pane: guide -> band, the rest -> output."""
-    v = (override_value(cwd, PLACE_KEYS.get(what) or f"{what.capitalize()} place") or "pane").strip().lower()
+    v = first_word(override_value(cwd, PLACE_KEYS.get(what) or f"{what.capitalize()} place")) or "pane"
     if not pane_enabled():
         return "band" if what == "guide" else "off" if what == "running" else "output"
     return v if v in PLACE_VALUES.get(what, ("pane", "output")) else "pane"
@@ -661,9 +738,9 @@ CONTEXT_MARKS = (500, 600, 700, 750, 800, 850, 900, 950)  # thousands of tokens
 
 
 def context_marks(cwd):
-    """`- Context marks = 100, 150, 180` (thousands of tokens) in the override block, else the defaults."""
+    """`- Context marks = 100, 150, 180` (thousands of tokens; `500K` and `1M` read too) in the override block, else the defaults. 0 is no mark."""
     v = override_value(cwd, "Context marks")
-    marks = sorted({int(x) for x in re.findall(r"\d+", v or "")}) if v else []
+    marks = sorted({int(n) * (1000 if u.lower() == "m" else 1) for n, u in re.findall(r"(\d+)\s*([kKmM]?)", v or "")} - {0})
     return tuple(marks) or CONTEXT_MARKS
 
 
@@ -673,7 +750,7 @@ MODEL_ORDER = ("haiku", "sonnet", "opus", "fable")
 
 
 def guide_on(cwd):
-    return (override_value(cwd, "Guide") or "on").strip().lower() not in ("off", "0", "none")
+    return select_of("Guide", override_value(cwd, "Guide")) != "off"
 
 
 def next_setting(model, effort, side, tier=None):
@@ -1161,7 +1238,8 @@ def pane_overrides(root, sid):
     for k, spec in OVERRIDE_KEYS.items():
         v, src, _ = block_value(blocks, k)
         keys.append({"key": k, "kind": spec["kind"], "options": list(spec["options"]), "value": v if v is not None else spec["default"], "source": src, "default": spec["default"],
-                     "project": block_value(project_blocks, k)[0], "user": block_value(user_blocks, k)[0]})  # each file's own value: the editor's toggle and Reset act on one file
+                     "project": block_value(project_blocks, k)[0], "user": block_value(user_blocks, k)[0],  # each file's own value: the editor's toggle and Reset act on one file
+                     **({"invalid": True} if v is not None and not override_known(k, v) else {})})  # the hooks use the default instead
     return {"files": {"project": str(override_target("project", root)), "user": str(USER_CLAUDE_MD)}, "keys": keys,
             "raw": [{"line": l, "source": s} for l, s in override_lines(blocks) if simple_key(l) is None]}  # never clipped: Save writes them back
 
@@ -1450,7 +1528,7 @@ def resume_scope(cwd, flag=None):
     project — the default), `all` (this project, then one line per other project). Returns (scope, source).
     `Resume = off` is not a scope: it only stops the automatic block (see resume_off), so it falls through here — the guide and `/abofles:resume` keep a real scope."""
     for v, src in ((flag, "flag"), (override_value(cwd, "Resume"), "override"), (config_read().get("resume_scope"), "default")):
-        v = (v or "").strip().lower()
+        v = first_word(v)
         if v in SCOPES:
             return v, src
     return "project", "built-in"
@@ -1600,13 +1678,13 @@ def git_exclude_memo(cwd):
 
 def resume_off(cwd):
     """`- Resume = off` (also none / 0): no automatic resume block at session start, after a compact or after a break; `/abofles:resume` and the guide are unaffected."""
-    return (override_value(cwd, "Resume") or "").strip().lower() in ("off", "0", "none")
+    return select_of("Resume", override_value(cwd, "Resume")) == "off"
 
 
 def break_minutes(cwd):
     """`- Break = N` (minutes away before the resume block is shown) or `Break = off`; default 10."""
-    v = (override_value(cwd, "Break") or "10").strip().lower()
-    if v in ("off", "0", "none"):
+    v = first_word(override_value(cwd, "Break")) or "10"
+    if v in OFF_WORDS:
         return 0
     m = re.match(r"(\d+)", v)
     return int(m.group(1)) if m else 10
@@ -2855,16 +2933,16 @@ DEC_STAMP_RE = re.compile(r"^-?\s*\d\d-\d\d \d\d:\d\d · ")
 
 
 def select_override(cwd, key):
-    """The value of a select override key, one of its options, else the key's default."""
-    v = (override_value(cwd, key) or "").strip().lower()
-    return v if v in OVERRIDE_KEYS[key]["options"] else OVERRIDE_KEYS[key]["default"]
+    """The value of a select override key, one of its options (select_of: a note after it is ignored), else the key's default."""
+    return select_of(key, override_value(cwd, key)) or OVERRIDE_KEYS[key]["default"]
 
 
-def number_override(cwd, key):
-    """The value of a number override key (leading digits), else the key's default. 0 counts as no value: `Archive items = 0` must not archive everything at once."""
+def number_override(cwd, key, zero=False):
+    """The value of a number override key (leading digits), else the key's default. 0 counts as no value — `Archive items = 0` must not archive
+    everything at once — unless `zero` (`Review memory = 0`: no carry-over by topic)."""
     m = re.match(r"\d+", (override_value(cwd, key) or "").strip())
-    v = int(m.group(0)) if m else 0
-    return v if v > 0 else int(OVERRIDE_KEYS[key]["default"])
+    v = int(m.group(0)) if m else -1
+    return v if v > 0 or (zero and v == 0) else int(OVERRIDE_KEYS[key]["default"])
 
 
 def memo_on_compact(cwd):
@@ -3894,7 +3972,7 @@ def mode_of(st):
 
 def gate_setting(cwd):
     """`- Agents = ask | auto | N | off` (default ask)."""
-    v = (override_value(cwd, "Agents") or os.environ.get("ABOFLES_AGENTS") or "ask").strip().lower()
+    v = first_word(override_value(cwd, "Agents") or os.environ.get("ABOFLES_AGENTS")) or "ask"
     if v.isdigit():
         return "fixed", int(v)
     return (v if v in ("ask", "auto", "off") else "ask"), None
@@ -3939,8 +4017,7 @@ BUDGET_RAISES = 2  # auto raises per task
 
 def budget_raise_mode(cwd):
     """`- Budget raise = auto | ask` (default auto): auto lets an over-budget agent raise an auto budget, ask denies it."""
-    v = (override_value(cwd, "Budget raise") or "auto").strip().lower()
-    return v if v in ("auto", "ask") else "auto"
+    return select_override(cwd, "Budget raise")
 
 
 def budget_raise_step(cwd, st, tier, budget, src, used):
@@ -4015,8 +4092,7 @@ QUESTION_ROUTE = {1: ("sonnet", "low", None, None), 2: ("sonnet", "medium", None
 
 
 def questions_setting(cwd):
-    v = (override_value(cwd, "Questions") or "judge").strip().lower()
-    return "off" if v in ("off", "none", "0") else "judge"
+    return select_override(cwd, "Questions")
 
 
 def question_language(cwd):
@@ -6132,8 +6208,7 @@ def risky_git(cmd, depth=0):
 
 def git_guard_mode(cwd):
     """`- Git guard = warn | deny | off` (default warn)."""
-    v = (override_value(cwd, "Git guard") or "warn").strip().lower()
-    return v if v in ("warn", "deny", "off") else "warn"
+    return select_override(cwd, "Git guard")
 
 
 def git_guard(data):
@@ -6357,8 +6432,7 @@ def background_running(session_id):
 
 def review_gate_mode(cwd):
     """`- Review gate = auto | on | warn | off` (default auto: 🔴 refuses the receipt once, 🟠 warns in the guide)."""
-    v = (override_value(cwd, "Review gate") or "auto").strip().lower()
-    return v if v in ("auto", "on", "warn", "off") else "auto"
+    return select_override(cwd, "Review gate")
 
 
 def reviewers_override(cwd, letter, group, topic):
@@ -6378,7 +6452,7 @@ def reviewed_earlier(cwd, prior, work, topics, now=None, tier=3):
     within `Review memory` hours, with no FAIL after it. A small fix after a review does not ask them again; a FAIL or a lost reviewer still does."""
     now = time.time() if now is None else now
     keys = {k for r in work for k in TICKET_RE.findall(r.get("description") or "")}
-    window = number_override(cwd, "Review memory") * 3600
+    window = number_override(cwd, "Review memory", zero=True) * 3600
     passed = set()
     for r in prior:
         name = r.get("review")
