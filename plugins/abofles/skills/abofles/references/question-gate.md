@@ -11,6 +11,8 @@ A `PreToolUse` hook denies every `AskUserQuestion` (except the agent gate) until
 | T3 | Sonnet 5.5 · Medium — judges, then `HANDOFF` | Opus 5.5 · Medium |
 | T4 | Opus 5.5 · Medium — judges, then `HANDOFF` | Opus 5.5 · High |
 
+Another agent type (a `general-purpose` agent that can read the ticket, say) counts as the Judge or the Explainer by its `/ Judge` or `/ Explain` header only while the gate holds a question it refused in this task; otherwise it is a work agent and takes the agent budget.
+
 Cap 40 lines each. These agents do not count against the task's agent budget (the receipt shows them as `+ N gate`). Give the Judge everything it cannot see: the question as you would ask it, the options, what is being built, the files, what the user already decided this session, and `Language: <the language the user writes in>` — the Judge and the Explainer write every user-facing line in that language, with internal names, enum values and ticket keys turned into plain words. It also reads the memo's Decisions.
 
 - `VERDICT: ANSWERED` — the evidence settles it. State the answer and its evidence in one line, continue, **do not ask**. The hook logs it in the memo's Decisions; on T4 it also adds *judge decided (🔴 Critical): … — check* to Needs you so the user sees it in the next resume block (`Judge notes = sensitive` adds T3, `off` none).

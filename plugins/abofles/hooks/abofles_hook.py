@@ -640,6 +640,7 @@ def reset_task(st):
     st["asked"] = []  # questions this task asked (a reworded re-ask needs no second judge)
     st["inflight"] = 0
     st["inflight_bg"] = 0
+    st["inflight_ids"] = {}
     st["judge_ok"] = 0  # an unlock not used by a question does not carry into the next task
     st["connector_free"] = 0  # fetch-by-key connector reads that were free in this task
     st.pop("budget_ask_ts", None)
@@ -797,7 +798,7 @@ def guide_entries(root, st, sid, ctx_state=None, scope=None, rows=None):
                                 id="review"))
     # 4. a reply of this task that needs Step 4 and got nothing
     for r in rows:
-        if r.get("ts", 0) <= started or r.get("resolved") or row_gate(r) or r.get("memo"):
+        if r.get("ts", 0) <= started or r.get("resolved") or row_gate(r) or r.get("memo") or r.get("skip"):
             continue
         if r.get("owner_input") or r.get("status") == "pending" or r.get("how") in ("no_reply", "lost"):  # no reply text / lost: nothing to escalate
             continue
@@ -3989,7 +3990,7 @@ def apply_gate_answer(st, answer):
     if low.startswith("auto"):
         st["gate"], st["task_budget"] = "auto", None
         return "agents: auto"
-    if low.startswith("off") or "no limit" in low:
+    if low.startswith(("off", "unlimited")) or "no limit" in low:
         st["gate"], st["task_budget"] = "off", None
         return "agents: off this session"
     if low.startswith("main"):
@@ -4152,6 +4153,17 @@ def is_gate_agent(stype, prompt=""):
     if k:
         return k
     return {"Judge": "judge", "Explain": "explain"}.get(parse_header(prompt or "")[1] or "")
+
+
+def gate_claim(stype, prompt, st):
+    """is_gate_agent for a new agent of this session: the abofles Judge and Explainer types always; a `/ Judge` or `/ Explain` header on any other
+    type only while the question gate holds a question of this task (qgate refused it, no ask has spent the unlock yet). Else that agent is work like
+    any other and counts for the budget: a header alone frees no agent from it."""
+    k = is_gate_agent(stype, prompt)
+    if not k or GATE_TYPES.get((stype or "").strip()):
+        return k
+    waiting = st.get("denied_ts") or 0
+    return k if waiting and waiting >= (st.get("task_started") or 0) else None
 
 
 MEMO_AGENT_TYPES = ("abofles:abofles-memo", "abofles-memo")  # the memo agent: exempt like the gate agents (no budget, no agent gate, no receipt, no main line)
@@ -4492,8 +4504,8 @@ def ledger_rows(session_id):
 
 
 def row_pending(r):
-    """A background agent of the task that has not finished. The memo agent's row is not one: it belongs to no task (no receipt waits for it)."""
-    return r.get("status") == "pending" and not r.get("memo")
+    """A background agent of the task that has not finished. The memo agent's row and an abofles:skip agent's are not: they belong to no task (no receipt waits for them)."""
+    return r.get("status") == "pending" and not r.get("memo") and not r.get("skip")
 
 
 def pending_count(session_id):
@@ -4864,25 +4876,31 @@ def budget_deny(budget, src, no_tier, used):
 
 
 def cap_deny(cap):
-    return f"Abo Fles (ابو فليس): {cap} background agents are already running (Parallel = {cap}). Wait for one, or raise `Parallel`."
+    return f"Abo Fles (ابو فليس): {cap} background agent{'s are' if cap != 1 else ' is'} already running (Parallel = {cap}). Wait for one, or raise `Parallel`."
 
 
 def pre(data):
     if data.get("tool_name") != "Agent":
         return
     ti = data.get("tool_input") or {}
-    if ti.get("prompt", "").lstrip().startswith("abofles:skip"):
-        return
-    model = (ti.get("model") or "").strip().lower()
-    effort = (ti.get("effort") or "").strip().lower()
-    stype = ti.get("subagent_type") or ""
+    prompt = str(ti.get("prompt") or "")
+    model = str(ti.get("model") or "").strip().lower()
+    effort = str(ti.get("effort") or "").strip().lower()
+    stype = str(ti.get("subagent_type") or "")
+    is_memo = is_memo_agent(stype)
+    if is_memo and (model != "haiku" or effort != "low"):  # before abofles:skip: the plugin's own memo agent keeps its cell whatever the prompt says
+        deny("abofles: the memo agent runs at Haiku 5.5 · Low: model haiku, effort low.")
+    if prompt.lstrip().startswith("abofles:skip"):
+        return  # a non-coding agent: the plugin leaves it alone, and post() logs it apart (no budget, no receipt)
+    _, hside, tier = parse_header(prompt)
     problems = []
     if model not in MODELS:
         problems.append(f"model={model or 'missing'} (need one of {sorted(MODELS)})")
     if effort not in EFFORTS:
         problems.append(f"effort={effort or 'missing'} (need one of low|medium|high|xhigh|max)")
-    if model == "fable" and any(s in stype for s in NO_FABLE):
-        problems.append(f"fable is only for the Analyse and Plan sides; {stype} is not one")
+    own_type = stype.split(":")[-1].startswith("abofles-")  # an abofles agent type is its own side; any other type takes the side from its header
+    if model == "fable" and (any(s in stype for s in NO_FABLE) if own_type else bool(hside) and hside not in ("Analyse", "Plan")):  # rule 4
+        problems.append(f"fable is only for the Analyse and Plan sides; {stype if own_type else f'the {hside} side'} is not one")
     if problems:
         deny(
             "Abo Fles (ابو فليس) blocked this agent: " + "; ".join(problems)
@@ -4892,13 +4910,9 @@ def pre(data):
     if in_subagent(data):
         return
     sid = data.get("session_id", "")
-    _, _, tier = parse_header(ti.get("prompt") or "")
-    is_memo = is_memo_agent(stype)
-    is_q = bool(is_gate_agent(stype, ti.get("prompt") or "")) or is_memo  # neither takes budget, a slot, or the main-line hand-over
-    if is_memo and (ti.get("model") != "haiku" or ti.get("effort") != "low"):
-        deny("abofles: the memo agent runs at Haiku 5.5 · Low: model haiku, effort low.")
     with state_lock(sid):
         st = load_state(sid)
+        is_q = bool(gate_claim(stype, prompt, st)) or is_memo  # neither takes budget, a slot, or the main-line hand-over
         cwd = project_root(data, st)
         remember_transcript(data, st)
         en = effort_note(data, st)
@@ -4946,6 +4960,8 @@ def pre(data):
                 st["inflight"] = st.get("inflight", 0) + 1
             if ti.get("run_in_background"):
                 st["inflight_bg"] = st.get("inflight_bg", 0) + 1
+            if data.get("tool_use_id"):  # post() or release() gives exactly this reservation back
+                st["inflight_ids"] = {**(st.get("inflight_ids") or {}), data["tool_use_id"]: {"q": is_q, "bg": bool(ti.get("run_in_background"))}}
             if is_memo:  # the throttle starts at the spawn, so it holds even if the agent never reports; the due flags are spent
                 st.pop("memo_semantic_due", None)
                 registry_set(cwd, memo_agent_at=int(time.time()), semantic_due=False)
@@ -5293,6 +5309,27 @@ def ledger_path(session_id):
     return LEDGER_DIR / f"{sid}.jsonl"
 
 
+def release(data):
+    """PostToolUseFailure / PermissionDenied on Agent: the call never ran (an error such as a model the account cannot use, or a refused permission),
+    so the slot pre() reserved for it is given back at once, by its tool_use_id, not at the turn's end: the retry one step down (rule 9) is not refused
+    for a budget or a Parallel slot that nothing uses."""
+    if data.get("tool_name") != "Agent" or in_subagent(data):
+        return
+    sid, tid = data.get("session_id", ""), data.get("tool_use_id")
+    if not tid:
+        return
+    with state_lock(sid):
+        st = load_state(sid)
+        r = (st.get("inflight_ids") or {}).pop(tid, None)
+        if r is None:
+            return
+        if not r.get("q"):
+            st["inflight"] = max(0, st.get("inflight", 0) - 1)
+        if r.get("bg"):
+            st["inflight_bg"] = max(0, st.get("inflight_bg", 0) - 1)
+        save_state(sid, st)
+
+
 def emit(event, warnings, extra=None):
     msg = "\n\n".join(m for m in (("abofles: " + "; ".join(warnings)) if warnings else None, extra) if m)
     if msg:
@@ -5308,8 +5345,8 @@ def post(data):
     if in_subagent(data):
         return  # pre() reserves no slot for a subagent's spawn: counting it here would eat the main session's budget slot and let a subagent's judge reply unlock the user's question gate
     ti = data.get("tool_input") or {}
-    prompt = ti.get("prompt") or ""
-    stype = ti.get("subagent_type") or ""
+    prompt = str(ti.get("prompt") or "")
+    stype = str(ti.get("subagent_type") or "")
     topic, side, tier = parse_header(prompt)
     if side is None or side_of(stype)[0] == "git":
         side = side_of(stype)[1]  # abofles-git is its own side word: a Work row would count for the review gate
@@ -5319,8 +5356,9 @@ def post(data):
     agent_id = resp.get("agentId") if isinstance(resp, dict) else None
     done_sync = isinstance(resp, dict) and resp.get("status") == "completed" and has_header(reply_text(resp))  # a finished result with its report, even from a run_in_background call
     is_async = (isinstance(resp, dict) and (resp.get("status") == "async_launched" or resp.get("isAsync") is True)) or (ti.get("run_in_background") is True and not done_sync)
-    gate = is_gate_agent(stype, prompt)
     memo = is_memo_agent(stype)
+    skip = not memo and prompt.lstrip().startswith("abofles:skip")  # pre() let it through untouched: it takes no budget and owes no receipt
+    gate = None if skip else gate_claim(stype, prompt, load_state(data.get("session_id", "")))
 
     entry = {
         "ts": int(time.time()),
@@ -5334,7 +5372,7 @@ def post(data):
         "effort": (ti.get("effort") or "").lower() or None,
         "agent": stype,
         "cap": cap,
-        "description": ti.get("description", "")[:80],
+        "description": str(ti.get("description") or "")[:80],
     }
     task_line = next((l.strip() for l in prompt.splitlines()[1 if prompt.lstrip().startswith("abofles:") else 0:] if l.strip()), "")
     if task_line:
@@ -5348,6 +5386,8 @@ def post(data):
         entry["gate"] = gate  # close_row / the guide / sendmsg read it back: the agent type alone does not say it for a general-purpose agent
     if memo:
         entry["memo"] = True  # no task spawn: row_pending, the guide's escalation and the review gate skip it
+    if skip:
+        entry["skip"] = True  # the same for an abofles:skip agent: logged for its cost, no part of the task
     warnings = []
     kind = {"judge": "judge", "explain": "explainer"}.get(gate) or side_of(stype, prompt)[0]
     rv = kind if kind in REVIEW_SIDES else next((k for k, w in REVIEW_SIDES.items() if w == side), "")
@@ -5382,7 +5422,7 @@ def post(data):
         st = load_state(data.get("session_id", ""))
         if memo:
             st["task_memo"] = st.get("task_memo", 0) + 1  # named apart in the receipt header; no spawn count, no receipt owed for it
-        else:
+        elif not skip:
             st["direct_reads"] = 0
             st["guard_warned_at"] = 0
             st["spawns"] = st.get("spawns", 0) + 1
@@ -5393,10 +5433,11 @@ def post(data):
             st["gate_agents"] = (ga + [x for x in known if x and x not in ga])[-40:]
         if kind in ("judge", "explainer"):
             st["task_judges"] = st.get("task_judges", 0) + 1  # question-gate spawns do not eat the agent budget
-        elif not memo:
-            st["inflight"] = max(0, st.get("inflight", 0) - 1)  # the slot reserved in pre is now a counted spawn (the memo agent reserved none)
-        if is_async:
+        elif not memo and not skip:
+            st["inflight"] = max(0, st.get("inflight", 0) - 1)  # the slot reserved in pre is now a counted spawn (the memo agent and a skip agent reserved none)
+        if is_async and not skip:
             st["inflight_bg"] = max(0, st.get("inflight_bg", 0) - 1)  # now a `pending` ledger row
+        (st.get("inflight_ids") or {}).pop(data.get("tool_use_id"), None)  # its reservation is spent
         st["task_units"] = st.get("task_units", 0.0) + units(entry["model"], entry["effort"])
         remember_transcript(data, st)
         refresh_main_model(data, st)  # before pricing: the baseline is the main session's current model
@@ -5418,7 +5459,7 @@ def post(data):
         _, instruction = receipt_decision(root, st, data.get("session_id", ""))
         budget, bsrc = task_budget(root, st, entry.get("tier"))
         used, total = budget_used(st), st.get("spawns", 0)
-        if not tier and not is_async and (stype or "").startswith("abofles:") and kind not in ("judge", "explainer"):
+        if not tier and not is_async and not skip and (stype or "").startswith("abofles:") and kind not in ("judge", "explainer"):
             warnings.append("no `abofles: <Topic> / <Side> · T<tier>` first line in the prompt — tier unknown, so the agent budget was sized as 🟡 Normal and the ledger has no topic; put the header first next time")
         save_state(data.get("session_id", ""), st)
         if not entry.pop("_written", False):
@@ -5430,8 +5471,8 @@ def post(data):
                 save_state(data.get("session_id", ""), st)
             except Exception:
                 pass
-    if memo:
-        budget = None  # the memo agent takes no budget: no "1 spawn left" / "budget reached" note, no receipt instruction
+    if memo or skip:
+        budget = None  # the memo agent and a skip agent take no budget: no "1 spawn left" / "budget reached" note, no receipt instruction
     if budget is not None and used == budget - 1 and budget > 1:
         warnings.append(f"1 agent left in this task's agent budget ({budget}, {bsrc})")
     elif budget is not None and used >= budget:
@@ -5440,7 +5481,7 @@ def post(data):
     if not memo and total in (20, 50, 100, 200):
         warnings.append(f"{total} agents this session so far — if the user did not ask for a run of this size, say so in one line with /abofles:bill's $")
     # a background launch, or a sync spawn while one of the task's background spawns still runs: the receipt is due when the chain ends (Stop / the notification ask then)
-    rnote = None if memo or receipt_mode(root)[0] == "off" or is_async or background_running(data.get("session_id", "")) or st.get("inflight_bg") else instruction
+    rnote = None if memo or skip or receipt_mode(root)[0] == "off" or is_async or background_running(data.get("session_id", "")) or st.get("inflight_bg") else instruction
 
     # session cap from the project override block
     cap_units = session_cap(root)
@@ -5546,7 +5587,7 @@ def start(data):
         if src in ("startup", "clear"):  # a compact or a resume continues the same task
             close_task(st, "session")  # also drops a receipt owed by the session that ended
         else:
-            st["inflight"], st["inflight_bg"] = 0, 0  # no Agent call outlives the session that ended
+            st["inflight"], st["inflight_bg"], st["inflight_ids"] = 0, 0, {}  # no Agent call outlives the session that ended
             if st.get("judge_ok", 0) > 0 and not unlock_live(st, ledger_rows(sid), time.time()):
                 st["judge_ok"] = 0
         remember_transcript(data, st)
@@ -6338,7 +6379,7 @@ def review_gap(cwd, st, sid, text):
     if not wf:
         return None
     n = st.get("spawns_since_receipt", 0) or 0  # this task's rows are the last n of the ledger (timestamps have one-second grain: two tasks can share one)
-    spawned = [r for r in ledger_rows(sid) if not r.get("memo")]  # a memo-agent row is no spawn of the task
+    spawned = [r for r in ledger_rows(sid) if not r.get("memo") and not r.get("skip")]  # a memo-agent or skip row is no spawn of the task
     rows = [r for r in spawned[-n:] if not row_gate(r)] if n else []
     work = [r for r in rows if r.get("side") == "Work"]
     if not work:
@@ -6407,7 +6448,7 @@ def receipt(data):
             return
         st["last_activity"] = int(time.time())
         launching = bool(st.get("inflight_bg"))  # a background launch whose post has not written its pending row yet: it runs
-        st["inflight"], st["inflight_bg"] = 0, 0  # no Agent call outlives the turn: a failed call never ran its post
+        st["inflight"], st["inflight_bg"], st["inflight_ids"] = 0, 0, {}  # no Agent call outlives the turn: a failed call never ran its post
         st.pop("receipt_saved", None)  # read above, used once
         refresh_main_model(data, st)
         root = project_root(data, st)
@@ -6753,6 +6794,8 @@ def main():
             post(data)
         elif mode == "stop":
             stop(data)
+        elif mode == "release":
+            release(data)
         elif mode == "guard":
             guard(data)
         elif mode == "start":

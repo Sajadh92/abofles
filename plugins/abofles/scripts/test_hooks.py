@@ -626,6 +626,52 @@ def memo_health_tests(check):
         check("compact: a summary an older hook left in the project moves to the state folder; one not replaced for 30 days goes",
               "legacy" in HM.compact_path("lg000000").read_text() and not list(HM.memo_dir(str(rcm)).rglob("*.compact.md")) and not stale_.exists() and HM.compact_path("nw000000").exists())
 
+        # ── agent gate review: skip, header claims, fable by side, released slots ──
+        def ag_(sid, r, prompt="abofles: Unit Test / Work · T2\ndo it", model="sonnet", effort="medium", stype="abofles:abofles-worker", bg=False, tid=None):
+            ti_ = {"prompt": prompt, "model": model, "effort": effort, "subagent_type": stype, "description": "x"}
+            if bg:
+                ti_["run_in_background"] = True
+            return {"session_id": sid, "cwd": str(r), "tool_name": "Agent", "tool_input": ti_, **({"tool_use_id": tid} if tid else {})}
+        den_ = lambda o: isinstance(o, dict) and o.get("hookSpecificOutput", {}).get("permissionDecision") == "deny"
+        why_ = lambda o: (o or {}).get("hookSpecificOutput", {}).get("permissionDecisionReason", "") if isinstance(o, dict) else ""
+        def done_(pl, aid):
+            hrun("post", {**pl, "tool_response": {"status": "completed", "agentId": aid, "content": [{"type": "text", "text": "STATUS: done\nCONFIDENCE: high\n- ok"}]}})
+        rg = mkroot(["Agents = 1"]); SG = "gt000000-1111-2222-3333-444444444444"
+        hrun("start", {"session_id": SG, "cwd": str(rg), "source": "startup"})
+        p1_ = ag_(SG, rg); hrun("pre", p1_); done_(p1_, "g1")
+        check("agent gate: abofles:skip never frees the memo agent from Haiku 5.5 · Low", "Haiku 5.5 · Low" in why_(hrun("pre", ag_(SG, rg, prompt="abofles:skip x", model="opus", effort="high", stype="abofles:abofles-memo"))))
+        check("agent gate: the memo agent's cell is read like every model and effort (Haiku / Low passes)", not den_(hrun("pre", ag_(SG, rg, prompt="abofles: Memo Upkeep / Work · T1\nx", model="Haiku", effort="Low", stype="abofles:abofles-memo"))))
+        jh_ = ag_(SG, rg, prompt="abofles: Payments / Judge · T4\nRefactor the payment service", stype="general-purpose", model="opus", effort="high")
+        check("agent gate: a `/ Judge` header on another agent type with no question waiting is work: the spent budget refuses it", den_(hrun("pre", jh_)) and "budget is 1" in why_(hrun("pre", jh_)))
+        st_ = HM.load_state(SG); st_["denied_ts"] = int(time.time()); HM.save_state(SG, st_)
+        check("agent gate: ... while the question gate holds a question it is the Judge and takes no budget", not den_(hrun("pre", jh_)))
+        check("agent gate: gate_claim — the abofles Judge type always, a header only while a question waits",
+              HM.gate_claim("abofles:abofles-judge", "", {}) == "judge" and HM.gate_claim("general-purpose", "abofles: X / Judge · T2\nq", {}) is None
+              and HM.gate_claim("general-purpose", "abofles: X / Judge · T2\nq", {"denied_ts": 10, "task_started": 5}) == "judge" and HM.gate_claim("general-purpose", "abofles: X / Judge · T2\nq", {"denied_ts": 4, "task_started": 5}) is None)
+        check("agent gate: fable on any agent type is refused for a Read, Work or Verify header; an Analyse or Plan header passes",
+              all("fable is only for" in why_(hrun("pre", ag_(SG, rg, prompt=f"abofles: Unit Test / {sd} · T2\nx", model="fable", stype="general-purpose"))) for sd in ("Read", "Work", "Verify", "Security"))
+              and not any("fable is only" in why_(hrun("pre", ag_(SG, rg, prompt=f"abofles: Unit Test / {sd} · T2\nx", model="fable", stype="general-purpose"))) for sd in ("Analyse", "Plan")))
+        pn_ = ag_(SG, rg); pn_["tool_input"]["prompt"] = None; pn_["tool_input"]["model"] = ""
+        check("agent gate: a prompt that is not text fails closed on the model check (no crash, so no fail-open)", "model=missing" in why_(hrun("pre", pn_)))
+        rr = mkroot(["Agents = 2", "Parallel = 1"]); SR = "gr000000-1111-2222-3333-444444444444"
+        hrun("start", {"session_id": SR, "cwd": str(rr), "source": "startup"})
+        for i in (1, 2):
+            pr_ = ag_(SR, rr, bg=True, tid=f"tu{i}"); hrun("pre", pr_); hrun("release", {**pr_, "error": "model not available"})
+        st_ = HM.load_state(SR)
+        check("agent gate: a failed or refused Agent call gives its budget and Parallel slot back at once (release by tool_use_id)",
+              st_.get("inflight") == 0 and st_.get("inflight_bg") == 0 and not st_.get("inflight_ids") and not den_(hrun("pre", ag_(SR, rr, bg=True, tid="tu3"))))
+        hrun("release", {**ag_(SR, rr, tid="nope"), "error": "x"})
+        check("agent gate: ... a release of an id it never reserved changes nothing", HM.load_state(SR).get("inflight") == 1 and HM.load_state(SR).get("inflight_bg") == 1)
+        rk = mkroot(["Agents = 1"]); SK = "gk000000-1111-2222-3333-444444444444"
+        hrun("start", {"session_id": SK, "cwd": str(rk), "source": "startup"})
+        pk_ = ag_(SK, rk, prompt="abofles:skip research the market", stype="general-purpose"); hrun("pre", pk_); done_(pk_, "k1")
+        stk = HM.load_state(SK)
+        check("agent gate: an abofles:skip agent is logged apart: no spawn of the task, no budget, the next agent still passes",
+              not stk.get("spawns_since_receipt") and any(json.loads(l).get("skip") for l in Path(led, f"{SK}.jsonl").read_text().splitlines() if l.strip()) and not den_(hrun("pre", ag_(SK, rk))))
+        check("agent gate: the Parallel refusal says `1 background agent is`", "1 background agent is already running" in HM.cap_deny(1) and "2 background agents are" in HM.cap_deny(2))
+        st_ = {}; HM.apply_gate_answer(st_, "Unlimited")
+        check("agent gate: the answer `unlimited` is off for the session", st_.get("gate") == "off")
+
         # Memo on compact = off
         roff = mkroot(["Memo on compact = off"])
         CO = "cmpOFF01-1111-2222"
@@ -2785,8 +2831,9 @@ def main():
               and H.side_of("decision-judge", "abofles: X / Verify · T2\nq") == ("verifier", "Verify") and H.side_of("my-reader", "") == ("", "?"))
         out = run("post", jpa("ba8", ask, "decision-judge", "Read"), led)
         check("gate agent: decision-judge replying ASK does not unlock the gate", gstate("ba8").get("judge_ok", 0) == 0 and "question judged" not in ctx(out) and not gstate("ba8").get("gate_agents"))
+        _s9 = Path(state, "ba9.json"); _d9 = json.loads(_s9.read_text()) if _s9.exists() else {}; _d9["denied_ts"] = int(time.time()); _s9.write_text(json.dumps(_d9))  # qgate refused a question: a Judge is wanted
         out = run("post", jpa("ba9", ask, "general-purpose", "Judge"), led)
-        check("gate agent: general-purpose with a `/ Judge` header is a gate agent and unlocks", gstate("ba9").get("judge_ok") == 1 and "question judged" in ctx(out) and next(r for r in ledrows("ba9")).get("gate") == "judge")
+        check("gate agent: general-purpose with a `/ Judge` header while a question waits is a gate agent and unlocks", gstate("ba9").get("judge_ok") == 1 and "question judged" in ctx(out) and next(r for r in ledrows("ba9")).get("gate") == "judge")
         out = run("post", jpa("ba9", longq, "general-purpose", "Judge"), led)
         check("analyze: a general-purpose `/ Judge` agent is graded as a judge — no long-line nag", "too long" not in ctx(out) and "absolute paths" not in ctx(out))
         # 5. SendMessage unlocks only for a gate agent this session spawned
@@ -3657,7 +3704,7 @@ def main():
         check("launcher: no Python at all -> one clear stderr line, exit 0 (hook never breaks the session)", r.returncode == 0 and "Python 3.8+ not found" in r.stderr and r.stdout == "")
         hj = json.loads((HOOK.parent / "hooks.json").read_text())
         cmds = [h["command"] for ev in hj["hooks"].values() for grp in ev for h in grp["hooks"] if "run.py" in h["command"]]
-        check("launcher: every hook command runs bash scripts/py --hook hooks/run.py <mode>, no `||` (no double run)", len(cmds) == 13 and all(c.startswith('bash "${CLAUDE_PLUGIN_ROOT}/scripts/py" --hook "${CLAUDE_PLUGIN_ROOT}/hooks/run.py" ') and "||" not in c for c in cmds))
+        check("launcher: every hook command runs bash scripts/py --hook hooks/run.py <mode>, no `||` (no double run)", len(cmds) == 15 and all(c.startswith('bash "${CLAUDE_PLUGIN_ROOT}/scripts/py" --hook "${CLAUDE_PLUGIN_ROOT}/hooks/run.py" ') and "||" not in c for c in cmds))
         r = subprocess.run(["bash", str(PY), "--hook", str(Path(state, "missing.py"))], capture_output=True, text=True, env=base)
         check("launcher: --hook always exits 0, even when Python fails (exit 2 would block the tool call)", r.returncode == 0)
         r = subprocess.run(["bash", str(PY), str(Path(state, "missing.py"))], capture_output=True, text=True, env=base)
@@ -4267,13 +4314,13 @@ def main():
         bsess("bcap")
         bspawn("bcap", 1); bspawn("bcap", 1, bg=True)
         oc_ = bspawn("bcap", 1, bg=True)
-        check("budget raise: a start the Parallel cap refuses raises nothing (cap denial first)", not allowed(oc_) and "background agents are already running" in reason(oc_) and gstate("bcap")["budget_raise"]["n"] == 0)
+        check("budget raise: a start the Parallel cap refuses raises nothing (cap denial first)", not allowed(oc_) and "already running (Parallel = " in reason(oc_) and gstate("bcap")["budget_raise"]["n"] == 0)
         Path(cwd, "CLAUDE.md").write_text("## abofles overrides\n- Parallel = 1\n- Session cap = 1\n")
         orz_ = bspawn("bcap", 1)
         check("budget raise: ... a sync start then raises 2 → 4, and the Session cap warning still fires after the raise", allowed(orz_) and "budget raised 2 → 4 (auto, raise 1/2)" in ctx(orz_) and gstate("bcap")["budget_raise"]["n"] == 1)
         pr_ = dict(agent("haiku", "low", prompt="abofles: Unit Test / Work · T1\nq\nLine cap: 20", cwd=cwd), session_id="bcap")
         pr_["tool_input"] = dict(pr_["tool_input"], run_in_background=True)
-        check("budget raise: ... and the Parallel cap still denies a background start after a raise", "background agents are already running" in reason(run("pre", pr_, led)))
+        check("budget raise: ... and the Parallel cap still denies a background start after a raise", "already running (Parallel = " in reason(run("pre", pr_, led)))
         sc_ = ctx(run("post", dict(agent("haiku", "low", prompt="abofles: Unit Test / Work · T1\nq\nLine cap: 20", cwd=cwd, resp=good), session_id="bcap"), led))
         check("budget raise: session cap passed is still warned after a raise", "session cap 1 units passed" in sc_)
         Path(cwd, "CLAUDE.md").unlink()

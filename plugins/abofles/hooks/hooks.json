@@ -132,6 +132,28 @@
           }
         ]
       }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/py\" --hook \"${CLAUDE_PLUGIN_ROOT}/hooks/run.py\" release"
+          }
+        ]
+      }
+    ],
+    "PermissionDenied": [
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/py\" --hook \"${CLAUDE_PLUGIN_ROOT}/hooks/run.py\" release"
+          }
+        ]
+      }
     ]
   }
 }

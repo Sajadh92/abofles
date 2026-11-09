@@ -14,6 +14,11 @@ All notable changes to the plugins in this marketplace.
 - abofles: **the raw compact summary is kept in `~/.abofles/state/compact/<session>.md`**, never in the project: it holds the conversation, and a folder outside git (or a synced one) would carry it. A summary an older version left in the project moves there at the next tidy-up; one not replaced for 30 days is removed. The memo agent reads only the summaries of this project's sessions.
 - abofles: **`move-item` moves only to a project the memo knows** (one with a memo, as `memo.py list` gives), never into any git repository.
 - abofles: the Needs-you split checks once per other session whether it is closed, not once per item.
+- abofles: **a failed Agent call gives its slot back.** New `PostToolUseFailure` and `PermissionDenied` hooks on Agent release the budget and Parallel slot the call had reserved (by its `tool_use_id`), so the retry one step down after `model not available` is no longer refused for a budget or a slot nothing uses.
+- abofles: **a `/ Judge` header frees an agent from the budget only while a question waits.** On another agent type it counts as the Judge only while the question gate holds a question it refused in this task; else it is work and takes budget. The abofles Judge and Explainer types are unchanged.
+- abofles: **rule 4 holds on any agent type.** Fable on a `general-purpose` agent is refused for a Read, Work, Verify or reviewer header, not only on the abofles reader, worker, git, verifier and reviewer types.
+- abofles: **`abofles:skip` agents are logged apart.** They take no budget, owe no receipt and keep no Parallel slot, as the hook already let them through; the memo agent keeps Haiku 5.5 · Low even with `abofles:skip`.
+- abofles: the memo agent's cell is read like any model and effort (`Haiku` / `Low` passes); a prompt that is not text is refused on the model check instead of failing open; the Parallel refusal says `1 background agent is`; the gate answer `unlimited` means off.
 
 ## abofles 2.4.0 · abofles-guide 0.7.0 — 2026-11-09
 
