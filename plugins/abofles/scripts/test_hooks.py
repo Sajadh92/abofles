@@ -1645,12 +1645,17 @@ def main():
         with open(tr, "w") as f:
             f.write(json.dumps({"type": "assistant", "message": {"model": "claude-opus-5-5", "usage": {"input_tokens": 1, "cache_read_input_tokens": 999, "cache_creation_input_tokens": 0, "output_tokens": 1}}}) + "\n")
         run("start", {"session_id": "tk", "cwd": cwd, "transcript_path": str(tr), "effort": {"level": "medium"}}, led)
-        sub_tr("tk", "h1", "claude-haiku-5-5", 0, 100_000, 1_000_000, 10_000)   # haiku: 0.125 + 0.10 + 0.05 = $0.275 ; at opus: 0.5 + 0.2 + 0.2 = $0.90
+        sub_tr("tk", "h1", "claude-haiku-5-5", 0, 100_000, 1_000_000, 10_000)   # haiku: 0.0125 + 0.01 + 0.005 = $0.0275, each call's prompt 550K > 100K so x5 = $0.1375 ; at opus: 0.5 + 0.2 + 0.2 = $0.90
         out = run("post", dict(agent("haiku", "low", resp=dict(good_resp := {"status": "completed", "agentId": "h1", "content": [{"type": "text", "text": good}]}), cwd=cwd), session_id="tk", transcript_path=str(tr)), led)
         hdr = next((l for l in ctx(out).splitlines() if l.startswith("🧾")), "")
-        check("tokens: sync agent -> header has tokens, $ and saving vs main model", hdr == "🧾 **1 Agent · 1.1M Tokens · $0.28 · Saved 69% ($0.62)** vs Opus 5.5")
+        check("tokens: sync agent -> header has tokens, $ and saving vs main model", hdr == "🧾 **1 Agent · 1.1M Tokens · $0.14 · Saved 85% ($0.76)** vs Opus 5.5")
         row = json.loads(Path(led, "tk.jsonl").read_text().splitlines()[-1])
-        check("tokens: ledger row carries tokens/usd/base_usd/resolved_model", row.get("tokens") == 1_110_000 and row.get("usd") == 0.275 and row.get("base_usd") == 0.9 and row.get("resolved_model") == "claude-haiku-5-5" and row.get("calls") == 2)
+        check("tokens: ledger row carries tokens/usd/base_usd/resolved_model", row.get("tokens") == 1_110_000 and row.get("usd") == 0.1375 and row.get("base_usd") == 0.9 and row.get("resolved_model") == "claude-haiku-5-5" and row.get("calls") == 2)
+        check("usd: Haiku 5.5 at $0.10 / $0.50 per million; a call whose prompt passes 100K tokens at 5x; other models have no long-prompt rate",
+              abs(_H.usd("claude-haiku-5-5", {"input_tokens": 1_000_000, "output_tokens": 1_000_000}) - 0.60) < 1e-9
+              and abs(_H.usd("haiku", {"input_tokens": 1_000_000, "long": {"input_tokens": 1_000_000}}) - 0.50) < 1e-9
+              and abs(_H.usd("opus", {"input_tokens": 1_000_000, "long": {"input_tokens": 1_000_000}}) - 4.0) < 1e-9
+              and _H.PRICE["sonnet"] / _H.PRICE["haiku"] == _H.PRICE_USD["sonnet"][3] / _H.PRICE_USD["haiku"][3])
         # background: pending at launch, spend filled at SubagentStop
         run("post", dict(agent("sonnet", "medium", resp={"status": "async_launched", "agentId": "s1", "prompt": "p", "description": "t"}, cwd=cwd), session_id="tk", transcript_path=str(tr)), led)
         sub_tr("tk", "s1", "claude-sonnet-5-5", 0, 0, 500_000, 5_000)  # sonnet: 0.10 + 0.05 = $0.15 ; at opus: 0.10 + 0.10 = $0.20
@@ -1658,8 +1663,8 @@ def main():
         rows = [json.loads(l) for l in Path(led, "tk.jsonl").read_text().splitlines()]
         check("tokens: background row filled at SubagentStop", rows[-1].get("tokens") == 505_000 and rows[-1].get("usd") == 0.15 and rows[-1].get("status") == "done")
         out = run("receipt", {"session_id": "tk", "cwd": cwd, "transcript_path": str(tr), "stop_hook_active": False, "last_assistant_message": "done."}, led)
-        check("tokens: Stop header sums sync + background", "🧾 **2 Agents · 1.6M Tokens · $0.43 · Saved 61% ($0.68)** vs Opus 5.5" in (out or {}).get("reason", ""))
-        check("tokens: the dominant agent is named", "largest: Read Haiku 5.5 · Low $0.28 (65%)" in (out or {}).get("reason", ""))
+        check("tokens: Stop header sums sync + background", "🧾 **2 Agents · 1.6M Tokens · $0.29 · Saved 74% ($0.81)** vs Opus 5.5" in (out or {}).get("reason", ""))
+        check("tokens: the dominant agent is named", "largest: Read Sonnet 5.5 · Medium $0.15 (52%)" in (out or {}).get("reason", ""))
         run("receipt", {"session_id": "tk", "cwd": cwd, "transcript_path": str(tr), "stop_hook_active": True, "last_assistant_message": "🧾 **2 Agents · 1 u · Saved 1%** vs Opus 5.5\n- `done` → x"}, led)  # a printed receipt closes the task
         # main session on fable: baseline priced at fable
         with open(tr, "a") as f:
@@ -3177,8 +3182,11 @@ def main():
                 check("session: ABOFLES_SESSION wins over everything", H.newest_session_id(pj, U1) == "sA" and H.newest_state_path(pj).name == "sA.json")
                 pin()
                 check("session: an explicit UUID of an existing state is used", H.newest_session_id(pj, U1) == U1 and H.newest_state(pj, U1).get("last_prompt_ts") == 50)
-                check("session: an unexpanded ${CLAUDE_SESSION_ID}, an empty value, a non-UUID and an unknown UUID are ignored",
-                      all(H.newest_session_id(pj, v) == "sB" for v in ("${CLAUDE_SESSION_ID}", "", None, "sA", U2)))
+                check("session: an unexpanded ${CLAUDE_SESSION_ID}, an empty value and an unknown UUID are ignored",
+                      all(H.newest_session_id(pj, v) == "sB" for v in ("${CLAUDE_SESSION_ID}", "", None, U2)))
+                check("session: a short id names that session (exact name, or the one state it starts), never the newest one; an unknown or ambiguous short id is none",
+                      H.newest_session_id(pj, "sA") == "sA" and H.newest_session_id(pj, U1[:8]) == U1 and H.newest_state_path(pj, "zzzzzzzz") is None
+                      and H.newest_state_path(pj, "sZ") is None and (put(sd, U1[:8] + "-0000-4000-8000-000000000000", pj, age=1) or True) and H.newest_state_path(pj, U1[:8]) is None)
                 check("session: an unexpanded ABOFLES_SESSION is ignored", (os.environ.update(ABOFLES_SESSION="${X}") or True) and H.newest_session_id(pj) == "sB" and (pin() or True))
             with _tf.TemporaryDirectory() as sd:
                 H.STATE_DIR = Path(sd)
@@ -3946,10 +3954,13 @@ def main():
         bad_ = subprocess.run([sys.executable, str(mp_), "receipt", "--session", ps], input="no receipt here", capture_output=True, text=True, env=menv_, cwd=pd)
         rec_ = subprocess.run([sys.executable, str(mp_), "receipt", "--session", ps], input=hdr_ + "\n- `done` → recorded the cap test\n- `why` → pane\n- `check` → ok\n- `open` → none", capture_output=True, text=True, env=menv_, cwd=pd)
         check("memo.py receipt: stdin without a receipt -> exit 2; a receipt -> exit 0, kept in the state for the Stop", bad_.returncode == 2 and rec_.returncode == 0 and "recorded" in rec_.stdout and (gstate(ps).get("receipt_saved") or {}).get("text", "").startswith("🧾"))
+        st_rec_ = gstate(ps)
+        check("memo.py receipt: the recorded receipt closes its task at once (a next task in the same turn counts apart) and is journaled now",
+              st_rec_.get("spawns_since_receipt", 0) == 0 and (st_rec_.get("receipt_saved") or {}).get("closed") is True and "recorded the cap test" in HG.session_memo_path(pd, ps).read_text())
         out_ = run("receipt", {"session_id": ps, "cwd": pd, "stop_hook_active": True, "last_assistant_message": "Done — the cap test is in."}, led)
         st_ = gstate(ps)
         check("receipt place pane: the recorded receipt closes the task like a printed one (no demand, count reset, used once)", not (out_ or {}).get("reason", "").count("no receipt") and st_.get("spawns_since_receipt", 0) == 0 and "receipt_saved" not in st_)
-        check("receipt place pane: the memo Journal (the pane's Last receipts) gets the recorded receipt", "recorded the cap test" in HG.session_memo_path(pd, ps).read_text())
+        check("receipt place pane: the memo Journal (the pane's Last receipts) gets the recorded receipt, once (the Stop does not journal it again)", HG.session_memo_path(pd, ps).read_text().count("done: recorded the cap test") == 1)
         mod(None); HG._PANE_ON.clear()
         check("receipt place: without the mod the receipt is printed (output), whatever the line says", HG.place(pd, "receipt") == "output")
         mod(True)
@@ -4492,6 +4503,7 @@ def main():
         check("qgate (review): one unlock does not carry a box of two questions (ok >= len(questions)), and the deny says why", "question gate" in reason(o_) and "covers 1 question" in reason(o_))
         json.dump(dict(json.loads(Path(state, "sr1.json").read_text()), judge_ok=2), open(Path(state, "sr1.json"), "w"))
         check("qgate (review): ... two unlocks do", run("qgate", qbox("sr1", "Should the cap apply per unit or per order?", "Should refunds go to the wallet or the card?"), led) is None)
+        check("qgate: a judged box counts its questions as asked (gate_remaining)", json.loads(Path(state, "sr1.json").read_text()).get("round_asked") == 2)
         qsess("sr2", budget_ask_ts=now_, task_started=now_ - 10)
         check("qgate (review): a budget-mark question that carries another ask needs a Judge", "question gate" in reason(run("qgate", qbox("sr2", "Abo Fles agent budget — also may I deploy to prod?"), led)))
         check("qgate (review): ... so does one whose option carries it", "question gate" in reason(run("qgate", qbox("sr2", "Abo Fles agent budget: raise it to 6?", opts=("Raise to 6", "Raise and deploy to prod")), led)))
@@ -4506,6 +4518,17 @@ def main():
         stx_ = {"task_started": now_ - 10}
         SR.apply_gate_reply(stx_, "VERDICT: ASK\nQUESTION: a?\nVERDICT: ASK\nQUESTION: b?\n", "judge")
         check("gate reply (review): a judge reply with two ASK blocks unlocks two (one box may carry both)", stx_.get("judge_ok") == 2)
+        stx_ = {"task_started": now_ - 10}
+        j3_ = "VERDICT: HANDOFF\nQUESTION: a?\nVERDICT: HANDOFF\nQUESTION: b?\nVERDICT: HANDOFF\nQUESTION: c?\n"
+        SR.apply_gate_reply(stx_, j3_, "judge", tier=3, agent="j1")
+        SR.apply_gate_reply(stx_, "QUESTION 1: a?\nQUESTION 2: b?\nEXPLAIN: x", "explainer", agent="e1")
+        u1_ = stx_.get("judge_ok")
+        stx_["judge_ok"], stx_["round_asked"] = 1, 2  # the box asked both; a SendMessage to the explainer unlocked one for the third
+        SR.apply_gate_reply(stx_, "QUESTION 1: a?\nQUESTION 2: b?\nQUESTION 3: c?\nEXPLAIN: x", "explainer", agent="e1")
+        check("gate reply: an explainer that answers a SendMessage with all its questions again unlocks none already asked or unlocked (DCMP 2026-11-09: a stale 'still unasked' Stop)",
+              u1_ == 2 and stx_.get("judge_ok") == 1 and SR.gate_remaining(stx_) == 1)
+        SR.apply_gate_reply(stx_, j3_, "judge", tier=3, agent="j1")
+        check("gate reply: a Judge that replies again replaces its count of passed-on questions (3, not 6)", SR.gate_remaining(stx_) == 1 and stx_["judged_by"] == {"j1": 3})
         check("similar (review): both ways — an old question plus a new ask is no re-ask; a rewording is",
               not SR.similar("Keep feature flag X on for beta users and also delete the database?", "Keep feature flag X on for beta users?", 0.75, both=True)
               and SR.similar("Keep the feature flag X on for the beta users?", "Keep feature flag X on for beta users?", 0.75, both=True))

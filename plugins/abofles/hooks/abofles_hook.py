@@ -219,9 +219,12 @@ def label(model, effort=None):
     return f"{m} · {EFFORT_LABEL.get((effort or '').lower(), effort.capitalize())}" if effort else m
 
 
-# List price per million tokens (Claude API, 2026-10): input, cache write (1.25x input), cache read, output.
-PRICE_USD = {"haiku": (1.0, 1.25, 0.10, 5.0), "sonnet": (2.0, 2.5, 0.20, 10.0), "opus": (4.0, 5.0, 0.20, 20.0), "fable": (10.0, 12.5, 0.25, 50.0)}
+# List price per million tokens (Claude API, 2026-10): input, cache write (1.25x input), cache read, output. Haiku 5.5 is $0.10 / $0.50
+# (cache write and read taken as 1.25x and 0.1x input); the cost units (PRICE: haiku 1, sonnet 20, opus 40, fable 100) are these output prices.
+PRICE_USD = {"haiku": (0.10, 0.125, 0.01, 0.50), "sonnet": (2.0, 2.5, 0.20, 10.0), "opus": (4.0, 5.0, 0.20, 20.0), "fable": (10.0, 12.5, 0.25, 50.0)}
 USAGE_KEYS = ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens", "output_tokens")
+LONG_PROMPT_TOKENS = 100_000  # a call whose prompt (input + cache write + cache read) passes this is a long-prompt call
+LONG_PROMPT_FACTOR = {"haiku": 5.0}  # Haiku 5.5 bills a long-prompt call at 5x ($0.50 / $2.50)
 
 
 EXPLAIN_MARK = "📖"  # heads a markdown explanation printed above a question
@@ -239,16 +242,24 @@ def alias_of(model_id):
 
 
 def usd(model, usage):
-    """Dollar cost of a usage dict at `model`'s list prices (0 when the model is unknown)."""
-    pr = PRICE_USD.get(alias_of(model) or "")
+    """Dollar cost of a usage dict at `model`'s list prices (0 when the model is unknown). `usage["long"]` (the long-prompt calls'
+    share, from transcript_usage) is billed at the model's LONG_PROMPT_FACTOR."""
+    a = alias_of(model) or ""
+    pr = PRICE_USD.get(a)
     if not pr or not usage:
         return 0.0
-    return sum(usage.get(k, 0) * pr[i] for i, k in enumerate(USAGE_KEYS)) / 1_000_000
+    cost = sum(usage.get(k, 0) * pr[i] for i, k in enumerate(USAGE_KEYS))
+    long = usage.get("long") or {}
+    if a in LONG_PROMPT_FACTOR and long:
+        cost += sum(long.get(k, 0) * pr[i] for i, k in enumerate(USAGE_KEYS)) * (LONG_PROMPT_FACTOR[a] - 1)
+    return cost / 1_000_000
 
 
 def transcript_usage(path):
-    """Sum the usage of every assistant message in a (sub)agent transcript. None when the file is missing/empty."""
+    """Sum the usage of every assistant message in a (sub)agent transcript, and under `long` the share of the calls whose prompt passed
+    LONG_PROMPT_TOKENS (priced higher on some models, see usd). None when the file is missing/empty."""
     tot = dict.fromkeys(USAGE_KEYS, 0)
+    long = dict.fromkeys(USAGE_KEYS, 0)
     calls, model = 0, None
     seen = set()  # one API message is written as several lines (thinking, text, tool_use) that repeat its usage
     try:
@@ -272,8 +283,11 @@ def transcript_usage(path):
                     seen.add(mid)
                 calls += 1
                 model = (r.get("message") or {}).get("model") or model
+                big = sum(int(u.get(k) or 0) for k in USAGE_KEYS[:3]) > LONG_PROMPT_TOKENS
                 for k in USAGE_KEYS:
                     tot[k] += int(u.get(k) or 0)
+                    if big:
+                        long[k] += int(u.get(k) or 0)
     except Exception:
         return None
     if not calls:
@@ -281,6 +295,8 @@ def transcript_usage(path):
     tot["total"] = sum(tot[k] for k in USAGE_KEYS)
     tot["calls"] = calls
     tot["model"] = model
+    if any(long.values()):
+        tot["long"] = long
     return tot
 
 
@@ -4333,6 +4349,7 @@ def qgate(data):
         if ok > 0 or reask:
             if ok > 0:
                 st["judge_ok"] = max(0, ok - max(1, len(qlist)))  # one unlock per question the box carries: two judged questions merged into one ask spend both
+                st["round_asked"] = (st.get("round_asked") or 0) + max(1, len(qlist))  # gate_remaining: these are asked
                 st.pop("denied_qhash", None)  # a Judge unlock spent: the denied set is judged or replaced, never exempt on its own
                 st.pop("denied_ts", None)
             inline_ex = ""  # not printed above the question: the explanation goes inside the box
@@ -4442,7 +4459,7 @@ def sendmsg(data):
             kind = "explainer" if row_gate(row) == "explain" else "judge"
             resp = data.get("tool_response") or {}
             text = response_text(next((resp[k] for k in ("reply", "answer", "result", "content") if resp.get(k)), ""))
-            _, warns, _ = apply_gate_reply(st, text, kind, sid, project_root(data, st), st.get("task_tier_max") or None, data.get("transcript_path") or st.get("transcript_path") or "")
+            _, warns, _ = apply_gate_reply(st, text, kind, sid, project_root(data, st), st.get("task_tier_max") or None, data.get("transcript_path") or st.get("transcript_path") or "", agent=said_id or to)
             if warns:
                 st["gate_note"] = warns[-1]
             save_state(sid, st)
@@ -4523,12 +4540,23 @@ def judge_blocks(text):
 EXPLAIN_STUB_WARN = "explainer reply has no QUESTION line (a stub, not the report) — the question gate stays locked; read the explainer's real reply or restart it"
 
 
-def apply_gate_reply(st, text, kind, sid="", root="", tier=None, tpath=""):
+def gate_remaining(st):
+    """Questions this task's Judges passed on (ASK / HANDOFF) that no judged box has asked yet, or None when no Judge ran in this task.
+    A reply never raises the open unlocks above it: an Explainer that answers a SendMessage with all its questions again, after some were
+    asked, unlocked them a second time and the Stop hook then kept asking for questions already answered (DCMP 2026-11-09)."""
+    if (st.get("judged_ts") or 0) < (st.get("task_started") or 0):
+        return None
+    total = sum((st.get("judged_by") or {}).values()) or (st.get("judged_n") or 0)
+    return max(0, total - (st.get("round_asked") or 0))
+
+
+def apply_gate_reply(st, text, kind, sid="", root="", tier=None, tpath="", agent=""):
     """What a Judge ("judge") / Explainer ("explainer") reply does to the question gate — one rule for a sync reply (post)
     and a background one (close_row). Every judge block counts: ANSWERED blocks go to the memo, a HANDOFF or an ASK among
     them decides the verdict. ASK (or any other verdict) and a filled EXPLAIN unlock one question; ANSWERED, HANDOFF, a judge
     reply with no VERDICT and an explainer reply with no QUESTION line (a stub) do not; an explainer's EXPLAIN is optional. Mutates st (the caller holds the state lock and
-    saves). Returns (verdict, warnings, instruction): the instruction (how to ask) is for the live model only."""
+    saves). `agent`: the gate agent's id — a Judge that replies again (after a SendMessage) replaces its count of passed-on questions.
+    Returns (verdict, warnings, instruction): the instruction (how to ask) is for the live model only."""
     warnings, instruction = [], ""
     blocks = judge_blocks(text) if kind == "judge" else explainer_blocks(text)
     verdicts = [b[0] for b in blocks]
@@ -4543,7 +4571,10 @@ def apply_gate_reply(st, text, kind, sid="", root="", tier=None, tpath=""):
         if answered and verdict != "ANSWERED":
             warnings.append("judge ANSWERED " + "; ".join(f"{b[1]} → {b[2]}" for b in answered) + " — state those in one line each, do not ask them; the remaining question(s) below")
     if kind == "judge":
+        if (st.get("judged_ts") or 0) < (st.get("task_started") or 0):  # the first Judge of this task: a new count
+            st["judged_by"], st["round_asked"] = {}, 0
         st["judged_n"] = sum(1 for b in blocks if b[0] != "ANSWERED" and b[1]) or None  # the questions it passed on (ASK / HANDOFF): an explainer after it unlocks no more
+        st.setdefault("judged_by", {})[agent or f"judge-{len(st.get('judged_by') or {})}"] = st["judged_n"] or 0
         st["judged_ts"] = int(time.time())
     if kind == "judge" and verdict == "ANSWERED":
         warnings.append("judge ANSWERED from evidence — state it in one line and continue, do not ask the user: " + "; ".join(f"{b[1]} → {b[2]}" + (f" ({b[3]})" if b[3] else "") for b in blocks))
@@ -4563,6 +4594,9 @@ def apply_gate_reply(st, text, kind, sid="", root="", tier=None, tpath=""):
             n = min(n, GATE_UNLOCK_MAX, judged or GATE_UNLOCK_MAX)
         else:  # a judge: one per ASK block (two judged questions may go in one box), at most GATE_UNLOCK_MAX
             n = min(GATE_UNLOCK_MAX, max(1, sum(1 for b in blocks if b[0] not in ("ANSWERED", "HANDOFF") and b[1])))
+        rem = gate_remaining(st)
+        if rem is not None:
+            n = min(n, max(0, rem - st.get("judge_ok", 0)))  # the questions already asked, or already unlocked, are not unlocked again
         st["judge_ok"] = st.get("judge_ok", 0) + n
         st["judge_ok_ts"] = int(time.time())
         md = explain_needs_markdown(text)
@@ -5488,7 +5522,7 @@ def post(data):
         if kind in ("judge", "explainer"):
             with state_lock(sid):
                 stx = load_state(sid)
-                verdict, gw, instruction_ = apply_gate_reply(stx, text, kind, sid, mroot, tier, data.get("transcript_path") or "")  # what the model prints after this point counts
+                verdict, gw, instruction_ = apply_gate_reply(stx, text, kind, sid, mroot, tier, data.get("transcript_path") or "", agent=agent_id or "")  # what the model prints after this point counts
                 save_state(sid, stx)
             entry["verdict"] = verdict or None
             warnings = warnings + gw + ([instruction_] if instruction_ else [])
@@ -5742,12 +5776,23 @@ def session_arg(argv, keep=False):
 
 def newest_state_path(cwd=None, session=None):
     """The state file of the session a command belongs to. Order: env ABOFLES_SESSION; the explicit `session` when it is a
-    UUID (the command's own `${CLAUDE_SESSION_ID}`); among the states whose root is this project (or holds this folder after
-    a `cd`) the newest `last_prompt_ts`, then the newest mtime. A state of another project is never chosen."""
+    UUID (the command's own `${CLAUDE_SESSION_ID}`), or the one state whose id starts with a shorter one (`e18fb730`, at least 6
+    characters); among the states whose root is this project (or holds this folder after a `cd`) the newest `last_prompt_ts`,
+    then the newest mtime. A state of another project is never chosen, and a short id that names no state (or several) is None:
+    `memo.py now --session e18fb730` once wrote another session's Now (DCMP 2026-11-09)."""
     for cand in (os.environ.get("ABOFLES_SESSION"), session if UUID_RE.match((session or "").strip()) else None):
         cand = "" if "${" in (cand or "") else re.sub(r"[^A-Za-z0-9_-]", "", cand or "")
         if cand and state_path(cand).exists():
             return state_path(cand)
+    short = "" if "${" in (session or "") else re.sub(r"[^A-Za-z0-9_-]", "", session or "")
+    if short and not UUID_RE.match(short):
+        if state_path(short).exists():
+            return state_path(short)
+        try:
+            hits = [p for p in STATE_DIR.glob(f"{short}*.json") if UUID_RE.match(p.stem)] if len(short) >= 6 else []
+        except Exception:
+            hits = []
+        return hits[0] if len(hits) == 1 else None
     try:
         states = list(STATE_DIR.glob("*.json"))
     except Exception:
@@ -6519,6 +6564,25 @@ def unasked_text(md):
             + "Never \"reply in chat\" instead of the box.")
 
 
+def receipt_close(root, st, sid, text, rc, own, foreign, stop_active):
+    """Close the task on a receipt — the Stop hook for a printed one, `memo.py receipt` for a recorded one (at once, so a second task in
+    the same turn starts its own count). Returns (closed, rc to journal or None, the review gate's refusal or None). A task with no agents
+    is not closed; a 🔴 change missing a required reviewer is refused once (`stop_active`: already refused). Caller holds the state lock."""
+    closing = bool(st.get("spawns_since_receipt", 0) and (own or foreign))
+    gap = review_gap(root, st, sid, text) if closing else None
+    if gap and gap["missing"] and gap["block"] and not stop_active:
+        return False, (None if foreign else rc), review_gate_text(gap, label(*verify_cell(gap["tier"])))  # once: the task stays open for the reviewers
+    if not closing:
+        return False, (None if foreign else rc), None  # only a receipt that closed the task is journaled under the computed header
+    if foreign and rc:
+        rc["header"] = re.sub(r"\*\*", "", receipt_header(st)[1:]).strip()  # before close_task resets the task's numbers
+    close_task(st, "receipt")  # the receipt closes the task — even while a background agent of it is still running
+    st.pop("review_missing", None)
+    if gap and gap["missing"] and gap["mode"] != "off":
+        st["review_missing"] = {"names": gap["missing"], "tier": gap["tier"], "topic": gap["topics"][0], "ts": int(time.time())}  # the guide shows it until the next task starts
+    return True, rc, None
+
+
 def receipt(data):
     """Stop: (1) if this turn started abofles agents and the final message has no receipt block, refuse the stop
     once so the 5-line receipt gets printed (`stop_hook_active` means we already did); (2) the context watch —
@@ -6531,8 +6595,8 @@ def receipt(data):
     reasons = []
     if not (has_receipt(text) or looks_like_receipt(text)):  # Receipt place = pane: the receipt was recorded this turn by `memo.py receipt`
         saved = load_state(sid).get("receipt_saved") or {}
-        if saved.get("text") and (saved.get("ts") or 0) >= (load_state(sid).get("turn_ts") or 0) - 5:
-            text = saved["text"]
+        if saved.get("text") and not saved.get("closed") and (saved.get("ts") or 0) >= (load_state(sid).get("turn_ts") or 0) - 5:
+            text = saved["text"]  # a recorded receipt that closed its task at once (`closed`) was journaled then
     own = has_receipt(text)
     foreign = not own and looks_like_receipt(text)  # the model's own header: it closes the task like the computed one, the journal gets the computed header
     rc = parse_receipt(text) if own or foreign else None
@@ -6562,21 +6626,12 @@ def receipt(data):
         ok_before = st.get("judge_ok", 0)  # reset_task below zeroes it
         unasked_md = bool(st.get("explain_md"))
         ex_keep = {k: st[k] for k in EXPLAIN_KEYS if k in st}  # reset_task clears the explain state; an unlock that survives it keeps its own
-        closing = bool(pending and (own or foreign))
-        gap = review_gap(root, st, sid, text) if closing else None
-        refused = False
-        if gap and gap["missing"] and gap["block"] and not data.get("stop_hook_active"):
-            reasons.append(review_gate_text(gap, label(*verify_cell(gap["tier"]))))  # once: the task stays open for the reviewers
-            closing, refused = False, True
-        if foreign and not closing:
-            rc = None  # only a receipt that closed the task is journaled under the computed header
+        closing, rc, refusal = receipt_close(root, st, sid, text, rc, own, foreign, bool(data.get("stop_hook_active")))
+        refused = refusal is not None
+        if refused:
+            reasons.append(refusal)
         if closing:
-            if foreign and rc:
-                rc["header"] = re.sub(r"\*\*", "", receipt_header(st)[1:]).strip()  # before close_task resets the task's numbers
-            close_task(st, "receipt")  # the receipt closes the task — even while a background agent of it is still running
-            st.pop("review_missing", None)
-            if gap and gap["missing"] and gap["mode"] != "off":
-                st["review_missing"] = {"names": gap["missing"], "tier": gap["tier"], "topic": gap["topics"][0], "ts": int(time.time())}  # the guide shows it until the next task starts
+            pass  # closed by the receipt above
         elif pending and not refused and not chain:  # a chain still running (a pending row or a launch in flight): the receipt is due when it ends
             kind, instruction = receipt_decision(root, st, sid)
             owed = bool(st.get("receipt_owed"))  # a nudge went unanswered, or the last turn ended on a question: this Stop asks again
@@ -6658,7 +6713,7 @@ def close_row(row, text, st, sid, cwd, how="", note=""):
     row.update(spend)
     kind = {"judge": "judge", "explain": "explainer"}.get(row_gate(row), "")
     if kind and text and not had_verdict:  # the same gate rule as a sync reply in post(): every judge block counts; a re-close never unlocks twice
-        verdict, gw, _ = apply_gate_reply(st, text, kind, sid, cwd, row.get("tier"), st.get("transcript_path") or "")
+        verdict, gw, _ = apply_gate_reply(st, text, kind, sid, cwd, row.get("tier"), st.get("transcript_path") or "", agent=row.get("agent_id") or "")
         row["verdict"] = verdict or None
         warnings = list(warnings) + gw
         stub = next((w for w in gw if "(a stub, not the report)" in w), None)

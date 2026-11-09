@@ -106,7 +106,7 @@ abofles [■■■■] 4/4 · Plan ✓ · Work ✓ · Work ✓ · Verify ✓ · 
 - `check` → `dotnet test TestLab/TestLab.csproj` → total 13, failed 0
 - `open` → ATTENTION: cap applies in order currency — USD orders uncapped (OrderPricingRules.cs:77)
 
-A read-only question on the same project routes to `haiku·low`: the same 1M-token read costs $0.28 on Haiku 5.5 and $0.90 on Opus 5.5 — that is where the saving comes from. `Tokens` counts every billed token of the subagents, cache reads of each call's context included (that is what the dollars are priced from), so it is much larger than the harness's per-agent `totalTokens`. `/abofles:bill` adds the real tokens and dollars of the session. `/abofles:route <task>` shows the plan and the estimate without starting anything; `/abofles:bill` shows what the session cost afterwards.
+A read-only question on the same project routes to `haiku·low`: the same 1M-token read costs $0.03 on Haiku 5.5 and $0.90 on Opus 5.5 — that is where the saving comes from. `Tokens` counts every billed token of the subagents, cache reads of each call's context included (that is what the dollars are priced from), so it is much larger than the harness's per-agent `totalTokens`. `/abofles:bill` adds the real tokens and dollars of the session. `/abofles:route <task>` shows the plan and the estimate without starting anything; `/abofles:bill` shows what the session cost afterwards.
 
 ## Change cells for one project
 

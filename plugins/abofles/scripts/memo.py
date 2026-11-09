@@ -15,8 +15,8 @@
                   · 4 no session (a write needs --session or a session state of this folder) · 5 the item is another session's (use --force)
     memo.py note <text>          add a user note to Decisions (something settled in chat), tagged `(s:<session> p:<project>)`
     memo.py now < text           replace the Now section from stdin (what /abofles:memo writes)
-    memo.py receipt < text       record the task's receipt (Receipt place = pane): the Stop hook reads it as if it were printed,
-                                 so the memo and the Abo Fles pane get it and the chat does not; exit 2 when stdin is no receipt
+    memo.py receipt < text       record the task's receipt (Receipt place = pane): it counts as printed, at once — the task closes and
+                                 the memo and the Abo Fles pane get it, the chat does not; exit 2 when stdin is no receipt
     memo.py path                 print the main memo path (`path mine`: this session's file)
     memo.py move <root>          move this session's memo (its file, its Needs-you items, its index line) to project <root> (a repository top)
                                  and make <root> the session's project — for a session that was started in the wrong folder
@@ -64,6 +64,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
+import abofles_hook as H  # noqa: E402
 from abofles_hook import memo_repair, repair_roots, CODE_EXIT, memo_path, session_memo_path, sess_read, memo_apply, memo_trace, memo_read, resume_block, newest_state, newest_state_path, session_arg, resume_scope, config_read, config_write, SCOPES, CONFIG_PATH, memo_move, load_state, save_state, state_lock, refresh_guide, guide_line, last_resolved_note, script_cmd, clip, has_receipt, looks_like_receipt, repo_top, NEED_TAIL_RE, MEMO_DIR_NAME  # noqa: E402
 
 NO_EVIDENCE = 'abofles: resolve needs evidence — add a note, e.g. --trace "re-checked: <evidence>" or "user answered: <answer>"'
@@ -347,11 +348,26 @@ def main():
         if not sid:
             print("abofles: no session state — name it with --session")
             sys.exit(2)
-        with state_lock(sid):
+        own = has_receipt(text)
+        foreign = not own and looks_like_receipt(text)
+        with state_lock(sid):  # the task closes now, as a printed receipt closes it at the turn's end: a next task in this turn counts apart
             stx = load_state(sid)
-            stx["receipt_saved"] = {"text": text, "ts": time.time()}
+            root = H.project_root({"cwd": cwd}, stx)
+            closed, rc, refusal = H.receipt_close(root, stx, sid, text, H.parse_receipt(text), own, foreign, False) if stx.get("started") else (False, None, None)
+            stx["receipt_saved"] = {"text": text, "ts": time.time(), **({"closed": True} if closed else {})}
             save_state(sid, stx)
-        print("abofles: receipt recorded — it shows in the Abo Fles pane and the memo when the turn ends; end the turn with one short sentence, do not print it")
+        if closed:
+            if rc:
+                H.memo_journal(root, sid, rc)
+            with state_lock(sid):  # the receipt's open items just reached Needs you: the guide and the pane show them
+                stx = load_state(sid)
+                refresh_guide(root, stx, sid)
+                save_state(sid, stx)
+        if refusal:
+            print(refusal)
+            print("abofles: receipt kept — the task stays open until the reviewers ran; record the receipt again after them")
+        else:
+            print("abofles: receipt recorded — it shows in the Abo Fles pane and the memo" + (" now" if closed else " when the turn ends") + "; end the turn with one short sentence, do not print it")
     elif cmd == "now":
         text = sys.stdin.read()
         if not text.strip():
