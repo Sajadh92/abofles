@@ -5974,7 +5974,7 @@ def risky_git_op(sub, args):
             return "push --prune"
         return "push :<ref>" if any(a.startswith(":") and len(a) > 1 for a in args) else None  # `git push origin :branch` deletes the remote branch
     if sub == "reset":
-        return next((f"reset {a}" for a in ("--hard", "--merge", "--keep") if a in args), None)
+        return next((f"reset {a}" for a in ("--hard", "--merge", "--keep") if a in args), None)  # a --soft / --mixed reset keeps every change: silent
     if sub == "tag":
         return "tag -d" if "--delete" in args or short("d") else "tag -f" if "--force" in args or short("f") else None
     if sub == "switch":
@@ -6002,7 +6002,10 @@ def risky_git_op(sub, args):
             return "checkout -B"
         if "--" in args and args.index("--") + 1 < len(args):
             return "checkout -- <paths>"
-        return "checkout ." if "." in args else None
+        if "." in args:
+            return "checkout ."
+        pos = [a for x, a in enumerate(args) if not a.startswith("-") and not (x and args[x - 1] in ("-b", "-B", "--orphan"))]
+        return "checkout <commit> <paths>" if len(pos) >= 2 else None  # files taken from a commit: their uncommitted edits are gone
     if sub == "restore":
         staged = "--staged" in args or short("S")
         return "restore" if not staged or "--worktree" in args or short("W") else None
@@ -6011,6 +6014,10 @@ def risky_git_op(sub, args):
         return f"stash {v}" if v in ("drop", "clear") else None
     if sub in ("filter-branch", "filter-repo"):
         return sub
+    if sub == "pull":
+        return "pull --rebase" if any(a in ("-r", "--rebase") or (a.startswith("--rebase=") and a != "--rebase=false") for a in args) else None
+    if sub == "submodule":
+        return "submodule deinit -f" if verb() == "deinit" and ("--force" in args or short("f")) else None
     if sub == "commit":
         return "commit --amend" if "--amend" in flags else None
     if sub == "update-ref":
@@ -6094,8 +6101,21 @@ def risky_git(cmd, depth=0):
         return None
     try:
         segments = shell_segments(cmd, depth)
+        segs, seps, _ = _tokenize(cmd)
     except Exception:  # RecursionError on a pathological line included
         return "git command not fully parsed"
+    for k, words in enumerate(segs):  # a command whose name the shell reads from a variable (`$G push -f`) or a substitution (`$(echo git) push -f`)
+        j = wrap_end(words)
+        if j >= len(words):
+            continue
+        if words[j].startswith("$") and j + 1 < len(words):
+            op = risky_git_op(words[j + 1], words[j + 2:])
+        elif k and seps[k] in (")", "`") and any("git" in w.lower() for w in segs[k - 1]):
+            op = risky_git_op(words[j], words[j + 1:])
+        else:
+            continue
+        if op:
+            return f"{op}, its command from a variable or substitution, not fully parsed"
     for words in segments:
         if words == [TOO_DEEP]:
             return f"git nested more than {SHELL_DEPTH} shells deep, not read"

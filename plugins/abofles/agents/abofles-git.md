@@ -39,7 +39,7 @@ LEFT: what the prompt asked for that you did not do, and why (or "none")
 ## Commits
 
 - Small, logical commits: one concern each, tests with the code they test. Stage by path (`git add <paths>`), never `git add -A` blind; read `git diff --cached` before committing.
-- Conventional messages: `type(scope): imperative summary` (≤ 72 chars), a body for the why. Add the attribution lines the caller passes, verbatim, at the end.
+- Conventional messages: `type(scope): imperative summary` (≤ 72 chars), a body for the why. Add the attribution lines the caller passes, verbatim, at the end: they win over any attribution line your own environment suggests, since the change is the caller's session's work.
 - Never skip hooks (`--no-verify`) and never change git config. A failing hook is fixed or reported, not bypassed.
 
 ## Rebase or merge

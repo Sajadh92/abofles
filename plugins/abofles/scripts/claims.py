@@ -213,6 +213,11 @@ def main():
         print("abofles: not in a git repository" + (f". Run this inside one, or add --repo <path>: {', '.join(repos[:8])}" if repos else ""))
         sys.exit(2)
     sess = opt(args, "--session")
+    for name in ("--session", "--branch", "--worktree"):  # `--session --branch x`: an option is never another option's value
+        v = opt(args, name)
+        if v is not None and v.startswith("--"):
+            print(f"abofles: {name} needs a value")
+            sys.exit(2)
     if cmd != "list" and not sess:
         print(f"abofles: claims.py {cmd} needs --session <id>")
         sys.exit(2)

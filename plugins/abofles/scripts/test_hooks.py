@@ -4386,6 +4386,16 @@ def main():
               all("not fully parsed" in ctx(gg(c)) for c in ("su me -c 'git reset --hard'", "script -q /dev/null git reset --hard", "python3 -c \"import subprocess;subprocess.run(['git','reset','--hard'])\"")))
         check("git guard: the backstop leaves text alone (echo, grep, a gh PR title, git rm --cached)",
               all(gg(c) is None for c in ("grep -r 'git reset --hard' docs", "gh pr create --title 'fix git reset --hard docs'", "git rm --cached a.py", "cat .gitignore")))
+        check("git guard review: a tree-ish checkout over paths, pull --rebase, a forced submodule deinit and a git named by a variable or substitution are flagged",
+              all("risky git" in ctx(gg(c)) for c in ("git checkout HEAD file.txt", "git checkout main~2 src/a.cs",
+                                                       "git pull --rebase", "git pull -r origin main", "git submodule deinit -f lib", "$(echo git) push --force", "`echo git` push -f", "G=git; $G push -f")))
+        check("git guard review: ... while a reset that keeps the changes, a branch switch, a new branch from a remote, a plain pull and a captured git output stay silent",
+              all(gg(c) is None for c in ("git reset", "git reset HEAD~3", "git reset HEAD file.txt", "git reset -- src/a.cs", "git reset src/a.cs", "git checkout main", "git checkout -b feat origin/main",
+                                          "git pull", "git pull --no-rebase", "git submodule deinit lib", "x=$(git rev-parse HEAD) && echo $x")))
+        _cr = tempfile.mkdtemp(); subprocess.run(["git", "init", "-q", _cr]); claims_py_ = str(Path(__file__).resolve().parent / "claims.py")
+        check("claims: an option is never another option's value (`--session --branch x` exits 2)",
+              subprocess.run([sys.executable, claims_py_, "claim", "--session", "--branch", "x"], cwd=_cr, capture_output=True, text=True).returncode == 2
+              and subprocess.run([sys.executable, claims_py_, "claim", "--session", "s1", "--branch", "--files"], cwd=_cr, capture_output=True, text=True).returncode == 2)
         check("git guard: a line that breaks the parser (1000 heredocs) is flagged as not fully parsed, never passed", "not fully parsed" in ctx(gg("git reset --hard " + "<<A " * 1000)))
         for cmd_ in ("git status", "git log --oneline -n 5", "git diff -- .", "git branch -d old", "git fetch --all", 'git commit -m "reset --hard docs"', "git commit -m 'push --force and rebase'",
                      "git rebase --continue", "git rebase --abort", "git restore --staged a.py", "git clean -n", "git stash push -m drop", 'git log --grep="reset --hard"', 'echo "git push --force"',

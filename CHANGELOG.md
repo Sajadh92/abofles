@@ -19,6 +19,8 @@ All notable changes to the plugins in this marketplace.
 - abofles: **rule 4 holds on any agent type.** Fable on a `general-purpose` agent is refused for a Read, Work, Verify or reviewer header, not only on the abofles reader, worker, git, verifier and reviewer types.
 - abofles: **`abofles:skip` agents are logged apart.** They take no budget, owe no receipt and keep no Parallel slot, as the hook already let them through; the memo agent keeps Haiku 5.5 · Low even with `abofles:skip`.
 - abofles: the memo agent's cell is read like any model and effort (`Haiku` / `Low` passes); a prompt that is not text is refused on the model check instead of failing open; the Parallel refusal says `1 background agent is`; the gate answer `unlimited` means off.
+- abofles: **the Git guard sees more history rewrites.** `checkout <commit> <paths>`, `pull --rebase` and `submodule deinit -f` are flagged, and so is a git whose command name comes from a variable or a substitution (`$G push -f`, `$(echo git) push --force`).
+- abofles: `claims.py` refuses an option as another option's value (`--session --branch x`); the git agent keeps the caller's attribution lines over its own environment's.
 
 ## abofles 2.4.0 · abofles-guide 0.7.0 — 2026-11-09
 
