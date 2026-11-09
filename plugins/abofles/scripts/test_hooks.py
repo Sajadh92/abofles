@@ -3331,6 +3331,10 @@ def main():
         check("review: the ledger row carries review=finance, graded as a verifier (PASS)", any(r.get("review") == "finance" and r.get("verdict") == "PASS" and r.get("side") == "Finance" for r in rows_("rv1")))
         out = stop_("rv1", RCPT + "\n- `workflow` → Read ✓ · Work ✓ · Verify ✓ · Finance ✓ · Security skipped: internal tool, no external input · Tester skipped: covered by Verify", active=True)
         check("review gate: skipped reviewers named in the workflow line pass; the task closes", out is None and rst("rv1").get("spawns_since_receipt") == 0 and not rst("rv1").get("review_missing"))
+        sk_ = lambda s: [k for k, w in H.REVIEW_SIDES.items() if re.search(r"\b" + re.escape(w) + H.SKIP_TAIL, s, re.I)]
+        check("review gate: a skip needs its reason, and one reviewer's skip does not skip the one before it on the line",
+              sk_("Finance · Security skipped: internal tool") == ["security"] and sk_("Security skipped") == [] and sk_("QA skipped because no UI changed") == ["qa"]
+              and sk_("Tester skipped — covered by Verify") == ["tester"] and sk_("Security review skipped (no external input)") == ["security"])
         sp("rv1", "Work", "abofles:abofles-worker")
         out = stop_("rv1", RCPT)
         out2 = stop_("rv1", RCPT, active=True)

@@ -6511,6 +6511,11 @@ def reviewed_earlier(cwd, prior, work, topics, now=None, tier=3):
     return passed
 
 
+# `<Tag> skipped: <reason>` in the receipt: the tag, a few words of its own (never past a `·`, `,`, `;` or `|`, so `Finance ✓ · Security skipped`
+# does not skip Finance), `skipped`, then the reason (`:`, a dash, a bracket, because / since / as) — a bare "skipped" names no reason
+SKIP_TAIL = r"\b[^\n·,;|]{0,40}?\bskipped\b\s*(?::|—|–|-|\(|because\b|since\b|as\b)\s*\S"
+
+
 def review_gap(cwd, st, sid, text):
     """What the review gate sees at a receipt: the change's tier, the reviewers it required, the ones that ran, the ones the
     receipt says were skipped, and whether the receipt is refused. None when no Work agent of this task needs reviewers."""
@@ -6542,7 +6547,7 @@ def review_gap(cwd, st, sid, text):
     if not required:
         return None
     done = sorted({r.get("review") for r in rows if r.get("review")})
-    skipped = [k for k, w in REVIEW_SIDES.items() if re.search(r"\b" + re.escape(w) + r"\b[^\n]{0,60}?\bskipped\b", text, re.I)]
+    skipped = [k for k, w in REVIEW_SIDES.items() if re.search(r"\b" + re.escape(w) + SKIP_TAIL, text, re.I)]
     earlier = reviewed_earlier(cwd, spawned[:-n], work, topics, tier=tier) if n else set()
     missing = [x for x in required if x not in done and x not in skipped and x not in earlier]
     mode = review_gate_mode(cwd)
