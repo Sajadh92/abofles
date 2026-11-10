@@ -22,7 +22,7 @@ Two inputs pick the workflow: the **topic** gives the tier, the **intent** (what
 | 🟠 Sensitive (T3) | Read → Analyse → Plan → Work → Verify → Review |
 | 🔴 Critical (T4) | Read → Analyse → Plan → Work → Verify → Review (every reviewer required) |
 
-`Review` = the specialist reviewers of the topic's domain at that tier (table below; `scripts/topic.py find` prints them per topic), started **in parallel after Verify passes**, each with the tier's Verify cell (model · effort · cap) unless `- Review: <Name> / T<tier> = model·effort` overrides it. A reviewer FAIL → a Work agent fixes it → re-run **that reviewer only**. 🟢/🟡: the generic verifier alone.
+`Review` = the specialist reviewers of the topic's domain at that tier (table below; `scripts/topic.py find` prints them per topic), started **in parallel after Verify passes**, each at the Review cell (T1 Haiku·Low, T2 Sonnet·Low, T3 Sonnet·High, T4 Opus·High) with the Verify cap, unless `- Review: <Name> / T<tier> = model·effort` overrides it. A reviewer FAIL → a Work agent fixes it → re-run **that reviewer only**. 🟢/🟡: the generic verifier alone.
 
 **Review gate** (hook, at the receipt): a 🔴 change closed with a required reviewer missing is refused once, naming the missing reviewers; a 🟠 change gets a 🟠 guide item instead. A reviewer you skip on purpose is named in the receipt's `workflow` line — `Security skipped: <reason>` — and the gate lets it pass. `- Review gate = auto | on | warn | off` (auto = this; on = refuse on T3 too; warn = never refuse; off = silent).
 
@@ -42,15 +42,16 @@ Two inputs pick the workflow: the **topic** gives the tier, the **intent** (what
 | ⚡ Perf | `Perf` | `abofles:abofles-perf` | hot paths and complexity, N+1 and round-trips, allocations, caching, benchmark or load evidence before and after | read + run benchmarks |
 | 📊 Data | `Data` | `abofles:abofles-data` | pipeline idempotency and backfills, metric definitions, aggregation correctness, double counting, freshness, data contracts | read + run read-only queries |
 
-Route line of a reviewer: `<emoji> `<Tag>` → **<Topic>** · <Model> · <Effort> · Cap <N> · <Tier>` (the Verify cell). Prompt header: `abofles: <Topic> / <Tag> · T<tier>`. Reply format: the verifier's (STATUS, CONFIDENCE, VERDICT, EVIDENCE, ISSUES, NOTE).
+Route line of a reviewer: `<emoji> `<Tag>` → **<Topic>** · <Model> · <Effort> · Cap <N> · <Tier>` (the Review cell). Prompt header: `abofles: <Topic> / <Tag> · T<tier>`. Reply format: the verifier's (STATUS, CONFIDENCE, VERDICT, EVIDENCE, ISSUES, NOTE).
 
 ## Work specialists
 
 | Specialist | Route tag | Agent | Owns | Tools |
 |---|---|---|---|---|
+| 📋 Scrum | `Scrum` | `abofles:abofles-scrum` | tickets and boards in Jira, ClickUp, Linear, Asana, monday.com, Trello or GitHub Issues: reads tickets for the other sides, refines stories and acceptance criteria, splits epics, estimates, plans sprints, keeps status and PR links in step with the code, standup and sprint reports; writes to the tracker only on the user's quoted ask, else drafts | all tools (the trackers' connectors) |
 | 🌿 Git | `Git` | `abofles:abofles-git` | every git and gh write: branches and worktrees, commits, merges and rebases, conflicts, PRs, tags and releases; claims for multi-session work | read + git/gh via Bash, edit (conflicts) |
 
-A specialist takes the topic's **Work** cell at its tier. Route line: `<emoji> `<Tag>` → **<Topic>** · <Model> · <Effort> · Cap <N> · <Tier>`. Prompt header: `abofles: <Topic> / Git · T<tier>` (`/ Work` with `abofles:abofles-git` is the same cell). Reply format: STATUS, CONFIDENCE, ACTIONS, STATE, CONFLICTS, LEFT. It is not a reviewer: it never trips the review gate, and Fable is refused for it.
+A specialist follows the work up, so it takes the topic's **economy Work cell** at its tier in both matrices (`scripts/topic.py` prints it as `Git/Scrum …`). Route line: `<emoji> `<Tag>` → **<Topic>** · <Model> · <Effort> · Cap <N> · <Tier>`. Prompt header: `abofles: <Topic> / Git · T<tier>` or `/ Scrum · T<tier>` (`/ Work` with the specialist's agent type is the same cell). Reply formats: Git — STATUS, CONFIDENCE, ACTIONS, STATE, CONFLICTS, LEFT; Scrum — STATUS, CONFIDENCE, TRACKER, ACTIONS, DRAFTS, BOARD, LEFT. Neither is a reviewer: they never trip the review gate, and Fable is refused for them. A ticket read for another side (a Judge or a Verifier that needs the acceptance criteria) is a Scrum agent's job when the tracker has a connector; a 🟢 read of one ticket the main session may still fetch itself.
 
 ## Reviewers per domain
 

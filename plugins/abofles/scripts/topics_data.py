@@ -1395,6 +1395,13 @@ DOMAINS = [
             "Release Communication & Customer Announcements | T1 | release announcement, customer email release, in app announcement, what's new post, changelog public",
             "Vendor & Contract Management (SaaS seats, renewals) | T2 | SaaS seats, renewal, vendor contract, license count, subscription management internal, procurement",
         ]),
+        ("Task Management & Trackers", [
+            "Tracker Operations (Jira, ClickUp, Linear, Asana, monday) | T2 | jira, clickup, linear, asana, monday, trello, github issues, create ticket, update ticket, transition, move ticket, assign ticket, ticket status, subtask, comment on ticket",
+            "Sprint Planning, Capacity & Velocity | T2 | sprint planning, plan the sprint, next sprint, capacity, velocity, sprint goal, sprint scope, carry over, commitment",
+            "Backlog Refinement & Epic Breakdown | T2 | backlog grooming, refine backlog, split epic, break down epic, split ticket, stories from epic, duplicate tickets, stale tickets",
+            "Standup, Sprint & Blocker Reports | T1 | standup report, daily standup, sprint report, sprint review, burndown, what is blocked, blockers, board status, what is left in the sprint",
+            "Ticket to Code Traceability (PRs, branches, commits) | T2 | link PR to ticket, ticket key in commit, smart commit, development panel, branch per ticket, release notes from tickets, ticket in review",
+        ]),
     ]),
 
     ("LANG", "Languages, Runtimes & Frameworks", "C#/.NET, Java/Kotlin, Python, JavaScript/TypeScript, Go, Rust, PHP, Ruby, C/C++, Swift, SQL procedural, shells, runtimes, package managers",

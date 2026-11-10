@@ -555,7 +555,8 @@
    "blurb": "MVP, requirements, scoping, estimation, roadmaps, tickets, triage, stakeholders, agile, code review process, policies",
    "areas": [
     "Scope & Requirements",
-    "Process & Collaboration"
+    "Process & Collaboration",
+    "Task Management & Trackers"
    ],
    "reviewers": {
     "3": [
@@ -18098,6 +18099,81 @@
    },
    "n": 1086
   },
+  "Tracker Operations (Jira, ClickUp, Linear, Asana, monday)": {
+   "group": "PROD",
+   "area": "Task Management & Trackers",
+   "tier": 2,
+   "signals": "jira, clickup, linear, asana, monday, trello, github issues, create ticket, update ticket, transition, move ticket, assign ticket, ticket status, subtask, comment on ticket",
+   "reviewers": {
+    "3": [
+     "qa"
+    ],
+    "4": [
+     "qa"
+    ]
+   },
+   "n": 1087
+  },
+  "Sprint Planning, Capacity & Velocity": {
+   "group": "PROD",
+   "area": "Task Management & Trackers",
+   "tier": 2,
+   "signals": "sprint planning, plan the sprint, next sprint, capacity, velocity, sprint goal, sprint scope, carry over, commitment",
+   "reviewers": {
+    "3": [
+     "qa"
+    ],
+    "4": [
+     "qa"
+    ]
+   },
+   "n": 1088
+  },
+  "Backlog Refinement & Epic Breakdown": {
+   "group": "PROD",
+   "area": "Task Management & Trackers",
+   "tier": 2,
+   "signals": "backlog grooming, refine backlog, split epic, break down epic, split ticket, stories from epic, duplicate tickets, stale tickets",
+   "reviewers": {
+    "3": [
+     "qa"
+    ],
+    "4": [
+     "qa"
+    ]
+   },
+   "n": 1089
+  },
+  "Standup, Sprint & Blocker Reports": {
+   "group": "PROD",
+   "area": "Task Management & Trackers",
+   "tier": 1,
+   "signals": "standup report, daily standup, sprint report, sprint review, burndown, what is blocked, blockers, board status, what is left in the sprint",
+   "reviewers": {
+    "3": [
+     "qa"
+    ],
+    "4": [
+     "qa"
+    ]
+   },
+   "n": 1090
+  },
+  "Ticket to Code Traceability (PRs, branches, commits)": {
+   "group": "PROD",
+   "area": "Task Management & Trackers",
+   "tier": 2,
+   "signals": "link PR to ticket, ticket key in commit, smart commit, development panel, branch per ticket, release notes from tickets, ticket in review",
+   "reviewers": {
+    "3": [
+     "qa"
+    ],
+    "4": [
+     "qa"
+    ]
+   },
+   "n": 1091
+  },
   "C# & .NET Runtime (language features, async, LINQ)": {
    "group": "LANG",
    "area": "Languages",
@@ -18112,7 +18188,7 @@
      "security"
     ]
    },
-   "n": 1087
+   "n": 1092
   },
   "Java & JVM (language, generics, streams, GC)": {
    "group": "LANG",
@@ -18128,7 +18204,7 @@
      "security"
     ]
    },
-   "n": 1088
+   "n": 1093
   },
   "Kotlin (language, coroutines)": {
    "group": "LANG",
@@ -18144,7 +18220,7 @@
      "security"
     ]
    },
-   "n": 1089
+   "n": 1094
   },
   "Python (language, typing, async, packaging)": {
    "group": "LANG",
@@ -18160,7 +18236,7 @@
      "security"
     ]
    },
-   "n": 1090
+   "n": 1095
   },
   "JavaScript (language, async, modules, Node runtime)": {
    "group": "LANG",
@@ -18176,7 +18252,7 @@
      "security"
     ]
    },
-   "n": 1091
+   "n": 1096
   },
   "TypeScript (types, generics, strictness, tsconfig)": {
    "group": "LANG",
@@ -18192,7 +18268,7 @@
      "security"
     ]
    },
-   "n": 1092
+   "n": 1097
   },
   "Go (language, goroutines, modules, errors)": {
    "group": "LANG",
@@ -18208,7 +18284,7 @@
      "security"
     ]
    },
-   "n": 1093
+   "n": 1098
   },
   "Rust (ownership, async, cargo)": {
    "group": "LANG",
@@ -18224,7 +18300,7 @@
      "security"
     ]
    },
-   "n": 1094
+   "n": 1099
   },
   "PHP (language, Composer, versions)": {
    "group": "LANG",
@@ -18240,7 +18316,7 @@
      "security"
     ]
    },
-   "n": 1095
+   "n": 1100
   },
   "Ruby (language, gems, metaprogramming)": {
    "group": "LANG",
@@ -18256,7 +18332,7 @@
      "security"
     ]
    },
-   "n": 1096
+   "n": 1101
   },
   "C & C++ (memory, build, UB)": {
    "group": "LANG",
@@ -18272,7 +18348,7 @@
      "security"
     ]
    },
-   "n": 1097
+   "n": 1102
   },
   "Swift & Objective-C (language)": {
    "group": "LANG",
@@ -18288,7 +18364,7 @@
      "security"
     ]
    },
-   "n": 1098
+   "n": 1103
   },
   "Dart, Elixir, Scala & Other Languages": {
    "group": "LANG",
@@ -18304,7 +18380,7 @@
      "security"
     ]
    },
-   "n": 1099
+   "n": 1104
   },
   "SQL Procedural Languages (PL/pgSQL, T-SQL, PL/SQL code)": {
    "group": "LANG",
@@ -18320,7 +18396,7 @@
      "security"
     ]
    },
-   "n": 1100
+   "n": 1105
   },
   "Shell, Bash & PowerShell (language)": {
    "group": "LANG",
@@ -18336,7 +18412,7 @@
      "security"
     ]
    },
-   "n": 1101
+   "n": 1106
   },
   "Regular Expressions & Text Parsing": {
    "group": "LANG",
@@ -18352,7 +18428,7 @@
      "security"
     ]
    },
-   "n": 1102
+   "n": 1107
   },
   "Date, Time & Timezone Libraries": {
    "group": "LANG",
@@ -18368,7 +18444,7 @@
      "security"
     ]
    },
-   "n": 1103
+   "n": 1108
   },
   "Numeric Types, Floating Point & Big Numbers": {
    "group": "LANG",
@@ -18384,7 +18460,7 @@
      "security"
     ]
    },
-   "n": 1104
+   "n": 1109
   },
   "Strings, Encoding & Unicode": {
    "group": "LANG",
@@ -18400,7 +18476,7 @@
      "security"
     ]
    },
-   "n": 1105
+   "n": 1110
   },
   "Collections, Iterators & Data Structures": {
    "group": "LANG",
@@ -18416,7 +18492,7 @@
      "security"
     ]
    },
-   "n": 1106
+   "n": 1111
   },
   "Async, Concurrency & Parallelism Primitives": {
    "group": "LANG",
@@ -18432,7 +18508,7 @@
      "security"
     ]
    },
-   "n": 1107
+   "n": 1112
   },
   "Memory Management & Garbage Collection (runtime)": {
    "group": "LANG",
@@ -18448,7 +18524,7 @@
      "security"
     ]
    },
-   "n": 1108
+   "n": 1113
   },
   "Serialization Libraries (JSON, XML, Protobuf, MessagePack)": {
    "group": "LANG",
@@ -18464,7 +18540,7 @@
      "security"
     ]
    },
-   "n": 1109
+   "n": 1114
   },
   "Reflection, Metaprogramming & Dynamic Code": {
    "group": "LANG",
@@ -18480,7 +18556,7 @@
      "security"
     ]
    },
-   "n": 1110
+   "n": 1115
   },
   "Interop & FFI (native libraries, P/Invoke, WASM)": {
    "group": "LANG",
@@ -18496,7 +18572,7 @@
      "security"
     ]
    },
-   "n": 1111
+   "n": 1116
   },
   "Runtime Versions, EOL & Upgrade Paths": {
    "group": "LANG",
@@ -18512,7 +18588,7 @@
      "security"
     ]
    },
-   "n": 1112
+   "n": 1117
   },
   "Package Managers & Lockfiles (npm, pnpm, NuGet, pip, Maven, Composer)": {
    "group": "LANG",
@@ -18528,7 +18604,7 @@
      "security"
     ]
    },
-   "n": 1113
+   "n": 1118
   },
   "Dependency Resolution, Conflicts & Transitive Deps": {
    "group": "LANG",
@@ -18544,7 +18620,7 @@
      "security"
     ]
    },
-   "n": 1114
+   "n": 1119
   },
   "Monorepo Package Management & Workspaces": {
    "group": "LANG",
@@ -18560,7 +18636,7 @@
      "security"
     ]
    },
-   "n": 1115
+   "n": 1120
   },
   "Compilers, Transpilers & Build Targets": {
    "group": "LANG",
@@ -18576,7 +18652,7 @@
      "security"
     ]
    },
-   "n": 1116
+   "n": 1121
   },
   "Linters, Formatters & Static Analyzers per Language": {
    "group": "LANG",
@@ -18592,7 +18668,7 @@
      "security"
     ]
    },
-   "n": 1117
+   "n": 1122
   },
   "Language Server, IDE Tooling & Debuggers": {
    "group": "LANG",
@@ -18608,7 +18684,7 @@
      "security"
     ]
    },
-   "n": 1118
+   "n": 1123
   },
   "Scripting, CLI Tools & Automation Scripts": {
    "group": "LANG",
@@ -18624,7 +18700,7 @@
      "security"
     ]
    },
-   "n": 1119
+   "n": 1124
   },
   "Cross-platform Runtime Behaviour (paths, line endings, case)": {
    "group": "LANG",
@@ -18640,7 +18716,7 @@
      "security"
     ]
    },
-   "n": 1120
+   "n": 1125
   },
   "Native Extensions & Platform-specific Builds": {
    "group": "LANG",
@@ -18656,7 +18732,7 @@
      "security"
     ]
    },
-   "n": 1121
+   "n": 1126
   },
   "Standard Library vs Third-party Choices": {
    "group": "LANG",
@@ -18672,7 +18748,7 @@
      "security"
     ]
    },
-   "n": 1122
+   "n": 1127
   },
   "WebAssembly & Portable Runtimes": {
    "group": "LANG",
@@ -18688,7 +18764,7 @@
      "security"
     ]
    },
-   "n": 1123
+   "n": 1128
   },
   "Embedded, IoT & Firmware": {
    "group": "LANG",
@@ -18704,7 +18780,7 @@
      "security"
     ]
    },
-   "n": 1124
+   "n": 1129
   },
   "Game Development Engines & Loops (Unity, Godot, Unreal)": {
    "group": "LANG",
@@ -18720,7 +18796,7 @@
      "security"
     ]
    },
-   "n": 1125
+   "n": 1130
   },
   "Desktop GUI Frameworks (WPF, WinUI, Qt, GTK, Avalonia)": {
    "group": "LANG",
@@ -18736,7 +18812,7 @@
      "security"
     ]
    },
-   "n": 1126
+   "n": 1131
   },
   "Low-code, No-code & Spreadsheet Logic (Power Apps, AppSheet, Excel formulas)": {
    "group": "LANG",
@@ -18752,7 +18828,7 @@
      "security"
     ]
    },
-   "n": 1127
+   "n": 1132
   },
   "Blockchain & Smart Contracts": {
    "group": "LANG",
@@ -18771,10 +18847,40 @@
      "finance"
     ]
    },
-   "n": 1128
+   "n": 1133
   }
  },
  "tiers": {
+  "1": {
+   "Read": "haiku·low",
+   "Analyse": "opus·low",
+   "Plan": "opus·low",
+   "Work": "opus·low",
+   "Verify": "haiku·low"
+  },
+  "2": {
+   "Read": "haiku·low",
+   "Analyse": "opus·medium",
+   "Plan": "opus·medium",
+   "Work": "opus·medium",
+   "Verify": "sonnet·low"
+  },
+  "3": {
+   "Read": "haiku·medium",
+   "Analyse": "opus·medium",
+   "Plan": "opus·medium",
+   "Work": "opus·high",
+   "Verify": "sonnet·high"
+  },
+  "4": {
+   "Read": "sonnet·low",
+   "Analyse": "opus·high",
+   "Plan": "opus·xhigh",
+   "Work": "opus·xhigh",
+   "Verify": "sonnet·xhigh"
+  }
+ },
+ "tiers_economy": {
   "1": {
    "Read": "haiku·low",
    "Analyse": "sonnet·low",
@@ -18804,6 +18910,11 @@
    "Verify": "opus·high"
   }
  },
+ "quality_sides": [
+  "Analyse",
+  "Plan",
+  "Work"
+ ],
  "caps": {
   "1": {
    "Read": 20,

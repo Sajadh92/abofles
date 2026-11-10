@@ -14,7 +14,7 @@ Goal: correct work, fast, fewest tokens. The usual waste is a subagent inheritin
 ## Hard rules
 
 1. Every Agent call passes **both** `model` and `effort`. Never inherit. This skill is the explicit instruction that permits setting `effort`.
-2. Print one route line before each agent, plain markdown: <Side emoji> `<Side>` → **<Topic>** · <Model> · <Effort> · Cap <N> · <Tier>[ · <Modifier>]. Emoji: 🔍 Read · 🧠 Analyse · 📐 Plan · 🛠️ Work · 🌿 Git (Work cell) · ✅ Verify · ⚖️ Judge · 💬 Explain · 🗂️ Memo (the memo agent, started only on the hook's own memo-upkeep line or `/abofles:memo`); reviewers (Verify cell): 🛡️ Security · 💰 Finance · 📜 Compliance · 🧪 Tester · 🎯 QA · 🎨 UIUX · 🧹 Clean · 🗄️ DBA · ⚙️ Ops · ⚡ Perf · 📊 Data. Tier = the word with its dot, never the code: 🟢 Minor (T1) · 🟡 Normal (T2) · 🟠 Sensitive (T3) · 🔴 Critical (T4); `T#` stays in prompt headers. Side = full word; topic = matrix name exactly, Title Case. Modifiers, each after its own ` · `: `Scope −1`, `User: <what>`, `User Cap`, `Project Override`, `Merged: N Questions`, `Parallel`, `Fallback: <Model> Unavailable`. Several route lines: bullets.
+2. Print one route line before each agent, plain markdown: <Side emoji> `<Side>` → **<Topic>** · <Model> · <Effort> · Cap <N> · <Tier>[ · <Modifier>]. Emoji: 🔍 Read · 🧠 Analyse · 📐 Plan · 🛠️ Work · 🌿 Git · 📋 Scrum (Git cell) · ✅ Verify · ⚖️ Judge · 💬 Explain · 🗂️ Memo (the memo agent, started only on the hook's own memo-upkeep line or `/abofles:memo`); reviewers (Review cell): 🛡️ Security · 💰 Finance · 📜 Compliance · 🧪 Tester · 🎯 QA · 🎨 UIUX · 🧹 Clean · 🗄️ DBA · ⚙️ Ops · ⚡ Perf · 📊 Data. Tier = the word with its dot, never the code: 🟢 Minor (T1) · 🟡 Normal (T2) · 🟠 Sensitive (T3) · 🔴 Critical (T4); `T#` stays in prompt headers. Side = full word; topic = matrix name exactly, Title Case. Modifiers, each after its own ` · `: `Scope −1`, `User: <what>`, `User Cap`, `Project Override`, `Merged: N Questions`, `Parallel`, `Fallback: <Model> Unavailable`. Several route lines: bullets.
 3. One subagent = one side (Read → Analyse → Plan → Work → Verify, separate small agents; Judge and Explain are the question gate's). Results flow forward as short summaries.
 4. `fable` only on Analyse and Plan. Never for Read, Work or Verify.
 5. `max` effort only through escalation, never as a start value.
@@ -59,10 +59,11 @@ The hook records the answer (`agents: …`) — continue, never re-ask; over an 
 | **Plan** | plans or designs before code changes | `abofles:abofles-planner` |
 | **Work** | writes or edits code, tests, docs, configs | `abofles:abofles-worker` |
 | **Verify** | runs tests, reviews the diff, checks docs vs code | `abofles:abofles-verifier` |
-| **Git** (Work cell) | owns every git and gh write: branches and worktrees, commits, merges and rebases, conflicts, PRs, tags and releases | `abofles:abofles-git` |
-| **Review** (Verify cell) | one specialist per concern, after Verify passes, in parallel: `Security` · `Finance` · `Compliance` · `Tester` (the only one that edits — test files) · `QA` · `UIUX` (uses the Better Design and UX Pilot connectors when connected) · `Clean` · `DBA` · `Ops` · `Perf` · `Data` | `abofles:abofles-security` · `-finance` · `-compliance` · `-tester` · `-qa` · `-uiux` · `-cleancoder` · `-dba` · `-ops` · `-perf` · `-data` |
+| **Git** (Git cell) | owns every git and gh write: branches and worktrees, commits, merges and rebases, conflicts, PRs, tags and releases | `abofles:abofles-git` |
+| **Scrum** (Git cell) | scrum master and task manager: tickets and boards in Jira, ClickUp, Linear, Asana, monday.com, Trello, GitHub Issues — refines stories and acceptance criteria, splits epics, estimates, plans sprints, keeps status and PR links in step with the code, standup and sprint reports; writes to a tracker only on the user's quoted ask, else drafts | `abofles:abofles-scrum` |
+| **Review** (Review cell) | one specialist per concern, after Verify passes, in parallel: `Security` · `Finance` · `Compliance` · `Tester` (the only one that edits — test files) · `QA` · `UIUX` (uses the Better Design and UX Pilot connectors when connected) · `Clean` · `DBA` · `Ops` · `Perf` · `Data` | `abofles:abofles-security` · `-finance` · `-compliance` · `-tester` · `-qa` · `-uiux` · `-cleancoder` · `-dba` · `-ops` · `-perf` · `-data` |
 
-Every abofles agent opens with `STATUS: done|partial|blocked` and `CONFIDENCE: high|medium|low` (feeds Step 4); its file holds the reply format. **The cell picks the model, not the agent type**: a read `abofles-reader` cannot do (Jira connector, project agent) still takes the Read cell — `general-purpose` at `haiku·low`.
+Every abofles agent opens with `STATUS: done|partial|blocked` and `CONFIDENCE: high|medium|low` (feeds Step 4); its file holds the reply format. **The cell picks the model, not the agent type**: a ticket read (Jira, ClickUp, Linear… through a connector) takes the Read cell with `abofles:abofles-scrum`; another read `abofles-reader` cannot do (a project agent) still takes the Read cell — `general-purpose` at `haiku·low`.
 
 ## Step 1½ — Find the workflow
 
@@ -76,7 +77,7 @@ Two inputs: the topic's **tier** (Step 2) and the ask's **intent**. Print one wo
 | `change` 🟢 / 🟡 | add, fix, implement, refactor | Work → Verify / Read → Work → Verify |
 | `change` 🟠 / 🔴 | same | Read → Analyse → Plan → Work → Verify → Review |
 
-`Review` = the topic domain's specialist reviewers at that tier — the lookup prints them per topic (`reviewers T3 … · T4 …`; table in [references/workflow.md](references/workflow.md): Money → Finance; Security → Security; Databases → DBA; Cache/Search/Messaging and Performance → Perf; DevOps, Cloud, Edge, Servers, Observability → Ops; Data & Analytics → Data; Frontend/UX/Mobile → UIUX; Business, APIs, Integrations, AI → QA; Testing/Debugging → Tester; Code Health → Clean; PII and audit topics add Compliance), started **in parallel after Verify passes**, each at the tier's Verify cell with the header `abofles: <Topic> / <Tag> · T<tier>`. A reviewer FAIL → Work fixes → re-run that reviewer only. A step you drop (rule 7, or the ask makes it pointless) is fine — say so in the receipt's `workflow` line. On a 🔴 change the Plan's open decisions go through the Judge before Work starts. **Review gate** (hook): a 🔴 change closed without a required reviewer is refused once, naming them; 🟠 gets a 🟠 guide item; `Security skipped: <reason>` in the `workflow` line passes it. Overrides: `Workflow: <Domain|Topic> = …`, `Reviewers: <Domain|Topic> = …`, `Review: <Tag> / T<tier> = cell`, `Review gate = auto | on | warn | off` ([references/overrides.md](references/overrides.md)).
+`Review` = the topic domain's specialist reviewers at that tier — the lookup prints them per topic (`reviewers T3 … · T4 …`; table in [references/workflow.md](references/workflow.md): Money → Finance; Security → Security; Databases → DBA; Cache/Search/Messaging and Performance → Perf; DevOps, Cloud, Edge, Servers, Observability → Ops; Data & Analytics → Data; Frontend/UX/Mobile → UIUX; Business, APIs, Integrations, AI → QA; Testing/Debugging → Tester; Code Health → Clean; PII and audit topics add Compliance), started **in parallel after Verify passes**, each at the Review cell (T1 Haiku·Low, T2 Sonnet·Low, T3 Sonnet·High, T4 Opus·High) with the header `abofles: <Topic> / <Tag> · T<tier>`. A reviewer FAIL → Work fixes → re-run that reviewer only. A step you drop (rule 7, or the ask makes it pointless) is fine — say so in the receipt's `workflow` line. On a 🔴 change the Plan's open decisions go through the Judge before Work starts. **Review gate** (hook): a 🔴 change closed without a required reviewer is refused once, naming them; 🟠 gets a 🟠 guide item; `Security skipped: <reason>` in the `workflow` line passes it. Overrides: `Workflow: <Domain|Topic> = …`, `Reviewers: <Domain|Topic> = …`, `Review: <Tag> / T<tier> = cell`, `Review gate = auto | on | warn | off` ([references/overrides.md](references/overrides.md)).
 
 ## Step 2 — Find the topic and its tier
 
@@ -88,14 +89,16 @@ bash "<plugin>/scripts/py" "<plugin>/scripts/topic.py" find "<the ask, 3–8 con
 
 Copy the exact command from the SessionStart note `abofles: topic lookup = …` (it names the plugin path; `scripts/py` picks python3, python or py -3, so it also works on Windows). Run it once per task before the workflow line; the call is free of the direct-read guard. Pick the match that names the *work*, not the code it touches; several unrelated topics → the highest tier, or one agent per independent topic. `topic.py show <#|name>` prints one topic's header template; `domains` the domain table ([references/topics.md](references/topics.md)); `list <CODE>` a domain. Project overrides are already applied in the output (`· Project Override`). No match → fast tier test below + the closest domain; name the nearest topic in the route line and tell the user the topic is new. A `💡 suggest` line names a package or tool fit for the topic and the project's stack (e.g. DynamicWhere.ex on .NET dynamic filtering): put it in the Plan/Work prompt and tell the user in one line; never install it unasked.
 
-Tier = how much a mistake costs. Cell = `model·effort / reply cap` (max content lines, status header excluded).
+Tier = how much a mistake costs. Cell = `model·effort / reply cap` (max content lines, status header excluded). Opus writes, plans and analyses; Haiku and Sonnet read and verify (`Matrix = quality`, the default — `- Matrix = economy` brings back the older, cheaper cells where Sonnet writes most code; the lookup prints the project's).
 
 | Tier | A mistake means... | Read | Analyse | Plan | Work | Verify |
 |---|---|---|---|---|---|---|
-| 🟢 T1 Minor | cosmetic, local, instantly reversible | haiku·low / 20 | sonnet·low / 10 | sonnet·low / 25 | haiku·medium / 10 | haiku·low / 10 |
-| 🟡 T2 Normal | a test catches it; dev-only; a redeploy reverts it | haiku·low / 40 | sonnet·medium / 20 | sonnet·medium / 50 | sonnet·medium / 20 | sonnet·low / 20 |
-| 🟠 T3 Sensitive | wrong prod behaviour, business rule, shared infra, SLO | haiku·medium / 60 | opus·medium / 35 | opus·medium / 90 | sonnet·high / 30 | sonnet·high / 35 |
-| 🔴 T4 Critical | money, auth, secrets, PII, data loss, prod infra, irreversible | sonnet·low / 100 | opus·high / 50 | opus·xhigh / 150 | opus·high / 40 | opus·high / 60 |
+| 🟢 T1 Minor | cosmetic, local, instantly reversible | haiku·low / 20 | opus·low / 10 | opus·low / 25 | opus·low / 10 | haiku·low / 10 |
+| 🟡 T2 Normal | a test catches it; dev-only; a redeploy reverts it | haiku·low / 40 | opus·medium / 20 | opus·medium / 50 | opus·medium / 20 | sonnet·low / 20 |
+| 🟠 T3 Sensitive | wrong prod behaviour, business rule, shared infra, SLO | haiku·medium / 60 | opus·medium / 35 | opus·medium / 90 | opus·high / 30 | sonnet·high / 35 |
+| 🔴 T4 Critical | money, auth, secrets, PII, data loss, prod infra, irreversible | sonnet·low / 100 | opus·high / 50 | opus·xhigh / 150 | opus·xhigh / 40 | sonnet·xhigh / 60 |
+
+Specialist reviewers take the **Review cell** (T1 haiku·low · T2 sonnet·low · T3 sonnet·high · T4 opus·high); the Git agent the **Git cell** the lookup prints (the economy Work cell).
 
 **Tier bumps** (after the lookup, say so in the route line as ` · Prod +1` / ` · Sandbox −1`): the ask names production, live customers, real money or real personal data → +1 (max T4); the ask is read-only, a dry run, localhost-only or a sandbox → −1 (floor T1; Money, Security and Privacy topics never below T3). **Fast tier test** (no match): money, auth, secrets, personal data, data loss, concurrency → T4; production behaviour or business rule → T3; ordinary code or tests → T2; text, formatting, exploration → T1.
 
@@ -118,7 +121,7 @@ Escalate on `STATUS: partial|blocked`, `CONFIDENCE: low`, or verifier `VERDICT: 
 2. Next model at `medium`: haiku → sonnet → opus → fable (fable only Analyse/Plan; Work/Verify/Read stop at `opus·xhigh`).
 3. `max` only for T4 after `opus·xhigh` (or `fable·xhigh` on Analyse/Plan) failed — opus·max for T4 Work/Verify. No step left: stop and report (the 🟡 guide item says so).
 
-Stop after 2 escalations per subtask; report what failed. Never re-run at the same setting.
+Stop after 2 escalations per subtask; report what failed. Never re-run at the same setting. **Loop guard** (hook, `Loop guard = 3`): the 3rd FAIL of one check on one topic, or the 3rd Judge or Explainer with no question asked, since the user last answered, refuses the next agent (a reader still runs): ask the user — the question gate lets that one through with no Judge — or end the turn with a short report.
 
 After a verifier FAIL, re-verify only the failed criterion: [references/agent-details.md](references/agent-details.md).
 
@@ -127,7 +130,7 @@ After a verifier FAIL, re-verify only the failed criterion: [references/agent-de
 - Self-contained (goal, exact files, constraints, "done"): the subagent has none of your context.
 - First line: `abofles: <Topic> / <Side> · T<tier>` (side as a full word: `Read`, `Analyse`, `Plan`, `Work`, `Verify`, `Judge`, `Explain`). Last line: `Line cap: N`.
 - Read: a precise question; working tree only, never `.worktrees/`, `.claude/worktrees/`, `node_modules/`, `bin/`, `obj/`, `vendor/` unless named. Plan: files in scope, not to touch, out of scope. Work: plan or findings as a short list. Verify: criteria and the command.
-- Judge/Verifier needing a ticket (no Jira access): fetch it yourself (first two fetch-by-key reads per task are free) or via the Read agent, then paste summary, acceptance criteria and status.
+- Judge/Verifier needing a ticket (no Jira access): fetch it yourself (first two fetch-by-key reads per task are free) or via the Scrum agent at the Read cell, then paste summary, acceptance criteria and status. A tracker write (create, edit, move, assign, comment, link) goes through `abofles:abofles-scrum` with the user's exact words quoted; without them it returns DRAFTS for you to ask about.
 
 ## Step 6 — Progress line, receipt, gates, memo
 

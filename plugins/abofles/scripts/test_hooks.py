@@ -3343,6 +3343,69 @@ def main():
         check("review gate: the refusal is spent after one Stop; the task closes and the guide shows the missing reviewers",
               (out or {}).get("decision") == "block" and out2 is None and rst("rv1").get("spawns_since_receipt") == 0 and rst("rv1").get("review_missing", {}).get("names") == ["finance", "security", "tester"]
               and any(i.get("id") == "review" and "Finance, Security, Tester" in i.get("text", "") for i in (rst("rv1").get("guide") or {}).get("items") or []))
+        # 2.6: one refusal per open task — a receipt recorded at each background step (memo.py: never stop_active) was refused at every step
+        run("start", {"session_id": "rv1b", "cwd": str(P), "transcript_path": str(trr)}, led3)
+        sp("rv1b", "Work", "abofles:abofles-worker")
+        o1, o2 = stop_("rv1b", RCPT), stop_("rv1b", RCPT)
+        check("review gate: a second receipt of the same open task is not refused again; it closes with the guide item",
+              (o1 or {}).get("decision") == "block" and o2 is None and rst("rv1b").get("spawns_since_receipt") == 0 and rst("rv1b").get("review_missing", {}).get("names") == ["finance", "security", "tester"])
+        sp("rv1b", "Work", "abofles:abofles-worker")
+        check("review gate: ... the next task of the same topic is refused once again", (stop_("rv1b", RCPT) or {}).get("decision") == "block")
+        check("review gate: the refusal says the reviewers start once Verify has passed", "once Verify has passed" in R.review_gate_text({"missing": ["security"], "tier": 4, "topics": ["Payments & Gateway Integration"]}, "Opus 5.5 · High"))
+        # 2.6: the loop guard — a fix loop or a gate loop with no word from the user stops and the user is asked
+        FAILR = "STATUS: done\nCONFIDENCE: high\nVERDICT: FAIL\nEVIDENCE:\n- authz — FAIL — src/a.cs:1\nISSUES:\n- src/a.cs:1 — broken — fix\nNOTE: none"
+        def pre_(sid_, side, stype, model="opus", effort="high", topic="Payments & Gateway Integration", tier=4):
+            return run("pre", dict(agent(model, effort, stype, prompt=f"abofles: {topic} / {side} · T{tier}\nq\nLine cap: 40", cwd=str(P)), session_id=sid_, transcript_path=str(trr)), led3)
+        def ask_(sid_, q="What next?"):
+            return run("qgate", {"session_id": sid_, "cwd": str(P), "tool_name": "AskUserQuestion", "tool_input": {"questions": [{"question": q, "options": [{"label": "A"}, {"label": "B"}]}]}}, led3)
+        run("start", {"session_id": "lp1", "cwd": str(P), "transcript_path": str(trr)}, led3)
+        json.dump(dict(rst("lp1"), gate="off"), open(Path(rh, "st", "lp1.json"), "w"))
+        for _ in range(3):
+            sp("lp1", "Work", "abofles:abofles-worker"); sp("lp1", "Verify", "abofles:abofles-verifier", model="sonnet", effort="xhigh", resp=FAILR)
+        d_ = pre_("lp1", "Work", "abofles:abofles-worker")
+        check("loop guard: the 3rd FAIL of Verify on one topic refuses the next agent and says to ask the user",
+              "loop guard" in reason(d_) and "Verify on Payments & Gateway Integration FAILed 3 times" in reason(d_) and "AskUserQuestion" in reason(d_) and rst("lp1").get("loop_stop"))
+        check("loop guard: ... a reader still runs", "loop guard" not in reason(pre_("lp1", "Read", "abofles:abofles-reader", model="sonnet", effort="low")))
+        check("loop guard: ... a Judge waits too (the question goes to the user without one)", "loop guard" in reason(pre_("lp1", "Judge", "abofles:abofles-judge", model="opus", effort="medium")))
+        check("loop guard: ... the question goes through with no Judge, and the counts start over", ask_("lp1") is None and not rst("lp1").get("loop") and "loop guard" not in reason(pre_("lp1", "Work", "abofles:abofles-worker")))
+        run("start", {"session_id": "lp2", "cwd": str(P), "transcript_path": str(trr)}, led3)
+        json.dump(dict(rst("lp2"), gate="off"), open(Path(rh, "st", "lp2.json"), "w"))
+        for r_ in (FAILR, FAILR, VOK, FAILR, FAILR):
+            sp("lp2", "Verify", "abofles:abofles-verifier", model="sonnet", effort="xhigh", resp=r_)
+        sp("lp2", "Security", "abofles:abofles-security", resp=FAILR)
+        check("loop guard: a PASS ends that check's loop, and another check's FAIL counts apart", "loop guard" not in reason(pre_("lp2", "Work", "abofles:abofles-worker")) and rst("lp2")["loop"]["fails"] == {"Verify on Payments & Gateway Integration": 2, "Security on Payments & Gateway Integration": 1})
+        sp("lp2", "Verify", "abofles:abofles-verifier", model="sonnet", effort="xhigh", resp=FAILR)
+        run("prompt", {"session_id": "lp2", "cwd": str(P), "prompt": "try the other lock order"}, led3)
+        check("loop guard: a prompt of the user's starts the counts over", "loop guard" not in reason(pre_("lp2", "Work", "abofles:abofles-worker")) and not rst("lp2").get("loop"))
+        run("start", {"session_id": "lp3", "cwd": str(P), "transcript_path": str(trr)}, led3)
+        json.dump(dict(rst("lp3"), gate="off"), open(Path(rh, "st", "lp3.json"), "w"))
+        ANSJ = "STATUS: done\nCONFIDENCE: high\nVERDICT: ANSWERED\nQUESTION: q\nANSWER: a\nEVIDENCE:\n- src/a.cs:1 — x"
+        jr = []
+        for i_ in range(4):
+            jd = dict(agent("opus", "medium", "abofles:abofles-judge", prompt=f"abofles: Payments & Gateway Integration / Judge · T4\nq{i_}\nLine cap: 40", cwd=str(P)), session_id="lp3", transcript_path=str(trr))
+            jr.append(reason(run("pre", jd, led3))); run("post", dict(jd, tool_response={"status": "completed", "content": [{"type": "text", "text": ANSJ}]}), led3)
+        check("loop guard: 3 Judges with no question asked — the 4th waits and the next question goes straight to the user",
+              all("loop guard" not in x for x in jr[:3]) and "3 Judges ran and no question reached the user" in jr[3] and ask_("lp3", "Which lock order?") is None)
+        Path(P, "CLAUDE.md").write_text("## abofles overrides\n- Loop guard = off\n")
+        run("start", {"session_id": "lp4", "cwd": str(P), "transcript_path": str(trr)}, led3)
+        json.dump(dict(rst("lp4"), gate="off"), open(Path(rh, "st", "lp4.json"), "w"))
+        for _ in range(4):
+            sp("lp4", "Verify", "abofles:abofles-verifier", model="sonnet", effort="xhigh", resp=FAILR)
+        check("loop guard: Loop guard = off never stops", "loop guard" not in reason(pre_("lp4", "Work", "abofles:abofles-worker")) and R.loop_limit(str(P)) == 0)
+        Path(P, "CLAUDE.md").write_text("## abofles overrides\n- Loop guard = 5  # long fix loops ok\n")
+        check("loop guard: N with a note reads as N; unset = 3", R.loop_limit(str(P)) == 5 and R.override_known("Loop guard", "5  # x") and R.override_known("Loop guard", "off"))
+        Path(P, "CLAUDE.md").unlink()
+        check("loop guard: unset = 3", R.loop_limit(str(P)) == 3)
+        # 2.6: the Scrum agent — a follow-up side like Git
+        check("scrum: parse_header and side_of know the Scrum side", R.parse_header("abofles: Sprint Planning, Capacity & Velocity / Scrum · T2")[1] == "Scrum" and R.side_of("abofles:abofles-scrum") == ("scrum", "Scrum"))
+        check("scrum: fable is refused for the Scrum agent", "fable is only for" in reason(run("pre", dict(agent("fable", "medium", "abofles:abofles-scrum", prompt="abofles: Sprint Planning, Capacity & Velocity / Scrum · T2\nq", cwd=str(P)), session_id="sc0"), led3)))
+        run("start", {"session_id": "sc1", "cwd": str(P), "transcript_path": str(trr)}, led3)
+        json.dump(dict(rst("sc1"), gate="off"), open(Path(rh, "st", "sc1.json"), "w"))
+        SOK = "STATUS: done\nCONFIDENCE: high\nTRACKER: Jira · project DCMP\nACTIONS:\n- DCMP-1 — read: In Progress\nLEFT: none"
+        sp("sc1", "Scrum", "abofles:abofles-scrum", model="sonnet", effort="high", resp=SOK)
+        check("scrum: its row is side Scrum (not Work: it never trips the review gate)", any(r.get("side") == "Scrum" and r.get("status") == "done" for r in rows_("sc1")) and stop_("sc1", RCPT) is None)
+        nt_ = R.topic_note({"prompt": "abofles: Sprint Planning, Capacity & Velocity / Scrum · T2\nq", "model": "opus", "effort": "medium"}, str(P), "sc1")
+        check("scrum: an Opus Scrum agent on a T2 topic is over its cell (the economy Work cell, Sonnet · Medium)", bool(nt_) and "sonnet·medium" in nt_)
         sp("rv1", "Work", "abofles:abofles-worker")
         check("review gate: the next task's first agent clears the item", not rst("rv1").get("review_missing"))
         _now = 1_000_000
@@ -3630,11 +3693,25 @@ def main():
         check("lookup: cloudflare workers -> the Cloudflare Workers topic", "Cloudflare Workers" in HT.topic_matches("cloudflare workers kv", wf, 1)[0][1])
         check("lookup: otp expiry -> an OTP topic in SEC", (lambda r: r and "OTP" in r[0][1] and r[0][2]["group"] == "SEC")(HT.topic_matches("otp code expiry", wf, 1)))
         check("lookup: gibberish -> no match", HT.topic_matches("zzqx vvbbnn", wf, 3) == [])
-        check("lookup: cells = tier base unless the topic overrides", HT.topic_cells(wf["topics"]["Unit Test"], 2, wf)["Work"] == ("sonnet·medium", 20, "base") and HT.topic_cells(wf["topics"]["Financial & Amount Calculations"], 4, wf)["Analyse"] == ("fable·medium", 50, "topic"))
+        check("lookup: cells = tier base unless the topic overrides", HT.topic_cells(wf["topics"]["Unit Test"], 2, wf)["Work"] == ("opus·medium", 20, "base") and HT.topic_cells(wf["topics"]["Financial & Amount Calculations"], 4, wf)["Analyse"] == ("fable·medium", 50, "topic"))
+        sk = wf["topics"]["Secrets, Keys & Config Security"]
+        check("matrix quality (default): Opus writes at every tier, Sonnet/Haiku verify, the specialist reviewers keep Opus at T4",
+              [wf["tiers"][t]["Work"] for t in "1234"] == ["opus·low", "opus·medium", "opus·high", "opus·xhigh"] and [wf["tiers"][t]["Verify"] for t in "1234"] == ["haiku·low", "sonnet·low", "sonnet·high", "sonnet·xhigh"]
+              and HT.verify_cell(4) == ("opus", "high") and all(wf["tiers"][t][x].startswith(("opus", "fable")) for t in "1234" for x in ("Analyse", "Plan", "Work")))
+        check("matrix quality: a topic override below Opus on Work is skipped, one up (Fable Plan) stays",
+              HT.topic_cells(sk, 4, wf)["Work"] == ("opus·xhigh", 40, "base") and HT.topic_cells(wf["topics"]["Architecture, Design Pattern & Stack Used"], 4, wf)["Plan"][0] == "fable·medium")
+        Path(cwd, "CLAUDE.md").write_text("## abofles overrides\n- Matrix = economy  # cheaper\n")
+        check("matrix economy: the cells before 2.6 and every topic override apply",
+              HT.matrix_mode(cwd) == "economy" and HT.topic_cells(wf["topics"]["Unit Test"], 2, wf, cwd)["Work"] == ("sonnet·medium", 20, "base") and HT.topic_cells(sk, 4, wf, cwd)["Work"] == ("sonnet·high", 40, "topic")
+              and HT.topic_cells(wf["topics"]["Unit Test"], 4, wf, cwd)["Verify"][0] == "opus·high")
+        Path(cwd, "CLAUDE.md").write_text("## abofles overrides\n- Matrix = fastest\n")
+        check("matrix: an unknown value reads as quality", HT.matrix_mode(cwd) == "quality" and HT.topic_cells(wf["topics"]["Unit Test"], 2, wf, cwd)["Work"][0] == "opus·medium")
+        Path(cwd, "CLAUDE.md").unlink()
+        check("matrix: the Git cell is the economy Work cell in both", HT.topic_cells(wf["topics"]["Unit Test"], 3, wf, None, economy=True)["Work"][0] == "sonnet·high")
         # topic.py CLI
         tp = lambda *a, **k: subprocess.run([sys.executable, str(sdir / "topic.py"), *a], capture_output=True, text=True, cwd=k.get("cwd", cwd))
         r = tp("find", "postgres read replica lag")
-        check("topic.py: find prints matches with tier, cells, reviewers and workflow", r.returncode == 0 and "🔎 topic lookup" in r.stdout and "Replica" in r.stdout and "reviewers T3 DBA" in r.stdout and "Read " in r.stdout and "change →" in r.stdout and len(r.stdout.splitlines()) <= 8)
+        check("topic.py: find prints matches with tier, cells, reviewers and workflow", r.returncode == 0 and "🔎 topic lookup" in r.stdout and "Replica" in r.stdout and "reviewers T3 DBA" in r.stdout and "Read " in r.stdout and " · Git/Scrum " in r.stdout and "change →" in r.stdout and len(r.stdout.splitlines()) <= 8)
         r = tp("find", "add dynamic filter grid to orders api c#")
         check("topic.py: a C# dynamic-filter ask suggests DynamicWhere.ex", "💡 suggest · DynamicWhere.ex" in r.stdout and "dotnet add package DynamicWhere.ex" in r.stdout)
         r = tp("find", "add dynamic filter grid to orders api")
@@ -4165,7 +4242,7 @@ def main():
         check("README: ... and every COMPLEX_FORMS form (one row each)", len(form_marks) == len(HG.COMPLEX_FORMS) and all(re.search(r"^\| `" + re.escape(m), sec_, re.M) for m in form_marks))
         check("README: ... with defaults from the code, the pane editor, /abofles:pane and /abofles:history", all(f"| `{k}` |" in sec_ and (v["default"] in sec_ if v["default"] else True) for k, v in HG.OVERRIDE_KEYS.items()) and "/abofles:pane" in sec_ and "/abofles:history" in sec_ and "pane" in sec_.split("| `Main session`")[0])
         check("overrides.md: the five place forms are described and the form count matches the code", all(f"`{w} place = " in (HOOK.parent.parent / "skills/abofles/references/overrides.md").read_text() for w in ("Guide", "Resume", "Agents", "Receipt", "Running"))
-              and f"Thirty-eight forms" in (HOOK.parent.parent / "skills/abofles/references/overrides.md").read_text() and len(HG.OVERRIDE_KEYS) + len(HG.COMPLEX_FORMS) == 38)
+              and f"Forty forms" in (HOOK.parent.parent / "skills/abofles/references/overrides.md").read_text() and len(HG.OVERRIDE_KEYS) + len(HG.COMPLEX_FORMS) == 40)
 
         # a receipt's Journal line keeps every field, and reads back
         rc_ = HG.parse_receipt("🧾 **1 Agent · 63K Tokens · $0.03**\n- `done` → the page\n- `why` → asked\n- `workflow` → Read ✓ · Work ✓\n- `check` → 181 pass\n- `open` → none\n- `next` → run /compact")

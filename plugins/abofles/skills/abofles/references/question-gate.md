@@ -24,4 +24,6 @@ Cap 40 lines each. These agents do not count against the task's agent budget (th
 
 Re-asking the **same round** reworded or translated (the user rejected the wording, or asked for Arabic) needs no second Judge: within 15 minutes of an allowed question the hook lets the next one through, and a `SendMessage` to the Judge or Explainer that produced the round (the cheap way to reword) unlocks one `AskUserQuestion` for its reply — wait for that reply and ask from its wording, never with your own translation first. A new question later is judged again. Pass `Language: <language>` to the Judge and Explainer: the override `- Language = Arabic` fixes it for a project, else it is the language the user writes in. A dismissed question is not a decision: it is not logged, and may be asked again.
 
+**Loop guard**: the 3rd Judge or Explainer with no question asked since the user last answered (or the 3rd FAIL of one check on one topic) refuses the next agent; then ask the user — the gate lets that question through with no Judge (`- Loop guard = N | off`).
+
 `- Questions = off` in the override block turns the gate off for a project; `- Pace = fast` skips the Judge only while the open task's tier (highest of its agents and the `main:` line) is 🟢/🟡; 🟠/🔴 or an unknown tier is still judged.

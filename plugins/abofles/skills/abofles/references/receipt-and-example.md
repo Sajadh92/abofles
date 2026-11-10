@@ -47,9 +47,9 @@ main: suggest Opus 5.5 · High for this task (now Opus 5.5 · Medium). Switch in
 
 - 🔍 `Read` → **Pricing, Fees, Commission & Tax** · Sonnet 5.5 · Low · Cap 100 · 🔴 Critical
 - 📐 `Plan` → **Pricing, Fees, Commission & Tax** · Opus 5.5 · Extra · Cap 150 · 🔴 Critical
-- 🛠️ `Work` → **Pricing, Fees, Commission & Tax** · Opus 5.5 · High · Cap 40 · 🔴 Critical
-- 🛠️ `Work` → **Unit Test** · Sonnet 5.5 · Medium · Cap 20 · 🟡 Normal
-- ✅ `Verify` → **Financial & Amount Calculations** · Opus 5.5 · High · Cap 60 · 🔴 Critical
+- 🛠️ `Work` → **Pricing, Fees, Commission & Tax** · Opus 5.5 · Extra · Cap 40 · 🔴 Critical
+- 🛠️ `Work` → **Unit Test** · Opus 5.5 · Medium · Cap 20 · 🟡 Normal
+- ✅ `Verify` → **Financial & Amount Calculations** · Sonnet 5.5 · Extra · Cap 60 · 🔴 Critical
 
 ```
 abofles [■■■■■] 5/5 · Read ✓ · Plan ✓ · Work ✓ · Work ✓ · Verify ✓ · 250 u
