@@ -431,7 +431,7 @@ def memo_health_tests(check):
         check("compact: parse — at most 10 left items, each clipped to 160 chars", q and len(q["left"]) == 10 and len(q["task"]) <= 160)
 
         # ── compact: hooks.json wiring ──
-        hj = json.loads((HOOK.parent / "hooks.json").read_text())["hooks"]
+        hj = json.loads((HOOK.parent / "hooks.json").read_text(encoding="utf-8"))["hooks"]
         cmds = lambda ev: [h["command"] for g in hj.get(ev, []) for h in g["hooks"]]
         check("compact: hooks.json wires PreCompact -> precompact and PostCompact -> postcompact (with a timeout)",
               any(c.endswith(" precompact") for c in cmds("PreCompact")) and any(c.endswith(" postcompact") for c in cmds("PostCompact"))
@@ -1565,7 +1565,7 @@ def main():
         LAUNCH = HOOK.parent / "run.py"
         _rl = subprocess.run([sys.executable, str(LAUNCH), "guard"], input=json.dumps({"session_id": "gmain", "cwd": cwd, "tool_name": "Grep", "tool_input": {}}), capture_output=True, text=True, env=dict(os.environ, ABOFLES_LEDGER_DIR=led))
         check("launcher: run.py guard exits 0 and is silent like the script", _rl.returncode == 0 and _rl.stdout.strip() == "")
-        _hj = json.loads((HOOK.parent / "hooks.json").read_text())
+        _hj = json.loads((HOOK.parent / "hooks.json").read_text(encoding="utf-8"))
         _cmds = [h["command"] for ev in _hj["hooks"].values() for grp in ev for h in grp["hooks"] if h["type"] == "command" and "run.py" in h["command"]]
         check("launcher: every python hook command runs hooks/run.py", _cmds and all("hooks/run.py" in c for c in _cmds))
         check("launcher: SessionStart text asks for the skill once per session, not per task", "once per session" in _hj["hooks"]["SessionStart"][0]["hooks"][0]["command"] and "start of each task" not in _hj["hooks"]["SessionStart"][0]["hooks"][0]["command"])
@@ -2564,6 +2564,21 @@ def main():
         check("prompt_dirs: an unquoted dir with a space in it is found whole", H.prompt_dirs(f"Working tree: {wsp} then read x.cs") == [wsp])
         check("prompt_dirs: quoted and backticked dirs are found", H.prompt_dirs(f'in "{wsp}" and `{pdd}/plain/tree2`.') == [wsp, f"{pdd}/plain/tree2"])
         check("prompt_dirs: a plain dir with a trailing dot still works", H.prompt_dirs(f"Working tree: {pdd}/plain/tree2.") == [f"{pdd}/plain/tree2"])
+        wdirs = {r"C:\Users\ASUS\proj\.claude\worktrees\wt1", "D:/work/repo/wt2", r"\\srv\share\team\a\wt3", r"\\srv\share\team\wt3", r"C:\Users\ASUS\my proj\wt4", r"C:\Users\RUNNER~1\proj\wt5", r"C:\a\b"}
+        isdir_ = H.os.path.isdir
+        H.os.path.isdir = lambda d: d in wdirs or isdir_(d)
+        try:
+            check("prompt_dirs: a Windows backslash path is found", H.prompt_dirs("Working tree: C:\\Users\\ASUS\\proj\\.claude\\worktrees\\wt1 (a worktree)") == [r"C:\Users\ASUS\proj\.claude\worktrees\wt1"])
+            check("prompt_dirs: a quoted backslash path and a forward-slash drive path keep their drive", H.prompt_dirs('in "C:\\Users\\ASUS\\proj\\.claude\\worktrees\\wt1" and D:/work/repo/wt2.') == [r"C:\Users\ASUS\proj\.claude\worktrees\wt1", "D:/work/repo/wt2"])
+            check("prompt_dirs: a UNC share path is found", H.prompt_dirs(r"tree \\srv\share\team\a\wt3 here") == [r"\\srv\share\team\a\wt3"])
+            check("prompt_dirs: a UNC dir only 2 below the share is too shallow, like /a/b", H.prompt_dirs(r"tree \\srv\share\team\wt3 here") == [])
+            check("prompt_dirs: a POSIX dir right after `key:` is found; a URL and a shallow drive path are not",
+                  H.prompt_dirs(f"Working tree:{pdd}/plain/tree2 and cwd:{wsp}") == [f"{pdd}/plain/tree2", wsp] and H.prompt_dirs("see http://x.com/a/b/c") == [] and H.prompt_dirs(r"in C:\a\b now") == [])
+            check("prompt_dirs: depth counts folders below the root (a UNC share is a root)", H.dir_depth(r"\\srv\share\team\wt3") == 2 and H.dir_depth(r"\\srv\share\a\b\c") == 3 and H.dir_depth("/a/b/c") == 3 and H.dir_depth(r"C:\a\b\c") == 3)
+            check("prompt_dirs: an 8.3 short name with ~ is kept whole", H.prompt_dirs(r"tree C:\Users\RUNNER~1\proj\wt5 x") == [r"C:\Users\RUNNER~1\proj\wt5"])
+            check("prompt_dirs: a Windows path with a space grows whole", H.prompt_dirs("Working tree: C:\\Users\\ASUS\\my proj\\wt4 then read x.cs") == [r"C:\Users\ASUS\my proj\wt4"])
+        finally:
+            H.os.path.isdir = isdir_
         # 4. resume `last` lists receipts only
         pr = tempfile.mkdtemp(); sR = "lastsess1"
         for n in (1, 2, 3, 4):
@@ -3218,10 +3233,10 @@ def main():
         check("cli: agents.py ignores an unexpanded session id and acts on the folder's newest prompt", "agents: 6 this task" in ag("set", "6", "--session", "${CLAUDE_SESSION_ID}") and gstate("sessNew").get("task_budget") == 6)
         # 6. stale install
         import tempfile as _tf2
-        home_saved = os.environ.get("HOME")
+        home_saved = {k: os.environ.get(k) for k in ("HOME", "USERPROFILE")}
         try:
             with _tf2.TemporaryDirectory() as hh:
-                os.environ["HOME"] = hh
+                os.environ["HOME"] = os.environ["USERPROFILE"] = hh  # Windows Path.home() reads USERPROFILE
                 cache = Path(hh, ".claude", "plugins", "cache", "mp", "abofles")
                 old_root, new_root = cache / "1.0.0", cache / "1.3.0"
                 for r_, v_ in ((old_root, "1.0.0"), (new_root, "1.3.0")):
@@ -3249,14 +3264,15 @@ def main():
             check("stale install: emitted once per session (install_checked)", H.install_note_once(st_i) == "abofles: stale" and st_i.get("install_checked") is True and H.install_note_once(st_i) is None)
             H.stale_install_note = note_f
         finally:
-            if home_saved is None: os.environ.pop("HOME", None)
-            else: os.environ["HOME"] = home_saved
+            for k_, v_ in home_saved.items():
+                if v_ is None: os.environ.pop(k_, None)
+                else: os.environ[k_] = v_
 
 
     # scripts: status.py / memo.py exit codes
     with tempfile.TemporaryDirectory() as xh, tempfile.TemporaryDirectory() as xp:
         sdir = Path(__file__).resolve().parent
-        xenv = dict(os.environ, HOME=xh, ABOFLES_LEDGER_DIR=str(Path(xh, "led")), ABOFLES_STATE_DIR=str(Path(xh, "st")))
+        xenv = dict(os.environ, HOME=xh, USERPROFILE=xh, ABOFLES_LEDGER_DIR=str(Path(xh, "led")), ABOFLES_STATE_DIR=str(Path(xh, "st")))
         Path(xh, "led").mkdir(); Path(xh, "st").mkdir()
         st_ = lambda *a: subprocess.run([sys.executable, str(sdir / "status.py"), *a], cwd=xp, capture_output=True, text=True, env=xenv)
         me_ = lambda *a: subprocess.run([sys.executable, str(sdir / "memo.py"), *a], cwd=xp, capture_output=True, text=True, env=xenv)
@@ -3284,7 +3300,7 @@ def main():
         check("exit: status --unresolve exits 0", st_("--unresolve", "abc1", "--session", "xs").returncode == 0 and "resolved" not in json.loads(lf.read_text().splitlines()[0]))
         check("exit: status --unresolve of an open row exits 3, writes no trace", st_("--unresolve", "abc1", "--session", "xs", "--trace").returncode == 3 and "reopened by hand" not in mem.read_text())
         # memo.py: Needs-you items through the hook's own writer
-        subprocess.run([sys.executable, "-c", "import sys,os; sys.path.insert(0, sys.argv[1]); import abofles_hook as h; h.memo_needs(os.getcwd(), 'sessAAAA', 'owner decision: pick A or B')", str(sdir.parent / "hooks")], cwd=xp, env=xenv)
+        subprocess.run([sys.executable, "-X", "utf8", "-c", "import sys,os; sys.path.insert(0, sys.argv[1]); import abofles_hook as h; h.memo_needs(os.getcwd(), 'sessAAAA', 'owner decision: pick A or B')", str(sdir.parent / "hooks")], cwd=xp, env=xenv)
         check("exit: memo resolve without n exits 2", me_("resolve").returncode == 2 and me_("resolve", "x").returncode == 2)
         check("exit: memo resolve --session without a value exits 2", me_("resolve", "1", "--session").returncode == 2 and me_("reopen", "1", "--session", "--trace").returncode == 2)
         check("exit: memo reopen of an open item exits 3, writes no trace", me_("reopen", "1", "--trace", "--session", "sessAAAA").returncode == 3 and "reopened by hand" not in mem.read_text())
@@ -3627,7 +3643,7 @@ def main():
     sdir = Path(__file__).resolve().parent
     sid_ = "11111111-2222-3333-4444-555555555555"
     with tempfile.TemporaryDirectory() as xh, tempfile.TemporaryDirectory() as xp, tempfile.TemporaryDirectory() as xo:
-        xenv = dict(os.environ, HOME=xh, ABOFLES_LEDGER_DIR=str(Path(xh, "led")), ABOFLES_STATE_DIR=str(Path(xh, "st")))
+        xenv = dict(os.environ, HOME=xh, USERPROFILE=xh, ABOFLES_LEDGER_DIR=str(Path(xh, "led")), ABOFLES_STATE_DIR=str(Path(xh, "st")))
         xenv.pop("ABOFLES_SESSION", None)
         Path(xh, "led").mkdir(); Path(xh, "st").mkdir()
         sc_ = lambda name, *a: subprocess.run([sys.executable, str(sdir / name), *a], cwd=xp, capture_output=True, text=True, env=xenv)
@@ -3648,7 +3664,7 @@ def main():
         r = sc_("status.py", "--resolve", "abc1", "--session", sid_, "--trace", "re-checked: t")
         check("scope: status --resolve <id> --session <uuid> settles the row the display shows", r.returncode == 0 and json.loads(Path(xh, "led", f"{sid_}.jsonl").read_text())["resolved"] is True)
         # memo.py: the user's own --session wins over the command's appended one
-        subprocess.run([sys.executable, "-c", "import sys,os; sys.path.insert(0, sys.argv[1]); import abofles_hook as h; h.memo_needs(os.getcwd(), 'sessAAAA', 'owner decision: pick A or B')", str(sdir.parent / "hooks")], cwd=xp, env=xenv)
+        subprocess.run([sys.executable, "-X", "utf8", "-c", "import sys,os; sys.path.insert(0, sys.argv[1]); import abofles_hook as h; h.memo_needs(os.getcwd(), 'sessAAAA', 'owner decision: pick A or B')", str(sdir.parent / "hooks")], cwd=xp, env=xenv)
         r = sc_("memo.py", "resolve", "1", "re-checked: t", "--trace", "--force", "--session", "mysessX", "--session", sid_)  # the item is sessAAAA's: --force
         memx = lambda s: Path(xp, ".claude", "abofles-memo.d", f"{s[:8]}.md")
         check("session: memo resolve with the user's --session X plus an appended UUID traces into X's file", r.returncode == 0 and "· resolved by hand: owner decision 1" in memx("mysessX").read_text() and "owner decision" not in (memx(sid_).read_text() if memx(sid_).exists() else ""))
@@ -3784,7 +3800,7 @@ def main():
         Path(cwd, ".claude").mkdir(exist_ok=True)
         r = subprocess.run([sys.executable, str(sdir / "memo.py"), "now", "--session", "win"], input="Task      Arabic ✓ عربي 🧔\nNext      test\n", capture_output=True, text=True, env=wenv, cwd=cwd)
         check("windows: memo.py writes a Now section with emoji and Arabic", r.returncode == 0 and "عربي" in Path(cwd, ".claude", "abofles-memo.d", "win.md").read_text(encoding="utf-8"))
-        hj = json.loads((HOOK.parent / "hooks.json").read_text())
+        hj = json.loads((HOOK.parent / "hooks.json").read_text(encoding="utf-8"))
         cmds = [h["command"] for ev in hj["hooks"].values() for grp in ev for h in grp["hooks"] if "run.py" in h["command"]]
         check("windows: every hook command goes through scripts/py (python3 -> python -> py -3)", cmds and all('bash "${CLAUDE_PLUGIN_ROOT}/scripts/py"' in c for c in cmds))
         check("windows: no Unix-only import left at module top", "\nimport fcntl\n" not in HOOK.read_text())
@@ -3812,7 +3828,7 @@ def main():
         Path(fbin, "python").unlink()
         r = subprocess.run(["bash", str(PY), "-c", "print(1)"], capture_output=True, text=True, env=wenv)
         check("launcher: no Python at all -> one clear stderr line, exit 0 (hook never breaks the session)", r.returncode == 0 and "Python 3.8+ not found" in r.stderr and r.stdout == "")
-        hj = json.loads((HOOK.parent / "hooks.json").read_text())
+        hj = json.loads((HOOK.parent / "hooks.json").read_text(encoding="utf-8"))
         cmds = [h["command"] for ev in hj["hooks"].values() for grp in ev for h in grp["hooks"] if "run.py" in h["command"]]
         check("launcher: every hook command runs bash scripts/py --hook hooks/run.py <mode>, no `||` (no double run)", len(cmds) == 15 and all(c.startswith('bash "${CLAUDE_PLUGIN_ROOT}/scripts/py" --hook "${CLAUDE_PLUGIN_ROOT}/hooks/run.py" ') and "||" not in c for c in cmds))
         r = subprocess.run(["bash", str(PY), "--hook", str(Path(state, "missing.py"))], capture_output=True, text=True, env=base)

@@ -5288,18 +5288,29 @@ def side_of(stype, prompt=""):
     return k, SIDE_WORD.get(k, "?")
 
 
+# An absolute folder's start: POSIX `/`, a Windows drive (`C:\` or `C:/`) or a UNC share (`\\server\share`).
+ABS_DIR = r"(?:[A-Za-z]:[\\/]|\\\\[^\\/\s\"'`]+[\\/]|/)"
+
+
+def dir_depth(d):
+    """Folders below the root: `/a/b/c`, `C:\\a\\b\\c` and `\\\\srv\\share\\a\\b\\c` are all 3 (a UNC share is a root, like a drive)."""
+    n = d.replace("\\", "/")
+    return n.count("/") - (3 if n.startswith("//") else 0)
+
+
 def prompt_dirs(prompt):
     """Absolute folders the agent prompt names (`Working tree: /…/worktree`): a reader working there cites paths
     relative to them, not to the session's project root. Found bare, in quotes or backticks, and across spaces
     (`/…/my proj/wt`: an unquoted match grows one word at a time while the longer path is a folder)."""
     text = prompt or ""
     found = []  # (position, dir)
-    for m in re.finditer(r"""["'`](/[^"'`\n]+)["'`]""", text):
-        found.append((m.start(1), m.group(1).strip().rstrip("/.")))
-    for m in re.finditer(r"(?<![\w.])(/(?:[\w.\-]+/)*[\w.\-]+)", text):
+    for m in re.finditer(r"""["'`](""" + ABS_DIR + r"""[^"'`\n]+)["'`]""", text):
+        found.append((m.start(1), m.group(1).strip().rstrip("/\\.")))
+    # Not inside a word, nor the `/x` of a drive path `C:/x` (matched whole from its letter); `Working tree:/a/b/c` counts.
+    for m in re.finditer(r"(?<![\w.])(?<!(?<![\w/])[A-Za-z]:)(" + ABS_DIR + r"(?:[\w.~\-]+[\\/])*[\w.~\-]+)", text):
         cur, end, best = m.group(1), m.end(), m.group(1).rstrip(".")
         for _ in range(6):
-            nxt = re.match(r" ([\w.\-]+(?:/[\w.\-]+)*)", text[end:])
+            nxt = re.match(r" ([\w.~\-]+(?:[\\/][\w.~\-]+)*)", text[end:])
             if not nxt:
                 break
             cur, end = cur + " " + nxt.group(1), end + nxt.end()
@@ -5308,7 +5319,7 @@ def prompt_dirs(prompt):
         found.append((m.start(1), best))
     out = []
     for _, d in sorted(found):
-        if d not in out and d.count("/") >= 3 and os.path.isdir(d):
+        if d not in out and dir_depth(d) >= 3 and os.path.isdir(d):
             out.append(d)
         if len(out) >= 5:
             break

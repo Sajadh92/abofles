@@ -2,6 +2,11 @@
 
 All notable changes to the plugins in this marketplace.
 
+## abofles 2.6.1 — 2026-11-11
+
+- abofles: **Windows working trees are found** ([#1](https://github.com/Sajadh92/abofles/issues/1)). When an agent prompt named a folder with a Windows path (`C:\…\worktree`, `C:/…` or a UNC share `\\server\share\…`), the hook did not find that folder. The agent's `path:line` facts were then marked missing, its reply was set to `CONFIDENCE: low`, and a correct reply was escalated. Drive paths and UNC paths now count, with `\` or `/` between folders and 8.3 short names (`RUNNER~1`) kept whole. A UNC share is a root, like a drive, so a folder needs 3 levels below it. A POSIX folder right after a colon (`Working tree:/a/b/c`) still counts.
+- abofles: **the test suite runs on Windows.** The stale-install test and the script tests set `USERPROFILE` with `HOME`, the memo seed runs with `-X utf8`, and `hooks.json` is read as UTF-8.
+
 ## abofles 2.6.0 · abofles-guide 0.9.0 — 2026-11-10
 
 - abofles + abofles-guide: **Opus writes the code.** The matrix now puts Opus 5.5 on Work at every tier (T1 Low, T2 Medium, T3 High, T4 Extra) and on Analyse and Plan at T1 and T2; Haiku and Sonnet read and verify (the generic verifier at T4 is Sonnet 5.5 · Extra). Code Sonnet wrote from a good plan came back as rework: in the owner's ledgers 33% of the Verify and reviewer verdicts on Sonnet · High Work at T3 were FAIL, 22% on Opus · High at T4, and each round costs another Work and Verify agent. The specialist reviewers keep their cells (Opus 5.5 · High at 🔴); the Git agent keeps the cheaper Work cell it had. A topic override that put Work, Analyse or Plan below Opus is skipped; Fable on Plan or Analyse stays. New key `Matrix = quality | economy` (default `quality`; `economy` brings back the earlier cells), in the editor's Agents group.
