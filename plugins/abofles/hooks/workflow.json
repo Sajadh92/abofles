@@ -81,6 +81,16 @@
    "word": "Data",
    "emoji": "📊",
    "agent": "abofles-data"
+  },
+  "design": {
+   "word": "Design",
+   "emoji": "🖌️",
+   "agent": "abofles-design"
+  },
+  "marketing": {
+   "word": "Marketing",
+   "emoji": "📣",
+   "agent": "abofles-marketing"
   }
  },
  "groups": {
@@ -250,6 +260,91 @@
     "4": [
      "uiux",
      "qa"
+    ]
+   }
+  },
+  "GFX": {
+   "name": "Graphic Design & Branding",
+   "blurb": "brand identity, logos, typography, layout, print, packaging, social graphics, posters, presentations, infographics, illustration, photo editing, creative briefs, licensing",
+   "areas": [
+    "Brand Identity",
+    "Typography & Lettering",
+    "Layout & Editorial",
+    "Print & Packaging",
+    "Digital & Marketing Graphics",
+    "Illustration & Imagery",
+    "Creative Process & Rights"
+   ],
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   }
+  },
+  "VID": {
+   "name": "Video, Motion & Audio",
+   "blurb": "video editing, storyboards, scripts, motion graphics, animation, color grading, VFX, captions, sound design, voiceover, music, podcasts, social video, delivery",
+   "areas": [
+    "Pre-production",
+    "Editing & Post-production",
+    "Motion Graphics & Animation",
+    "Audio, Voice & Music",
+    "Social & Platform Video",
+    "Delivery & Formats"
+   ],
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   }
+  },
+  "SPC": {
+   "name": "3D, Spatial & Product Design",
+   "blurb": "3D modeling, rendering, product and industrial design, architecture and interiors, AR/VR, game art, fashion and textiles",
+   "areas": [
+    "3D Modeling & Rendering",
+    "Product & Industrial Design",
+    "Architecture & Interiors",
+    "Games, AR & VR"
+   ],
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "qa"
+    ]
+   }
+  },
+  "SOC": {
+   "name": "Social Media, Ads & Marketing",
+   "blurb": "posts, captions, comments, DMs, profiles, scrolling and reach, paid ads, campaigns, influencers, community, analytics, account safety — Meta (Facebook, Instagram, WhatsApp, Threads, Messenger), TikTok, YouTube, LinkedIn, X, Snapchat, Telegram, Google, Pinterest, Reddit, Discord",
+   "areas": [
+    "Content & Posting",
+    "Profiles & Pages",
+    "Community & Engagement",
+    "Reach, Algorithms & Analytics",
+    "Paid Ads & Campaigns",
+    "Platforms",
+    "Strategy & Management",
+    "Account Safety & Policies"
+   ],
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
     ]
    }
   },
@@ -670,7 +765,7 @@
    "group": "SEC",
    "area": "Authentication",
    "tier": 3,
-   "signals": "Google login, Apple sign in, Facebook login, federated identity, external provider, Keycloak, Auth0",
+   "signals": "Google login, Apple sign in, Facebook login, Discord OAuth, Discord login, federated identity, external provider, Keycloak, Auth0",
    "reviewers": {
     "3": [
      "security"
@@ -5796,6 +5891,22 @@
    },
    "n": 311
   },
+  "Video Processing & Transcoding (FFmpeg, MediaConvert, Mux)": {
+   "group": "API",
+   "area": "Services & Side Effects",
+   "tier": 3,
+   "signals": "ffmpeg, transcode video, video transcoding, MediaConvert, HLS packaging, video pipeline backend, convert video server",
+   "reviewers": {
+    "3": [
+     "qa"
+    ],
+    "4": [
+     "qa",
+     "security"
+    ]
+   },
+   "n": 312
+  },
   "PDF, Excel & Document Generation (backend)": {
    "group": "API",
    "area": "Services & Side Effects",
@@ -5810,7 +5921,7 @@
      "security"
     ]
    },
-   "n": 312
+   "n": 313
   },
   "PDF Generation (HTML to PDF, QuestPDF, Puppeteer, wkhtmltopdf)": {
    "group": "API",
@@ -5826,7 +5937,7 @@
      "security"
     ]
    },
-   "n": 313
+   "n": 314
   },
   "PDF Parsing, Forms & Signatures": {
    "group": "API",
@@ -5842,7 +5953,7 @@
      "security"
     ]
    },
-   "n": 314
+   "n": 315
   },
   "Excel Export & Formatted Workbooks": {
    "group": "API",
@@ -5858,7 +5969,7 @@
      "security"
     ]
    },
-   "n": 315
+   "n": 316
   },
   "Excel & Spreadsheet Import Parsing": {
    "group": "API",
@@ -5874,7 +5985,7 @@
      "security"
     ]
    },
-   "n": 316
+   "n": 317
   },
   "CSV Export, Parsing & Encoding": {
    "group": "API",
@@ -5890,7 +6001,7 @@
      "security"
     ]
    },
-   "n": 317
+   "n": 318
   },
   "Email Sending & Deliverability": {
    "group": "API",
@@ -5906,7 +6017,7 @@
      "security"
     ]
    },
-   "n": 318
+   "n": 319
   },
   "Email Templates & Rendering (Razor, MJML, React Email)": {
    "group": "API",
@@ -5922,7 +6033,7 @@
      "security"
     ]
    },
-   "n": 319
+   "n": 320
   },
   "Transactional Email Flows (verify, reset, receipts)": {
    "group": "API",
@@ -5938,7 +6049,7 @@
      "security"
     ]
    },
-   "n": 320
+   "n": 321
   },
   "Inbound Email Processing & Parsing": {
    "group": "API",
@@ -5954,7 +6065,7 @@
      "security"
     ]
    },
-   "n": 321
+   "n": 322
   },
   "Email Verification & Address Validation": {
    "group": "API",
@@ -5970,7 +6081,7 @@
      "security"
     ]
    },
-   "n": 322
+   "n": 323
   },
   "SMS, WhatsApp & Messaging Providers": {
    "group": "API",
@@ -5986,7 +6097,7 @@
      "security"
     ]
    },
-   "n": 323
+   "n": 324
   },
   "3rd-party Integrations & Webhooks": {
    "group": "API",
@@ -6002,7 +6113,7 @@
      "security"
     ]
    },
-   "n": 324
+   "n": 325
   },
   "Outbound Webhooks & Event Delivery": {
    "group": "API",
@@ -6018,7 +6129,7 @@
      "security"
     ]
    },
-   "n": 325
+   "n": 326
   },
   "Background Processing in Web Apps": {
    "group": "API",
@@ -6034,7 +6145,7 @@
      "security"
     ]
    },
-   "n": 326
+   "n": 327
   },
   "Localization in APIs & Error Messages": {
    "group": "API",
@@ -6050,7 +6161,7 @@
      "security"
     ]
    },
-   "n": 327
+   "n": 328
   },
   "Time Handling in Backend (UTC, offsets)": {
    "group": "API",
@@ -6066,7 +6177,7 @@
      "security"
     ]
    },
-   "n": 328
+   "n": 329
   },
   "ASP.NET Core & .NET Backend": {
    "group": "API",
@@ -6082,7 +6193,7 @@
      "security"
     ]
    },
-   "n": 329
+   "n": 330
   },
   "Spring Boot & Java Backend": {
    "group": "API",
@@ -6098,7 +6209,7 @@
      "security"
     ]
    },
-   "n": 330
+   "n": 331
   },
   "Node.js, Express & NestJS": {
    "group": "API",
@@ -6114,7 +6225,7 @@
      "security"
     ]
    },
-   "n": 331
+   "n": 332
   },
   "Django, Flask & FastAPI": {
    "group": "API",
@@ -6130,7 +6241,7 @@
      "security"
     ]
    },
-   "n": 332
+   "n": 333
   },
   "Laravel & PHP Backend": {
    "group": "API",
@@ -6146,7 +6257,7 @@
      "security"
     ]
    },
-   "n": 333
+   "n": 334
   },
   "Ruby on Rails": {
    "group": "API",
@@ -6162,7 +6273,7 @@
      "security"
     ]
    },
-   "n": 334
+   "n": 335
   },
   "Go Services": {
    "group": "API",
@@ -6178,7 +6289,7 @@
      "security"
     ]
    },
-   "n": 335
+   "n": 336
   },
   "Rust Backend (Axum, Actix)": {
    "group": "API",
@@ -6194,7 +6305,7 @@
      "security"
     ]
    },
-   "n": 336
+   "n": 337
   },
   "Serverless Functions & Handlers": {
    "group": "API",
@@ -6210,7 +6321,7 @@
      "security"
     ]
    },
-   "n": 337
+   "n": 338
   },
   "Framework Upgrades (major versions)": {
    "group": "API",
@@ -6226,7 +6337,7 @@
      "security"
     ]
    },
-   "n": 338
+   "n": 339
   },
   "UI Components & Styling": {
    "group": "WEB",
@@ -6242,7 +6353,7 @@
      "qa"
     ]
    },
-   "n": 339
+   "n": 340
   },
   "State Management (frontend)": {
    "group": "WEB",
@@ -6258,7 +6369,7 @@
      "qa"
     ]
    },
-   "n": 340
+   "n": 341
   },
   "Server State, Data Fetching & Caching (React Query, SWR)": {
    "group": "WEB",
@@ -6274,7 +6385,7 @@
      "qa"
     ]
    },
-   "n": 341
+   "n": 342
   },
   "Forms & Client-side Validation": {
    "group": "WEB",
@@ -6290,7 +6401,7 @@
      "qa"
     ]
    },
-   "n": 342
+   "n": 343
   },
   "Component Architecture & Composition": {
    "group": "WEB",
@@ -6306,7 +6417,7 @@
      "qa"
     ]
    },
-   "n": 343
+   "n": 344
   },
   "Hooks, Effects & Lifecycle": {
    "group": "WEB",
@@ -6322,7 +6433,7 @@
      "qa"
     ]
    },
-   "n": 344
+   "n": 345
   },
   "Rendering Behaviour & Re-renders": {
    "group": "WEB",
@@ -6338,7 +6449,7 @@
      "qa"
     ]
    },
-   "n": 345
+   "n": 346
   },
   "Lists, Tables & Virtualization": {
    "group": "WEB",
@@ -6354,7 +6465,7 @@
      "qa"
     ]
    },
-   "n": 346,
+   "n": 347,
    "suggest": [
     "dynamicwhere"
    ]
@@ -6373,7 +6484,7 @@
      "qa"
     ]
    },
-   "n": 347
+   "n": 348
   },
   "Drag & Drop, Gestures & Interactions": {
    "group": "WEB",
@@ -6389,7 +6500,7 @@
      "qa"
     ]
    },
-   "n": 348
+   "n": 349
   },
   "Charts & Data Visualization (frontend)": {
    "group": "WEB",
@@ -6405,7 +6516,7 @@
      "qa"
     ]
    },
-   "n": 349
+   "n": 350
   },
   "File Upload UI & Previews": {
    "group": "WEB",
@@ -6421,7 +6532,7 @@
      "qa"
     ]
    },
-   "n": 350
+   "n": 351
   },
   "Rich Text Editors & Markdown": {
    "group": "WEB",
@@ -6437,7 +6548,7 @@
      "qa"
     ]
    },
-   "n": 351
+   "n": 352
   },
   "Maps & Geolocation UI": {
    "group": "WEB",
@@ -6453,7 +6564,7 @@
      "qa"
     ]
    },
-   "n": 352
+   "n": 353
   },
   "React & Next.js": {
    "group": "WEB",
@@ -6469,7 +6580,7 @@
      "qa"
     ]
    },
-   "n": 353
+   "n": 354
   },
   "Vue & Nuxt": {
    "group": "WEB",
@@ -6485,7 +6596,7 @@
      "qa"
     ]
    },
-   "n": 354
+   "n": 355
   },
   "Angular": {
    "group": "WEB",
@@ -6501,7 +6612,7 @@
      "qa"
     ]
    },
-   "n": 355
+   "n": 356
   },
   "Svelte, SvelteKit, Solid & Astro": {
    "group": "WEB",
@@ -6517,7 +6628,7 @@
      "qa"
     ]
    },
-   "n": 356
+   "n": 357
   },
   "Blazor & .NET Frontend": {
    "group": "WEB",
@@ -6533,7 +6644,7 @@
      "qa"
     ]
    },
-   "n": 357
+   "n": 358
   },
   "Server-side Rendering, Hydration & Streaming": {
    "group": "WEB",
@@ -6549,7 +6660,7 @@
      "qa"
     ]
    },
-   "n": 358
+   "n": 359
   },
   "Routing, Navigation & Deep Links (web)": {
    "group": "WEB",
@@ -6565,7 +6676,7 @@
      "qa"
     ]
    },
-   "n": 359
+   "n": 360
   },
   "Micro-frontends & Module Federation": {
    "group": "WEB",
@@ -6581,7 +6692,7 @@
      "qa"
     ]
    },
-   "n": 360
+   "n": 361
   },
   "Web Components & Shadow DOM": {
    "group": "WEB",
@@ -6597,7 +6708,7 @@
      "qa"
     ]
    },
-   "n": 361
+   "n": 362
   },
   "jQuery, Legacy & Vanilla JS Pages": {
    "group": "WEB",
@@ -6613,7 +6724,7 @@
      "qa"
     ]
    },
-   "n": 362
+   "n": 363
   },
   "CSS Layout (Flexbox, Grid, Positioning)": {
    "group": "WEB",
@@ -6629,7 +6740,23 @@
      "qa"
     ]
    },
-   "n": 363
+   "n": 364
+  },
+  "Graphics Programming (WebGL, WebGPU, Three.js)": {
+   "group": "WEB",
+   "area": "Styling & Layout",
+   "tier": 2,
+   "signals": "WebGL, WebGPU, Three.js scene, GLSL, webgl shader, fragment shader, canvas rendering, canvas pixel manipulation, canvas 2D, react-three-fiber",
+   "reviewers": {
+    "3": [
+     "uiux"
+    ],
+    "4": [
+     "uiux",
+     "qa"
+    ]
+   },
+   "n": 365
   },
   "Tailwind, Utility CSS & Design Tokens in Code": {
    "group": "WEB",
@@ -6645,7 +6772,7 @@
      "qa"
     ]
    },
-   "n": 364
+   "n": 366
   },
   "CSS Architecture (modules, BEM, CSS-in-JS)": {
    "group": "WEB",
@@ -6661,7 +6788,7 @@
      "qa"
     ]
    },
-   "n": 365
+   "n": 367
   },
   "Responsive, RTL & Theming": {
    "group": "WEB",
@@ -6677,7 +6804,7 @@
      "qa"
     ]
    },
-   "n": 366
+   "n": 368
   },
   "Animations & Transitions": {
    "group": "WEB",
@@ -6693,7 +6820,7 @@
      "qa"
     ]
    },
-   "n": 367
+   "n": 369
   },
   "Icons, Fonts & Asset Loading": {
    "group": "WEB",
@@ -6709,7 +6836,7 @@
      "qa"
     ]
    },
-   "n": 368
+   "n": 370
   },
   "Print Styles & Printable Views": {
    "group": "WEB",
@@ -6725,7 +6852,7 @@
      "qa"
     ]
    },
-   "n": 369
+   "n": 371
   },
   "Email HTML & Templates (frontend)": {
    "group": "WEB",
@@ -6741,7 +6868,7 @@
      "qa"
     ]
    },
-   "n": 370
+   "n": 372
   },
   "Frontend Performance": {
    "group": "WEB",
@@ -6757,7 +6884,7 @@
      "qa"
     ]
    },
-   "n": 371
+   "n": 373
   },
   "Bundling, Code Splitting & Build Tools": {
    "group": "WEB",
@@ -6773,7 +6900,7 @@
      "qa"
     ]
    },
-   "n": 372
+   "n": 374
   },
   "Core Web Vitals (LCP, INP, CLS)": {
    "group": "WEB",
@@ -6789,7 +6916,7 @@
      "qa"
     ]
    },
-   "n": 373
+   "n": 375
   },
   "Images, Lazy Loading & Responsive Media": {
    "group": "WEB",
@@ -6805,7 +6932,7 @@
      "qa"
     ]
    },
-   "n": 374
+   "n": 376
   },
   "Browser Storage & Offline (localStorage, IndexedDB, PWA)": {
    "group": "WEB",
@@ -6821,7 +6948,7 @@
      "qa"
     ]
    },
-   "n": 375
+   "n": 377
   },
   "Browser APIs (clipboard, notifications, camera, geolocation)": {
    "group": "WEB",
@@ -6837,7 +6964,7 @@
      "qa"
     ]
    },
-   "n": 376
+   "n": 378
   },
   "Web Workers & Heavy Client Computation": {
    "group": "WEB",
@@ -6853,7 +6980,7 @@
      "qa"
     ]
    },
-   "n": 377
+   "n": 379
   },
   "Cross-browser & Device Compatibility": {
    "group": "WEB",
@@ -6869,7 +6996,7 @@
      "qa"
     ]
    },
-   "n": 378
+   "n": 380
   },
   "Third-party Scripts, Tags & Consent Loading": {
    "group": "WEB",
@@ -6885,7 +7012,7 @@
      "qa"
     ]
    },
-   "n": 379
+   "n": 381
   },
   "SEO, Meta Tags & Structured Data": {
    "group": "WEB",
@@ -6901,7 +7028,7 @@
      "qa"
     ]
    },
-   "n": 380
+   "n": 382
   },
   "Frontend Security (XSS in UI, CSP, tokens in browser)": {
    "group": "WEB",
@@ -6917,7 +7044,7 @@
      "qa"
     ]
    },
-   "n": 381
+   "n": 383
   },
   "Frontend Error Handling & Boundaries": {
    "group": "WEB",
@@ -6933,7 +7060,7 @@
      "qa"
     ]
    },
-   "n": 382
+   "n": 384
   },
   "Internationalized Frontend (i18n libs, formatting)": {
    "group": "WEB",
@@ -6949,7 +7076,7 @@
      "qa"
     ]
    },
-   "n": 383
+   "n": 385
   },
   "Frontend Testing Setup (Testing Library, Vitest)": {
    "group": "WEB",
@@ -6965,7 +7092,7 @@
      "qa"
     ]
    },
-   "n": 384
+   "n": 386
   },
   "Storybook & Component Documentation": {
    "group": "WEB",
@@ -6981,7 +7108,7 @@
      "qa"
     ]
    },
-   "n": 385
+   "n": 387
   },
   "Feature Flags & Experiments in UI": {
    "group": "WEB",
@@ -6997,7 +7124,7 @@
      "qa"
     ]
    },
-   "n": 386
+   "n": 388
   },
   "Browser Extensions & Userscripts": {
    "group": "WEB",
@@ -7013,7 +7140,7 @@
      "qa"
     ]
    },
-   "n": 387
+   "n": 389
   },
   "Design Systems, Tokens & Component Libraries": {
    "group": "UX",
@@ -7029,7 +7156,7 @@
      "qa"
     ]
    },
-   "n": 388
+   "n": 390
   },
   "Typography, Spacing & Visual Hierarchy": {
    "group": "UX",
@@ -7045,7 +7172,7 @@
      "qa"
     ]
    },
-   "n": 389
+   "n": 391
   },
   "Color, Contrast & Themes": {
    "group": "UX",
@@ -7061,7 +7188,7 @@
      "qa"
     ]
    },
-   "n": 390
+   "n": 392
   },
   "Iconography & Illustration": {
    "group": "UX",
@@ -7077,7 +7204,7 @@
      "qa"
     ]
    },
-   "n": 391
+   "n": 393
   },
   "Layout Grids, Density & Whitespace": {
    "group": "UX",
@@ -7093,7 +7220,7 @@
      "qa"
     ]
    },
-   "n": 392
+   "n": 394
   },
   "Component States (hover, focus, disabled, loading)": {
    "group": "UX",
@@ -7109,7 +7236,7 @@
      "qa"
     ]
    },
-   "n": 393
+   "n": 395
   },
   "Design Handoff & Dev Parity (Figma to code)": {
    "group": "UX",
@@ -7125,7 +7252,7 @@
      "qa"
     ]
    },
-   "n": 394
+   "n": 396
   },
   "Brand Consistency & Visual Identity": {
    "group": "UX",
@@ -7141,7 +7268,7 @@
      "qa"
     ]
    },
-   "n": 395
+   "n": 397
   },
   "UX Flows & Accessibility": {
    "group": "UX",
@@ -7157,7 +7284,7 @@
      "qa"
     ]
    },
-   "n": 396
+   "n": 398
   },
   "Information Architecture & Navigation Design": {
    "group": "UX",
@@ -7173,7 +7300,7 @@
      "qa"
     ]
    },
-   "n": 397
+   "n": 399
   },
   "Onboarding, First-run & Empty States": {
    "group": "UX",
@@ -7189,7 +7316,7 @@
      "qa"
     ]
    },
-   "n": 398
+   "n": 400
   },
   "Forms UX (labels, errors, progressive disclosure)": {
    "group": "UX",
@@ -7205,7 +7332,7 @@
      "qa"
     ]
    },
-   "n": 399
+   "n": 401
   },
   "Search & Filtering UX": {
    "group": "UX",
@@ -7221,7 +7348,7 @@
      "qa"
     ]
    },
-   "n": 400,
+   "n": 402,
    "suggest": [
     "dynamicwhere"
    ]
@@ -7242,7 +7369,7 @@
      "finance"
     ]
    },
-   "n": 401
+   "n": 403
   },
   "Error, Loading & Feedback States": {
    "group": "UX",
@@ -7258,7 +7385,7 @@
      "qa"
     ]
    },
-   "n": 402
+   "n": 404
   },
   "Confirmation, Destructive Actions & Undo UX": {
    "group": "UX",
@@ -7274,7 +7401,7 @@
      "qa"
     ]
    },
-   "n": 403
+   "n": 405
   },
   "Notifications & Alerts UX": {
    "group": "UX",
@@ -7290,7 +7417,7 @@
      "qa"
     ]
    },
-   "n": 404
+   "n": 406
   },
   "Settings, Preferences & Account UX": {
    "group": "UX",
@@ -7306,7 +7433,7 @@
      "qa"
     ]
    },
-   "n": 405
+   "n": 407
   },
   "Tables, Lists & Bulk Actions UX": {
    "group": "UX",
@@ -7322,7 +7449,7 @@
      "qa"
     ]
    },
-   "n": 406,
+   "n": 408,
    "suggest": [
     "dynamicwhere"
    ]
@@ -7341,7 +7468,7 @@
      "qa"
     ]
    },
-   "n": 407
+   "n": 409
   },
   "Usability Heuristics & Expert Review": {
    "group": "UX",
@@ -7357,7 +7484,7 @@
      "qa"
     ]
    },
-   "n": 408
+   "n": 410
   },
   "User Research, Interviews & Usability Testing": {
    "group": "UX",
@@ -7373,7 +7500,7 @@
      "qa"
     ]
    },
-   "n": 409
+   "n": 411
   },
   "Conversion, Funnels & Growth UX": {
    "group": "UX",
@@ -7389,7 +7516,7 @@
      "qa"
     ]
    },
-   "n": 410
+   "n": 412
   },
   "Microcopy, Labels & Tone of Voice": {
    "group": "UX",
@@ -7405,7 +7532,7 @@
      "qa"
     ]
    },
-   "n": 411
+   "n": 413
   },
   "WCAG Compliance & Accessibility Audit": {
    "group": "UX",
@@ -7423,7 +7550,7 @@
      "compliance"
     ]
    },
-   "n": 412
+   "n": 414
   },
   "Keyboard Navigation & Focus Management": {
    "group": "UX",
@@ -7439,7 +7566,7 @@
      "qa"
     ]
    },
-   "n": 413
+   "n": 415
   },
   "Screen Readers, ARIA & Semantics": {
    "group": "UX",
@@ -7455,7 +7582,7 @@
      "qa"
     ]
    },
-   "n": 414
+   "n": 416
   },
   "Color Blindness, Contrast & Motion Sensitivity": {
    "group": "UX",
@@ -7471,7 +7598,7 @@
      "qa"
     ]
    },
-   "n": 415
+   "n": 417
   },
   "RTL, Arabic & Bidirectional UI": {
    "group": "UX",
@@ -7487,7 +7614,7 @@
      "qa"
     ]
    },
-   "n": 416
+   "n": 418
   },
   "Localization UX & Cultural Adaptation": {
    "group": "UX",
@@ -7503,7 +7630,7 @@
      "qa"
     ]
    },
-   "n": 417
+   "n": 419
   },
   "Touch Targets, Mobile Ergonomics & Thumb Zones": {
    "group": "UX",
@@ -7519,7 +7646,7 @@
      "qa"
     ]
    },
-   "n": 418
+   "n": 420
   },
   "Inclusive Design & Plain Language": {
    "group": "UX",
@@ -7535,7 +7662,7 @@
      "qa"
     ]
    },
-   "n": 419
+   "n": 421
   },
   "Dashboard Design & Information Layout": {
    "group": "UX",
@@ -7551,7 +7678,7 @@
      "qa"
     ]
    },
-   "n": 420
+   "n": 422
   },
   "Data Visualization Choice & Chart Design": {
    "group": "UX",
@@ -7567,7 +7694,7 @@
      "qa"
     ]
    },
-   "n": 421
+   "n": 423
   },
   "KPI Cards, Numbers & Formatting in UI": {
    "group": "UX",
@@ -7583,7 +7710,7 @@
      "qa"
     ]
    },
-   "n": 422
+   "n": 424
   },
   "Reports UX, Export & Print": {
    "group": "UX",
@@ -7599,7 +7726,7 @@
      "qa"
     ]
    },
-   "n": 423
+   "n": 425
   },
   "Admin Panels & Back-office UX": {
    "group": "UX",
@@ -7615,7 +7742,7 @@
      "qa"
     ]
    },
-   "n": 424,
+   "n": 426,
    "suggest": [
     "dynamicwhere"
    ]
@@ -7634,7 +7761,7 @@
      "qa"
     ]
    },
-   "n": 425
+   "n": 427
   },
   "Empty, Partial & Error States in Dashboards": {
    "group": "UX",
@@ -7650,7 +7777,7 @@
      "qa"
     ]
    },
-   "n": 426
+   "n": 428
   },
   "Motion Design & Micro-interactions": {
    "group": "UX",
@@ -7666,7 +7793,7 @@
      "qa"
     ]
    },
-   "n": 427
+   "n": 429
   },
   "Mobile App UX Patterns (iOS, Android HIG)": {
    "group": "UX",
@@ -7682,7 +7809,7 @@
      "qa"
     ]
    },
-   "n": 428
+   "n": 430
   },
   "Prototyping & Design Tooling": {
    "group": "UX",
@@ -7698,7 +7825,7 @@
      "qa"
     ]
    },
-   "n": 429
+   "n": 431
   },
   "Design Review & Critique": {
    "group": "UX",
@@ -7714,7 +7841,7 @@
      "qa"
     ]
    },
-   "n": 430
+   "n": 432
   },
   "Landing Pages & Marketing UX": {
    "group": "UX",
@@ -7730,7 +7857,7 @@
      "qa"
     ]
    },
-   "n": 431
+   "n": 433
   },
   "Gamification & Engagement Patterns": {
    "group": "UX",
@@ -7746,7 +7873,7 @@
      "qa"
     ]
    },
-   "n": 432
+   "n": 434
   },
   "Printables, Receipts & Physical Output Design": {
    "group": "UX",
@@ -7762,7 +7889,7 @@
      "qa"
     ]
    },
-   "n": 433
+   "n": 435
   },
   "Voice, Chat & Conversational UX": {
    "group": "UX",
@@ -7778,7 +7905,2961 @@
      "qa"
     ]
    },
-   "n": 434
+   "n": 436
+  },
+  "Logo Design & Logomarks": {
+   "group": "GFX",
+   "area": "Brand Identity",
+   "tier": 2,
+   "signals": "logo, logomark, wordmark, monogram, logo concept, logo redesign, emblem, lettermark",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 437
+  },
+  "Brand Identity Systems & Guidelines": {
+   "group": "GFX",
+   "area": "Brand Identity",
+   "tier": 2,
+   "signals": "brand identity, brand book, brand guidelines document, brand system, identity kit, style guide brand",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 438
+  },
+  "Brand Strategy, Naming & Positioning": {
+   "group": "GFX",
+   "area": "Brand Identity",
+   "tier": 2,
+   "signals": "brand strategy, naming, brand name, positioning, brand personality, brand archetype, tagline",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 439
+  },
+  "Color Palettes & Brand Color Systems": {
+   "group": "GFX",
+   "area": "Brand Identity",
+   "tier": 1,
+   "signals": "color palette, brand palette, Pantone, CMYK color, hex palette, color harmony, swatches",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 440
+  },
+  "Brand Asset Kits & Templates": {
+   "group": "GFX",
+   "area": "Brand Identity",
+   "tier": 1,
+   "signals": "brand kit, templates, asset pack, letterhead, business card, email signature, stationery",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 441
+  },
+  "Rebrand & Brand Refresh": {
+   "group": "GFX",
+   "area": "Brand Identity",
+   "tier": 3,
+   "signals": "rebrand, brand refresh, brand migration, new brand launch, legacy logo, brand transition",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 442
+  },
+  "Trademark & Logo Clearance": {
+   "group": "GFX",
+   "area": "Brand Identity",
+   "tier": 3,
+   "signals": "trademark, logo clearance, similar logo, infringement risk, registered mark, brand conflict",
+   "reviewers": {
+    "3": [
+     "design",
+     "compliance"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 443
+  },
+  "Type Pairing & Font Selection": {
+   "group": "GFX",
+   "area": "Typography & Lettering",
+   "tier": 1,
+   "signals": "font pairing, typeface choice, brand fonts, choose fonts, serif, sans serif, display font, font selection",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 444
+  },
+  "Typesetting & Text Layout": {
+   "group": "GFX",
+   "area": "Typography & Lettering",
+   "tier": 1,
+   "signals": "typesetting, kerning, tracking, leading, widows, orphans, hyphenation, rag, baseline grid",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 445
+  },
+  "Lettering, Calligraphy & Custom Type": {
+   "group": "GFX",
+   "area": "Typography & Lettering",
+   "tier": 1,
+   "signals": "lettering, hand lettering, calligraphy, Arabic calligraphy logo, khat, custom typeface, glyph, type design",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 446
+  },
+  "Arabic & Multilingual Typography": {
+   "group": "GFX",
+   "area": "Typography & Lettering",
+   "tier": 2,
+   "signals": "Arabic typography, Arabic font, kashida, bilingual layout, Naskh, Kufi, multilingual type, Kurdish font",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 447
+  },
+  "Font Licensing & Embedding": {
+   "group": "GFX",
+   "area": "Typography & Lettering",
+   "tier": 3,
+   "signals": "font license, desktop license, webfont license, app embedding, font EULA, commercial use font",
+   "reviewers": {
+    "3": [
+     "design",
+     "compliance"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 448
+  },
+  "Layout Composition & Grids (print and digital)": {
+   "group": "GFX",
+   "area": "Layout & Editorial",
+   "tier": 1,
+   "signals": "composition, layout design, grid system, rule of thirds, focal point, balance, visual weight",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 449
+  },
+  "Editorial & Magazine Layout": {
+   "group": "GFX",
+   "area": "Layout & Editorial",
+   "tier": 2,
+   "signals": "editorial design, magazine layout, spread, masthead, pull quote, column layout, InDesign",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 450
+  },
+  "Book Design & Covers": {
+   "group": "GFX",
+   "area": "Layout & Editorial",
+   "tier": 2,
+   "signals": "book cover, book layout, interior layout, spine, back cover, ebook cover, KDP",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 451
+  },
+  "Reports, Brochures & Annual Reports": {
+   "group": "GFX",
+   "area": "Layout & Editorial",
+   "tier": 2,
+   "signals": "brochure, annual report, flyer, leaflet, trifold, catalogue, company profile",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 452
+  },
+  "Infographics & Visual Explainers": {
+   "group": "GFX",
+   "area": "Layout & Editorial",
+   "tier": 2,
+   "signals": "infographic, visual explainer, data infographic, timeline graphic, process graphic, icon infographic",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 453
+  },
+  "Diagram & Chart Styling for Publication": {
+   "group": "GFX",
+   "area": "Layout & Editorial",
+   "tier": 1,
+   "signals": "chart styling, diagram design, publication chart, figure design, annotated chart, visual data story",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 454
+  },
+  "Resumes, CVs & Personal Documents Design": {
+   "group": "GFX",
+   "area": "Layout & Editorial",
+   "tier": 1,
+   "signals": "resume design, CV layout, cover letter design, portfolio pdf, personal brand document",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 455
+  },
+  "Print Production & Prepress": {
+   "group": "GFX",
+   "area": "Print & Packaging",
+   "tier": 4,
+   "signals": "prepress, bleed, crop marks, CMYK conversion, 300 dpi, print ready PDF, PDF/X, overprint, rich black",
+   "reviewers": {
+    "3": [
+     "design",
+     "qa"
+    ],
+    "4": [
+     "design",
+     "compliance",
+     "qa"
+    ]
+   },
+   "n": 456
+  },
+  "Packaging Design & Dielines": {
+   "group": "GFX",
+   "area": "Print & Packaging",
+   "tier": 3,
+   "signals": "packaging, dieline, box design, label design, mockup packaging, unboxing, carton",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 457
+  },
+  "Product Labels & Regulatory Text on Packs": {
+   "group": "GFX",
+   "area": "Print & Packaging",
+   "tier": 4,
+   "signals": "nutrition label, ingredients list, regulatory label, barcode, warning text, legal text on pack",
+   "reviewers": {
+    "3": [
+     "design",
+     "compliance"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 458
+  },
+  "Large Format, Signage & Wayfinding": {
+   "group": "GFX",
+   "area": "Print & Packaging",
+   "tier": 2,
+   "signals": "signage, wayfinding, banner, roll up, billboard, billboard design, large format, exhibition stand",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 459
+  },
+  "Posters, Flyers & Event Graphics": {
+   "group": "GFX",
+   "area": "Print & Packaging",
+   "tier": 1,
+   "signals": "poster, flyer, event poster, invitation, ticket design, restaurant menu, QR menu, certificate design, programme design",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 460
+  },
+  "Merchandise & Apparel Graphics": {
+   "group": "GFX",
+   "area": "Print & Packaging",
+   "tier": 1,
+   "signals": "t-shirt design, merch, apparel print, screen print, embroidery file, sticker design",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 461
+  },
+  "Print Vendor Specs & Proofing": {
+   "group": "GFX",
+   "area": "Print & Packaging",
+   "tier": 4,
+   "signals": "print vendor, print proof, color proof, paper stock, print finish, spot UV, foil, print quote",
+   "reviewers": {
+    "3": [
+     "design",
+     "qa"
+    ],
+    "4": [
+     "design",
+     "compliance",
+     "qa"
+    ]
+   },
+   "n": 462
+  },
+  "Social Media Graphics & Carousels": {
+   "group": "GFX",
+   "area": "Digital & Marketing Graphics",
+   "tier": 1,
+   "signals": "social media post, Instagram post, carousel, LinkedIn graphic, story design, social template",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 463
+  },
+  "Ad Creatives & Banner Sets": {
+   "group": "GFX",
+   "area": "Digital & Marketing Graphics",
+   "tier": 2,
+   "signals": "ad creative, banner ads, display ads, ad sizes, Meta ads creative, Google Display, ad variations",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 464
+  },
+  "Email & Newsletter Visual Design": {
+   "group": "GFX",
+   "area": "Digital & Marketing Graphics",
+   "tier": 1,
+   "signals": "email design, newsletter design, email header, email template visual, HTML email look",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 465
+  },
+  "Presentation & Pitch Deck Design": {
+   "group": "GFX",
+   "area": "Digital & Marketing Graphics",
+   "tier": 1,
+   "signals": "pitch deck design, slide design, keynote, PowerPoint design, deck template, slide master",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 466
+  },
+  "Thumbnails & Cover Art": {
+   "group": "GFX",
+   "area": "Digital & Marketing Graphics",
+   "tier": 1,
+   "signals": "YouTube thumbnail, cover art, album cover, podcast cover, thumbnail design, clickbait thumbnail",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 467
+  },
+  "Web & App Visual Assets (hero images, OG images)": {
+   "group": "GFX",
+   "area": "Digital & Marketing Graphics",
+   "tier": 1,
+   "signals": "hero image, OG image, social card, favicon, app icon artwork, splash screen art",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 468
+  },
+  "Mockups & Product Shots for Marketing": {
+   "group": "GFX",
+   "area": "Digital & Marketing Graphics",
+   "tier": 1,
+   "signals": "mockup, device mockup, product mockup, scene mockup, smart object, presentation mockup",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 469
+  },
+  "Digital Illustration & Character Design": {
+   "group": "GFX",
+   "area": "Illustration & Imagery",
+   "tier": 1,
+   "signals": "illustration, character design, mascot, vector illustration, digital painting, concept art",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 470
+  },
+  "Vector Graphics & SVG Artwork": {
+   "group": "GFX",
+   "area": "Illustration & Imagery",
+   "tier": 1,
+   "signals": "vector art, SVG artwork, Illustrator, paths, bezier, pen tool, vectorize, trace",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 471
+  },
+  "Icon Design & Icon Sets": {
+   "group": "GFX",
+   "area": "Illustration & Imagery",
+   "tier": 1,
+   "signals": "icon design, icon set, pictogram design, glyph icons, icon grid, line icons, filled icons",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 472
+  },
+  "Photo Editing, Retouching & Compositing": {
+   "group": "GFX",
+   "area": "Illustration & Imagery",
+   "tier": 1,
+   "signals": "photo editing, retouching, Photoshop, compositing, background removal, color correction photo, Lightroom",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 473
+  },
+  "Photography Direction & Shot Lists": {
+   "group": "GFX",
+   "area": "Illustration & Imagery",
+   "tier": 1,
+   "signals": "art direction, photo shoot, shot list, mood board photo, product photography, lighting setup",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 474
+  },
+  "AI Image Generation & Prompting for Visuals": {
+   "group": "GFX",
+   "area": "Illustration & Imagery",
+   "tier": 2,
+   "signals": "AI image, Midjourney, DALL-E, Stable Diffusion, Flux, image prompt, Firefly, generative fill",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 475
+  },
+  "Pattern, Texture & Background Design": {
+   "group": "GFX",
+   "area": "Illustration & Imagery",
+   "tier": 1,
+   "signals": "pattern design, seamless pattern, texture, background art, wallpaper, geometric pattern",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 476
+  },
+  "Creative Briefs & Design Requirements": {
+   "group": "GFX",
+   "area": "Creative Process & Rights",
+   "tier": 2,
+   "signals": "creative brief, design brief, client brief, deliverables list, design requirements, scope of design",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 477
+  },
+  "Mood Boards & Visual Direction": {
+   "group": "GFX",
+   "area": "Creative Process & Rights",
+   "tier": 1,
+   "signals": "mood board, visual direction, style tiles, reference board, look and feel, art direction board",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 478
+  },
+  "Client Feedback, Revisions & Approval Rounds": {
+   "group": "GFX",
+   "area": "Creative Process & Rights",
+   "tier": 2,
+   "signals": "client feedback, revision round, design approval, sign off design, change request design, proofing comments",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 479
+  },
+  "Design File Organization & Asset Management": {
+   "group": "GFX",
+   "area": "Creative Process & Rights",
+   "tier": 1,
+   "signals": "layers naming, file organization, asset library, DAM, export presets, design file cleanup, Figma pages",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 480
+  },
+  "Export Formats, Resolution & Color Profiles": {
+   "group": "GFX",
+   "area": "Creative Process & Rights",
+   "tier": 2,
+   "signals": "export settings, PNG vs JPG, SVG export, color profile, sRGB, Adobe RGB, DPI, file size",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 481
+  },
+  "Stock Assets & Image Licensing": {
+   "group": "GFX",
+   "area": "Creative Process & Rights",
+   "tier": 3,
+   "signals": "stock photo, image license, royalty free, Creative Commons, attribution, editorial use, Shutterstock",
+   "reviewers": {
+    "3": [
+     "design",
+     "compliance"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 482
+  },
+  "Design Tools & Software Choice": {
+   "group": "GFX",
+   "area": "Creative Process & Rights",
+   "tier": 1,
+   "signals": "Figma design, Photoshop, Illustrator, InDesign, Affinity, Canva design, design tool choice",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 483
+  },
+  "Design Portfolio & Case Studies": {
+   "group": "GFX",
+   "area": "Creative Process & Rights",
+   "tier": 1,
+   "signals": "portfolio, case study design, Behance, Dribbble, portfolio site, project showcase",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 484
+  },
+  "Video Scripts & Narration Writing": {
+   "group": "VID",
+   "area": "Pre-production",
+   "tier": 1,
+   "signals": "video script, narration, voiceover script, explainer script, TikTok script, reel script, YouTube script, ad script, hook line",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 485
+  },
+  "Storyboards & Shot Planning": {
+   "group": "VID",
+   "area": "Pre-production",
+   "tier": 1,
+   "signals": "storyboard, shot list video, animatic, scene breakdown, camera angles, shot plan",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 486
+  },
+  "Video Concept, Format & Treatment": {
+   "group": "VID",
+   "area": "Pre-production",
+   "tier": 1,
+   "signals": "video concept, treatment, video format, creative concept, video idea, pitch treatment",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 487
+  },
+  "Production Planning, Crew & Shoot Logistics": {
+   "group": "VID",
+   "area": "Pre-production",
+   "tier": 2,
+   "signals": "shoot schedule, call sheet, crew, location scout, production plan, equipment list",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 488
+  },
+  "Video Editing & Cutting": {
+   "group": "VID",
+   "area": "Editing & Post-production",
+   "tier": 1,
+   "signals": "video editing, cut, timeline, Premiere Pro, Final Cut, DaVinci Resolve, CapCut, rough cut, jump cut",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 489
+  },
+  "Pacing, Story Structure & Retention Editing": {
+   "group": "VID",
+   "area": "Editing & Post-production",
+   "tier": 1,
+   "signals": "pacing, retention, story arc, hook, B-roll, montage, edit rhythm, audience retention",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 490
+  },
+  "Color Correction & Grading": {
+   "group": "VID",
+   "area": "Editing & Post-production",
+   "tier": 1,
+   "signals": "color grading, color correction, LUT, log footage, DaVinci color, look, skin tones",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 491
+  },
+  "VFX, Compositing & Rotoscoping": {
+   "group": "VID",
+   "area": "Editing & Post-production",
+   "tier": 2,
+   "signals": "VFX, compositing, rotoscoping, green screen, chroma key, tracking, cleanup, Nuke",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 492
+  },
+  "Captions, Subtitles & Transcripts": {
+   "group": "VID",
+   "area": "Editing & Post-production",
+   "tier": 2,
+   "signals": "captions, add captions, subtitles, SRT, VTT, burned in captions, transcript, closed captions, translation subtitles",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 493
+  },
+  "Video Accessibility (captions, audio description)": {
+   "group": "VID",
+   "area": "Editing & Post-production",
+   "tier": 3,
+   "signals": "caption accuracy, audio description, accessible video, WCAG media, sign language overlay",
+   "reviewers": {
+    "3": [
+     "design",
+     "compliance"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 494
+  },
+  "Footage Management, Proxies & Archiving": {
+   "group": "VID",
+   "area": "Editing & Post-production",
+   "tier": 2,
+   "signals": "proxies, media management, footage backup, archive project, relink media, ingest",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 495
+  },
+  "Motion Graphics & Kinetic Typography": {
+   "group": "VID",
+   "area": "Motion Graphics & Animation",
+   "tier": 1,
+   "signals": "motion graphics, kinetic typography, After Effects, animated text, lower third, title sequence",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 496
+  },
+  "Logo Animation & Brand Motion": {
+   "group": "VID",
+   "area": "Motion Graphics & Animation",
+   "tier": 1,
+   "signals": "logo animation, animate logo, logo reveal, brand motion, sting, intro animation, outro animation",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 497
+  },
+  "2D Animation & Character Animation": {
+   "group": "VID",
+   "area": "Motion Graphics & Animation",
+   "tier": 2,
+   "signals": "2D animation, character animation, frame by frame, rigging 2D, Toon Boom, Moho, cel animation",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 498
+  },
+  "Explainer & Product Demo Videos": {
+   "group": "VID",
+   "area": "Motion Graphics & Animation",
+   "tier": 1,
+   "signals": "explainer video, product demo video, app demo, walkthrough video, how-it-works video",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 499
+  },
+  "Programmatic Video & Video from Code": {
+   "group": "VID",
+   "area": "Motion Graphics & Animation",
+   "tier": 2,
+   "signals": "Remotion, Motion Canvas app, programmatic video, video from code, React video, render video API",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 500
+  },
+  "Lottie & Web/App Animation Assets": {
+   "group": "VID",
+   "area": "Motion Graphics & Animation",
+   "tier": 2,
+   "signals": "Lottie, Rive, Bodymovin, animated SVG, app animation, web animation asset, dotLottie",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 501
+  },
+  "Easing, Timing & Animation Principles": {
+   "group": "VID",
+   "area": "Motion Graphics & Animation",
+   "tier": 1,
+   "signals": "easing curve, timing, squash and stretch, anticipation, follow through, 12 principles of animation",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 502
+  },
+  "Sound Design & SFX": {
+   "group": "VID",
+   "area": "Audio, Voice & Music",
+   "tier": 1,
+   "signals": "sound design, sound effects, SFX, foley, whoosh, ambience, audio layering",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 503
+  },
+  "Voiceover Recording & AI Voice": {
+   "group": "VID",
+   "area": "Audio, Voice & Music",
+   "tier": 2,
+   "signals": "voiceover, VO, AI voice, text to speech voiceover, ElevenLabs, Kokoro, voice clone, narration recording, voice consent",
+   "reviewers": {
+    "3": [
+     "design",
+     "compliance"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 504
+  },
+  "Audio Mixing, Mastering & Loudness": {
+   "group": "VID",
+   "area": "Audio, Voice & Music",
+   "tier": 2,
+   "signals": "audio mix, mastering, loudness, LUFS, noise reduction, EQ, compression audio, ducking",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 505
+  },
+  "Music Selection & Scoring": {
+   "group": "VID",
+   "area": "Audio, Voice & Music",
+   "tier": 1,
+   "signals": "background music, soundtrack, music bed, score, royalty free music, music cue",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 506
+  },
+  "Music & Audio Licensing Rights": {
+   "group": "VID",
+   "area": "Audio, Voice & Music",
+   "tier": 3,
+   "signals": "music license, sync license, copyright music, Content ID, royalty, Epidemic Sound, Artlist",
+   "reviewers": {
+    "3": [
+     "design",
+     "compliance"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 507
+  },
+  "Podcast Production & Editing": {
+   "group": "VID",
+   "area": "Audio, Voice & Music",
+   "tier": 1,
+   "signals": "podcast, podcast editing, episode, intro music, show notes, Riverside, Descript",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 508
+  },
+  "Short-form Social Video (Reels, TikTok, Shorts)": {
+   "group": "VID",
+   "area": "Social & Platform Video",
+   "tier": 1,
+   "signals": "Reels, TikTok, YouTube Shorts, vertical video, 9:16, short form, hook first 3 seconds",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 509
+  },
+  "YouTube Video Strategy & Packaging": {
+   "group": "VID",
+   "area": "Social & Platform Video",
+   "tier": 2,
+   "signals": "YouTube video, title and thumbnail, chapters, end screen, CTR, YouTube SEO, watch time",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 510
+  },
+  "Video Ads & Paid Social Creatives": {
+   "group": "VID",
+   "area": "Social & Platform Video",
+   "tier": 2,
+   "signals": "video ad, UGC ad, paid social video, ad hook, 6 second bumper, ad cutdowns",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 511
+  },
+  "Livestream & Webinar Production": {
+   "group": "VID",
+   "area": "Social & Platform Video",
+   "tier": 2,
+   "signals": "livestream, OBS, webinar, stream overlay, multistream, StreamYard, live production",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 512
+  },
+  "AI Video Generation (Runway, Sora, Veo)": {
+   "group": "VID",
+   "area": "Social & Platform Video",
+   "tier": 2,
+   "signals": "AI video, Runway, Sora, Veo, Kling, Pika, text to video, image to video, AI avatar video",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 513
+  },
+  "Video Export, Codecs & Delivery Specs": {
+   "group": "VID",
+   "area": "Delivery & Formats",
+   "tier": 2,
+   "signals": "export video, video codec, H.264, H.265, ProRes, video bitrate, export frame rate, vertical or horizontal export, render settings video",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 514
+  },
+  "Broadcast & Client Delivery Specs": {
+   "group": "VID",
+   "area": "Delivery & Formats",
+   "tier": 3,
+   "signals": "broadcast spec, delivery spec, deliverables video, QC report video, title safe, action safe, broadcast loudness, master file",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 515
+  },
+  "Video Review, Feedback & Versioning": {
+   "group": "VID",
+   "area": "Delivery & Formats",
+   "tier": 2,
+   "signals": "video review, Frame.io, timecode comments, version cut, client review video, feedback round video",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 516
+  },
+  "Video Tools & Software Choice": {
+   "group": "VID",
+   "area": "Delivery & Formats",
+   "tier": 1,
+   "signals": "Premiere, After Effects, DaVinci, Final Cut, CapCut, Descript, video software",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "compliance"
+    ]
+   },
+   "n": 517
+  },
+  "3D Modeling (Blender, Cinema 4D, Maya)": {
+   "group": "SPC",
+   "area": "3D Modeling & Rendering",
+   "tier": 1,
+   "signals": "3D model, Blender, Cinema 4D, Maya, 3ds Max, mesh, polygon modeling, sculpting, ZBrush",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "qa"
+    ]
+   },
+   "n": 518
+  },
+  "Materials, Texturing & UV Mapping": {
+   "group": "SPC",
+   "area": "3D Modeling & Rendering",
+   "tier": 1,
+   "signals": "3D materials, texturing, UV unwrap, PBR, Substance Painter, Blender shader nodes, normal map",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "qa"
+    ]
+   },
+   "n": 519
+  },
+  "Lighting & Rendering": {
+   "group": "SPC",
+   "area": "3D Modeling & Rendering",
+   "tier": 1,
+   "signals": "3D lighting, render, Cycles, Eevee, Octane, Redshift, V-Ray, HDRI, render settings",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "qa"
+    ]
+   },
+   "n": 520
+  },
+  "3D Animation & Rigging": {
+   "group": "SPC",
+   "area": "3D Modeling & Rendering",
+   "tier": 2,
+   "signals": "3D animation, rigging, skinning, keyframes 3D, motion capture, armature, weight paint",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "qa"
+    ]
+   },
+   "n": 521
+  },
+  "Product Visualization & 3D Mockups": {
+   "group": "SPC",
+   "area": "3D Modeling & Rendering",
+   "tier": 1,
+   "signals": "product render, product visualization, 3D mockup, packshot, CGI product, turntable",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "qa"
+    ]
+   },
+   "n": 522
+  },
+  "3D for Web & Real-time (glTF, Three.js assets)": {
+   "group": "SPC",
+   "area": "3D Modeling & Rendering",
+   "tier": 2,
+   "signals": "glTF, GLB, USDZ, real-time 3D asset, polycount, LOD, web 3D model, Spline",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "qa"
+    ]
+   },
+   "n": 523
+  },
+  "Industrial & Product Design Concepts": {
+   "group": "SPC",
+   "area": "Product & Industrial Design",
+   "tier": 2,
+   "signals": "industrial design, product design concept, form factor, ergonomics product, sketch to CAD, design for manufacture",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "qa"
+    ]
+   },
+   "n": 524
+  },
+  "CAD & Engineering Drawings": {
+   "group": "SPC",
+   "area": "Product & Industrial Design",
+   "tier": 3,
+   "signals": "CAD, Fusion 360, SolidWorks, Onshape, technical drawing, tolerance, STEP file",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "qa"
+    ]
+   },
+   "n": 525
+  },
+  "3D Printing & Fabrication Files": {
+   "group": "SPC",
+   "area": "Product & Industrial Design",
+   "tier": 2,
+   "signals": "3D printing, STL, slicer, Cura, FDM, resin print, laser cut, CNC file",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "qa"
+    ]
+   },
+   "n": 526
+  },
+  "Fashion, Textile & Apparel Design": {
+   "group": "SPC",
+   "area": "Product & Industrial Design",
+   "tier": 1,
+   "signals": "fashion design, textile print, garment, tech pack, flat sketch, apparel collection, fabric pattern",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "qa"
+    ]
+   },
+   "n": 527
+  },
+  "Jewelry & Object Design": {
+   "group": "SPC",
+   "area": "Product & Industrial Design",
+   "tier": 1,
+   "signals": "jewelry design, ring CAD, object design, Rhino 3D, Matrix jewelry, decorative object",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "qa"
+    ]
+   },
+   "n": 528
+  },
+  "Architectural Visualization": {
+   "group": "SPC",
+   "area": "Architecture & Interiors",
+   "tier": 2,
+   "signals": "archviz, architectural render, exterior render, Lumion, Enscape, Twinmotion, walkthrough render",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "qa"
+    ]
+   },
+   "n": 529
+  },
+  "Interior Design & Space Planning": {
+   "group": "SPC",
+   "area": "Architecture & Interiors",
+   "tier": 1,
+   "signals": "interior design, space planning, floor plan, furniture layout, room design, mood board interior",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "qa"
+    ]
+   },
+   "n": 530
+  },
+  "Architectural Drawings & BIM": {
+   "group": "SPC",
+   "area": "Architecture & Interiors",
+   "tier": 4,
+   "signals": "BIM, Revit, ArchiCAD, AutoCAD, floor plan drawing, section, elevation, building regulations",
+   "reviewers": {
+    "3": [
+     "design",
+     "compliance"
+    ],
+    "4": [
+     "design",
+     "qa",
+     "compliance"
+    ]
+   },
+   "n": 531
+  },
+  "Exhibition, Retail & Event Space Design": {
+   "group": "SPC",
+   "area": "Architecture & Interiors",
+   "tier": 2,
+   "signals": "exhibition design, booth design, retail display, store layout, event stage design",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "qa"
+    ]
+   },
+   "n": 532
+  },
+  "Landscape & Urban Design Visuals": {
+   "group": "SPC",
+   "area": "Architecture & Interiors",
+   "tier": 1,
+   "signals": "landscape design, urban design, site plan, masterplan visual, garden design",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "qa"
+    ]
+   },
+   "n": 533
+  },
+  "Game Art & Asset Design": {
+   "group": "SPC",
+   "area": "Games, AR & VR",
+   "tier": 1,
+   "signals": "game art, sprite, pixel art, tileset, game asset, concept art game, low poly",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "qa"
+    ]
+   },
+   "n": 534
+  },
+  "Game UI & HUD Design": {
+   "group": "SPC",
+   "area": "Games, AR & VR",
+   "tier": 2,
+   "signals": "game UI, HUD, game menu, inventory screen, health bar, game HUD layout",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "qa"
+    ]
+   },
+   "n": 535
+  },
+  "Level & Environment Design": {
+   "group": "SPC",
+   "area": "Games, AR & VR",
+   "tier": 2,
+   "signals": "level design, environment art, map design, world building, blockout, greybox",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "qa"
+    ]
+   },
+   "n": 536
+  },
+  "AR Filters, Effects & Experiences": {
+   "group": "SPC",
+   "area": "Games, AR & VR",
+   "tier": 2,
+   "signals": "AR filter, Spark AR, Lens Studio, Effect House, face filter, AR effect, WebAR",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "qa"
+    ]
+   },
+   "n": 537
+  },
+  "VR & Spatial UI Design (Vision Pro, Quest)": {
+   "group": "SPC",
+   "area": "Games, AR & VR",
+   "tier": 2,
+   "signals": "VR design, spatial UI, Vision Pro, visionOS, Quest, immersive, XR interface, 6DoF",
+   "reviewers": {
+    "3": [
+     "design"
+    ],
+    "4": [
+     "design",
+     "qa"
+    ]
+   },
+   "n": 538
+  },
+  "Post Ideas & Content Pillars": {
+   "group": "SOC",
+   "area": "Content & Posting",
+   "tier": 1,
+   "signals": "post ideas, content ideas, what to post, content pillars, content themes, viral ideas, post inspiration",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 539
+  },
+  "Social Content Plans & Posting Cadence": {
+   "group": "SOC",
+   "area": "Content & Posting",
+   "tier": 1,
+   "signals": "content calendar, posting schedule, best time to post, posting frequency, social editorial calendar, plan posts",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 540
+  },
+  "Captions, Hashtags & Post Copy": {
+   "group": "SOC",
+   "area": "Content & Posting",
+   "tier": 1,
+   "signals": "caption, Instagram caption, caption for post, hashtags, post copy, write a post, caption ideas, emoji use, call to action post",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 541
+  },
+  "Hooks, Openers & Scroll-stopping Content": {
+   "group": "SOC",
+   "area": "Content & Posting",
+   "tier": 1,
+   "signals": "hook, scroll stopping, first line, thumb stopping, attention grab, pattern interrupt, stop the scroll",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 542
+  },
+  "Threads, Long Posts & Text-first Content": {
+   "group": "SOC",
+   "area": "Content & Posting",
+   "tier": 1,
+   "signals": "tweet thread, long post, LinkedIn text post, text post, storytelling post, X thread",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 543
+  },
+  "Stories, Polls & Interactive Posts": {
+   "group": "SOC",
+   "area": "Content & Posting",
+   "tier": 1,
+   "signals": "stories, Instagram story, poll, quiz sticker, question box, story highlights content, interactive post",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 544
+  },
+  "Trends, Memes & Timely Content": {
+   "group": "SOC",
+   "area": "Content & Posting",
+   "tier": 1,
+   "signals": "trend, trending audio, meme, trending topic, newsjacking, challenge, trend jacking",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 545
+  },
+  "Content Repurposing Across Platforms": {
+   "group": "SOC",
+   "area": "Content & Posting",
+   "tier": 1,
+   "signals": "repurpose content, cross post, one video many platforms, content recycling, atomize content, reformat post",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 546
+  },
+  "User-generated Content & Reposts": {
+   "group": "SOC",
+   "area": "Content & Posting",
+   "tier": 2,
+   "signals": "UGC, user generated content, repost, reshare, customer photos, permission to repost, credit creator",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 547
+  },
+  "Social Scheduling & Publishing Tools": {
+   "group": "SOC",
+   "area": "Content & Posting",
+   "tier": 1,
+   "signals": "Buffer app, Hootsuite, Later app, Sprout Social, Meta Business Suite, schedule social post, Planoly, Metricool",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 548
+  },
+  "Profile Optimization & Bios": {
+   "group": "SOC",
+   "area": "Profiles & Pages",
+   "tier": 1,
+   "signals": "bio, profile optimization, Instagram profile photo, social username, display name social, about section, profile audit",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 549
+  },
+  "Business Pages, Accounts & Channel Setup": {
+   "group": "SOC",
+   "area": "Profiles & Pages",
+   "tier": 1,
+   "signals": "Facebook page, business account, creator account, professional account, channel setup, page setup",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 550
+  },
+  "Link in Bio, Highlights & Pinned Posts": {
+   "group": "SOC",
+   "area": "Profiles & Pages",
+   "tier": 1,
+   "signals": "link in bio, Linktree, highlights, pinned post, featured section, pinned comment, profile links",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 551
+  },
+  "Verification Badges & Paid Verification": {
+   "group": "SOC",
+   "area": "Profiles & Pages",
+   "tier": 2,
+   "signals": "verified badge, blue check, Meta Verified, X Premium, verification request, get verified",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 552
+  },
+  "Handles, Naming & Cross-platform Brand Consistency": {
+   "group": "SOC",
+   "area": "Profiles & Pages",
+   "tier": 1,
+   "signals": "social handle, social handle availability, same name everywhere, brand handle, rename page, vanity URL",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 553
+  },
+  "Comment Replies & Engagement": {
+   "group": "SOC",
+   "area": "Community & Engagement",
+   "tier": 2,
+   "signals": "reply to comments, comment reply, engagement, respond to comment, community management, comment strategy",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 554
+  },
+  "DMs, Inbox & Customer Messages": {
+   "group": "SOC",
+   "area": "Community & Engagement",
+   "tier": 2,
+   "signals": "DM, Instagram DM, social inbox, message replies social, auto reply social, saved replies, customer service social, quick replies",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 555
+  },
+  "Comment Moderation, Spam & Hidden Words": {
+   "group": "SOC",
+   "area": "Community & Engagement",
+   "tier": 2,
+   "signals": "moderation, hide comment, delete comment, spam comments, hidden words, block user, restrict, filter comments",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 556
+  },
+  "Reviews, Ratings & Reputation Replies": {
+   "group": "SOC",
+   "area": "Community & Engagement",
+   "tier": 2,
+   "signals": "review reply, bad review, Google review, rating, reputation management, respond to review, Trustpilot",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 557
+  },
+  "Crisis, Backlash & Negative PR on Social": {
+   "group": "SOC",
+   "area": "Community & Engagement",
+   "tier": 3,
+   "signals": "crisis, crisis response, backlash, viral complaint, negative PR, apology post, PR crisis social",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 558
+  },
+  "Groups, Channels & Communities": {
+   "group": "SOC",
+   "area": "Community & Engagement",
+   "tier": 2,
+   "signals": "Facebook group, Telegram channel, Telegram group, WhatsApp channel, WhatsApp community, community admin, group rules",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 559
+  },
+  "Giveaways, Contests & Promotions Rules": {
+   "group": "SOC",
+   "area": "Community & Engagement",
+   "tier": 3,
+   "signals": "giveaway, contest, competition, sweepstakes, promotion rules, winner selection, giveaway terms",
+   "reviewers": {
+    "3": [
+     "marketing",
+     "compliance"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 560
+  },
+  "Live Sessions, AMAs & Social Audio": {
+   "group": "SOC",
+   "area": "Community & Engagement",
+   "tier": 1,
+   "signals": "go live, Instagram Live, TikTok Live, Facebook Live, AMA, X Spaces, live Q&A",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 561
+  },
+  "Algorithms, Reach & Feed Ranking": {
+   "group": "SOC",
+   "area": "Reach, Algorithms & Analytics",
+   "tier": 1,
+   "signals": "algorithm, reach, feed ranking, For You page, explore page, impressions dropped, shadowban, distribution",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 562
+  },
+  "Scrolling Behaviour, Attention & Watch Time": {
+   "group": "SOC",
+   "area": "Reach, Algorithms & Analytics",
+   "tier": 1,
+   "signals": "scrolling, scroll behaviour, attention span, dwell time, swipe away, completion rate, feed habits",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 563
+  },
+  "Follower Growth & Audience Building": {
+   "group": "SOC",
+   "area": "Reach, Algorithms & Analytics",
+   "tier": 1,
+   "signals": "grow followers, gain followers, audience growth, follower count, organic growth, grow my account",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 564
+  },
+  "Social Analytics, Insights & KPIs": {
+   "group": "SOC",
+   "area": "Reach, Algorithms & Analytics",
+   "tier": 2,
+   "signals": "insights, social analytics, engagement rate, reach vs impressions, saves, shares, profile visits, social KPIs",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 565
+  },
+  "Social Listening & Competitor Analysis": {
+   "group": "SOC",
+   "area": "Reach, Algorithms & Analytics",
+   "tier": 2,
+   "signals": "social listening, competitor analysis social, brand mentions, mention tracking, Brandwatch, monitor mentions, benchmark competitors",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 566
+  },
+  "Social Media Reports for Clients & Managers": {
+   "group": "SOC",
+   "area": "Reach, Algorithms & Analytics",
+   "tier": 2,
+   "signals": "social media report, monthly social report, client report social, social performance summary, social report template, social dashboard",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 567
+  },
+  "Meta Ads Manager Campaigns": {
+   "group": "SOC",
+   "area": "Paid Ads & Campaigns",
+   "tier": 3,
+   "signals": "Meta Ads Manager, Facebook ads, Instagram ads, boost post, campaign objective, ad set, Advantage+",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 568
+  },
+  "Google Ads (Search, Performance Max, Display, YouTube)": {
+   "group": "SOC",
+   "area": "Paid Ads & Campaigns",
+   "tier": 3,
+   "signals": "Google Ads, search ads, Performance Max, PMax, keywords ads, quality score, YouTube ads, responsive search ad",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 569
+  },
+  "TikTok Ads & Spark Ads": {
+   "group": "SOC",
+   "area": "Paid Ads & Campaigns",
+   "tier": 3,
+   "signals": "TikTok ads, Spark Ads, TikTok Ads Manager, TikTok promote, TopView, TikTok campaign",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 570
+  },
+  "LinkedIn Ads & B2B Campaigns": {
+   "group": "SOC",
+   "area": "Paid Ads & Campaigns",
+   "tier": 3,
+   "signals": "LinkedIn ads, sponsored content, Campaign Manager, lead gen form, B2B ads, InMail ads",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 571
+  },
+  "Snapchat, X, Pinterest & Reddit Ads": {
+   "group": "SOC",
+   "area": "Paid Ads & Campaigns",
+   "tier": 3,
+   "signals": "Snapchat ads, X ads, Twitter ads, Pinterest ads, Reddit ads, Snap Ads Manager",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 572
+  },
+  "Audience Targeting, Lookalikes & Retargeting": {
+   "group": "SOC",
+   "area": "Paid Ads & Campaigns",
+   "tier": 3,
+   "signals": "ad targeting, custom audience, lookalike, retargeting, remarketing, interest targeting, broad targeting, special ad category",
+   "reviewers": {
+    "3": [
+     "marketing",
+     "compliance"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 573
+  },
+  "Ad Copy, Headlines & Offers": {
+   "group": "SOC",
+   "area": "Paid Ads & Campaigns",
+   "tier": 2,
+   "signals": "ad copy, ad headline, primary text, offer, ad CTA, write ad, ad angle",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 574
+  },
+  "Creative Testing & A/B Tests for Ads": {
+   "group": "SOC",
+   "area": "Paid Ads & Campaigns",
+   "tier": 2,
+   "signals": "A/B test ads, creative testing, split test, ad variations test, dynamic creative, winning ad",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 575
+  },
+  "Ad Budgets, Bidding & Spend Limits": {
+   "group": "SOC",
+   "area": "Paid Ads & Campaigns",
+   "tier": 4,
+   "signals": "ad budget, daily budget, bidding strategy, cost cap, bid cap, spend limit, CPM, CPC, CBO",
+   "reviewers": {
+    "3": [
+     "marketing",
+     "finance"
+    ],
+    "4": [
+     "marketing",
+     "compliance",
+     "finance"
+    ]
+   },
+   "n": 576
+  },
+  "Ad Account Charges & Payment Methods": {
+   "group": "SOC",
+   "area": "Paid Ads & Campaigns",
+   "tier": 4,
+   "signals": "ad account charges, ads payment method, Meta ad receipt, ads spending threshold, prepaid ads, ad spend charged twice",
+   "reviewers": {
+    "3": [
+     "marketing",
+     "finance"
+    ],
+    "4": [
+     "marketing",
+     "compliance",
+     "finance"
+    ]
+   },
+   "n": 577
+  },
+  "Ad Policies, Rejections & Restricted Categories": {
+   "group": "SOC",
+   "area": "Paid Ads & Campaigns",
+   "tier": 3,
+   "signals": "ad rejected, disapproved, ad policy, restricted category, special ad category, appeal ad, ad account disabled",
+   "reviewers": {
+    "3": [
+     "marketing",
+     "compliance"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 578
+  },
+  "Pixel, Conversions API & Ad Tracking": {
+   "group": "SOC",
+   "area": "Paid Ads & Campaigns",
+   "tier": 4,
+   "signals": "Meta Pixel, Facebook pixel, Conversions API, CAPI, TikTok pixel, Google tag, conversion tracking, events manager, gclid, pixel not firing",
+   "reviewers": {
+    "3": [
+     "marketing",
+     "compliance",
+     "security"
+    ],
+    "4": [
+     "marketing",
+     "compliance",
+     "security"
+    ]
+   },
+   "n": 579
+  },
+  "Ad Performance, ROAS & Optimization": {
+   "group": "SOC",
+   "area": "Paid Ads & Campaigns",
+   "tier": 3,
+   "signals": "ROAS, CPA, CTR ads, ad performance, ad fatigue, scale ads, optimize campaign, cost per result",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 580
+  },
+  "Lead Ads, Click-to-WhatsApp & Messenger Ads": {
+   "group": "SOC",
+   "area": "Paid Ads & Campaigns",
+   "tier": 3,
+   "signals": "lead ads, instant form, click to WhatsApp, click to Messenger, message ads, lead form, CTWA",
+   "reviewers": {
+    "3": [
+     "marketing",
+     "compliance"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 581
+  },
+  "Facebook Pages, Reels & Features": {
+   "group": "SOC",
+   "area": "Platforms",
+   "tier": 1,
+   "signals": "Facebook, Facebook page, Facebook reels, Facebook post, Facebook feature, how to Facebook, Facebook settings",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 582
+  },
+  "Instagram Posts, Reels & Features": {
+   "group": "SOC",
+   "area": "Platforms",
+   "tier": 1,
+   "signals": "Instagram, IG, Instagram reels, Instagram feed, Instagram grid, collab post, how to Instagram",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 583
+  },
+  "WhatsApp Business App, Catalogs & Broadcasts": {
+   "group": "SOC",
+   "area": "Platforms",
+   "tier": 2,
+   "signals": "WhatsApp Business app, catalog, broadcast list, WhatsApp status, labels, greeting message, away message",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 584
+  },
+  "Threads Content & Growth": {
+   "group": "SOC",
+   "area": "Platforms",
+   "tier": 1,
+   "signals": "Threads app, Meta Threads, Threads post, Threads growth, Threads by Instagram, fediverse Threads",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 585
+  },
+  "Messenger for Business & Chat Automation": {
+   "group": "SOC",
+   "area": "Platforms",
+   "tier": 2,
+   "signals": "Messenger, Facebook Messenger, ManyChat, chat automation, Messenger bot, comment to DM",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 586
+  },
+  "Telegram Channels, Bots & Marketing": {
+   "group": "SOC",
+   "area": "Platforms",
+   "tier": 2,
+   "signals": "Telegram, Telegram channel growth, Telegram bot marketing, Telegram ads, Telegram premium, Telegram mini app",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 587
+  },
+  "TikTok Content & Features": {
+   "group": "SOC",
+   "area": "Platforms",
+   "tier": 1,
+   "signals": "TikTok, TikTok creator, duet, stitch, TikTok sound, how to TikTok, TikTok trends",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 588
+  },
+  "YouTube Channel Management & Monetization": {
+   "group": "SOC",
+   "area": "Platforms",
+   "tier": 3,
+   "signals": "YouTube channel, YouTube Studio, YouTube monetization, YouTube Partner Program, community posts, playlists, channel memberships",
+   "reviewers": {
+    "3": [
+     "marketing",
+     "finance"
+    ],
+    "4": [
+     "marketing",
+     "compliance",
+     "finance"
+    ]
+   },
+   "n": 589
+  },
+  "LinkedIn Personal Brand, Company Pages & Newsletters": {
+   "group": "SOC",
+   "area": "Platforms",
+   "tier": 1,
+   "signals": "LinkedIn, LinkedIn profile, LinkedIn post, company page, LinkedIn newsletter, personal branding, LinkedIn creator",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 590
+  },
+  "X (Twitter) Posting, Communities & Features": {
+   "group": "SOC",
+   "area": "Platforms",
+   "tier": 1,
+   "signals": "Twitter, tweet, X post, X account, X Communities, X Premium, repost, quote post",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 591
+  },
+  "Snapchat Content, Spotlight & Public Profiles": {
+   "group": "SOC",
+   "area": "Platforms",
+   "tier": 1,
+   "signals": "Snapchat, Snap story, Spotlight, Snap Map, public profile Snapchat, Snapchat story, snap streak",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 592
+  },
+  "Google Business Profile & Local Presence": {
+   "group": "SOC",
+   "area": "Platforms",
+   "tier": 2,
+   "signals": "Google Business Profile, Google My Business, GMB, Google Maps listing, local SEO, business hours, Google posts",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 593
+  },
+  "Pinterest Pins & Boards": {
+   "group": "SOC",
+   "area": "Platforms",
+   "tier": 1,
+   "signals": "Pinterest, pins, boards, idea pins, Pinterest SEO, rich pins",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 594
+  },
+  "Reddit, Discord & Niche Communities": {
+   "group": "SOC",
+   "area": "Platforms",
+   "tier": 2,
+   "signals": "Reddit, subreddit, Discord server, Discord community, Quora, niche community, community rules",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 595
+  },
+  "Emerging Platforms (Bluesky, Mastodon, Twitch, Kick)": {
+   "group": "SOC",
+   "area": "Platforms",
+   "tier": 1,
+   "signals": "Bluesky, Mastodon, Twitch, Kick, BeReal, Lemon8, new platform",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 596
+  },
+  "Social Media Strategy & Platform Choice": {
+   "group": "SOC",
+   "area": "Strategy & Management",
+   "tier": 2,
+   "signals": "social media strategy, which platform, platform choice, social plan, goals social, audience persona social",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 597
+  },
+  "Brand Voice & Tone on Social": {
+   "group": "SOC",
+   "area": "Strategy & Management",
+   "tier": 1,
+   "signals": "brand voice social, tone on social, persona voice, brand personality posts, voice guidelines social",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 598
+  },
+  "Marketing Campaign Ideas & Launches": {
+   "group": "SOC",
+   "area": "Strategy & Management",
+   "tier": 2,
+   "signals": "campaign idea, marketing campaign, product launch, launch plan, promo campaign, seasonal campaign, Ramadan campaign, Eid sale, White Friday, national day campaign",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 599
+  },
+  "Influencer & Creator Marketing": {
+   "group": "SOC",
+   "area": "Strategy & Management",
+   "tier": 3,
+   "signals": "influencer, creator collab, brand deal, influencer brief, paid partnership, ambassador, disclosure #ad",
+   "reviewers": {
+    "3": [
+     "marketing",
+     "compliance"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 600
+  },
+  "Creator Monetization & Sponsorships": {
+   "group": "SOC",
+   "area": "Strategy & Management",
+   "tier": 3,
+   "signals": "creator monetization, sponsorship, brand deals rates, media kit, rate card, affiliate links, creator fund",
+   "reviewers": {
+    "3": [
+     "marketing",
+     "finance"
+    ],
+    "4": [
+     "marketing",
+     "compliance",
+     "finance"
+    ]
+   },
+   "n": 601
+  },
+  "Social Commerce & Shops": {
+   "group": "SOC",
+   "area": "Strategy & Management",
+   "tier": 3,
+   "signals": "social commerce, Instagram Shop, Facebook Shop, TikTok Shop, TikTok Shop seller, product tags, live shopping",
+   "reviewers": {
+    "3": [
+     "marketing",
+     "finance"
+    ],
+    "4": [
+     "marketing",
+     "compliance",
+     "finance"
+    ]
+   },
+   "n": 602
+  },
+  "Agency, Client & Team Workflows (approvals)": {
+   "group": "SOC",
+   "area": "Strategy & Management",
+   "tier": 2,
+   "signals": "social media agency, client approval, content approval, share page with agency, social media manager, approval workflow social",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 603
+  },
+  "Email, SMS & Retention Marketing": {
+   "group": "SOC",
+   "area": "Strategy & Management",
+   "tier": 3,
+   "signals": "email marketing, newsletter growth, SMS marketing, retention, drip campaign, abandoned cart message, unsubscribe, opt out, marketing consent",
+   "reviewers": {
+    "3": [
+     "marketing",
+     "compliance"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 604
+  },
+  "Product Listings & Marketplace Copy (Amazon, Noon, Salla, Zid)": {
+   "group": "SOC",
+   "area": "Strategy & Management",
+   "tier": 2,
+   "signals": "product listing, product description, Amazon listing, Noon listing, Salla store, Zid store, marketplace copy, product title",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 605
+  },
+  "PR, Press Releases & Media Outreach": {
+   "group": "SOC",
+   "area": "Strategy & Management",
+   "tier": 2,
+   "signals": "press release, PR pitch, media outreach, journalist pitch, press kit, media coverage",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 606
+  },
+  "Marketing Personas & Audience Research": {
+   "group": "SOC",
+   "area": "Strategy & Management",
+   "tier": 1,
+   "signals": "marketing persona, customer avatar, audience research, ideal customer profile, ICP, target audience",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 607
+  },
+  "Customer Support on Social Channels": {
+   "group": "SOC",
+   "area": "Strategy & Management",
+   "tier": 2,
+   "signals": "support on social, social customer care, DM response time, escalation from DM, help desk social, Zendesk social",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 608
+  },
+  "Hacked Accounts, Recovery & Account Security": {
+   "group": "SOC",
+   "area": "Account Safety & Policies",
+   "tier": 4,
+   "signals": "hacked account, account recovery, lost access, 2FA social, phishing DM, account stolen, login alert",
+   "reviewers": {
+    "3": [
+     "marketing",
+     "security"
+    ],
+    "4": [
+     "marketing",
+     "compliance",
+     "security"
+    ]
+   },
+   "n": 609
+  },
+  "Business Manager, Ad Account & Page Access": {
+   "group": "SOC",
+   "area": "Account Safety & Policies",
+   "tier": 4,
+   "signals": "Business Manager, Meta Business Portfolio, Facebook page admin, ad account access, partner access, Meta system user",
+   "reviewers": {
+    "3": [
+     "marketing",
+     "security"
+    ],
+    "4": [
+     "marketing",
+     "compliance",
+     "security"
+    ]
+   },
+   "n": 610
+  },
+  "Community Guidelines, Strikes & Bans": {
+   "group": "SOC",
+   "area": "Account Safety & Policies",
+   "tier": 3,
+   "signals": "community guidelines, strike, account banned, restricted account, violation, appeal ban, reduced reach violation",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 611
+  },
+  "Copyright, Music Rights & Takedowns on Posts": {
+   "group": "SOC",
+   "area": "Account Safety & Policies",
+   "tier": 3,
+   "signals": "copyright claim, DMCA social, music muted, takedown, content ID claim, repost copyright",
+   "reviewers": {
+    "3": [
+     "marketing",
+     "compliance"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 612
+  },
+  "Impersonation, Fake Accounts & Scams": {
+   "group": "SOC",
+   "area": "Account Safety & Policies",
+   "tier": 3,
+   "signals": "impersonation, impersonating, fake account, scam page, report account, clone account, fraud DMs",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 613
+  },
+  "Privacy, Minors & Data on Social": {
+   "group": "SOC",
+   "area": "Account Safety & Policies",
+   "tier": 4,
+   "signals": "minors on social, kids account social, age gate, personal data in posts, GDPR social media, customer data in DMs",
+   "reviewers": {
+    "3": [
+     "marketing",
+     "compliance",
+     "security"
+    ],
+    "4": [
+     "marketing",
+     "compliance",
+     "security"
+    ]
+   },
+   "n": 614
+  },
+  "Platform Automation, Bots & API Terms": {
+   "group": "SOC",
+   "area": "Account Safety & Policies",
+   "tier": 3,
+   "signals": "social automation, auto like, follow bot, scraping social, Graph API limits, platform terms automation, mass DM",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 615
+  },
+  "Social Platform APIs (Instagram Graph, X, TikTok, LinkedIn)": {
+   "group": "SOC",
+   "area": "Account Safety & Policies",
+   "tier": 3,
+   "signals": "Instagram Graph API, Facebook Graph API, X API, TikTok API, LinkedIn API, post via API, social API integration",
+   "reviewers": {
+    "3": [
+     "marketing",
+     "security"
+    ],
+    "4": [
+     "marketing",
+     "compliance",
+     "security"
+    ]
+   },
+   "n": 616
+  },
+  "WhatsApp Number Bans & Quality Rating": {
+   "group": "SOC",
+   "area": "Account Safety & Policies",
+   "tier": 3,
+   "signals": "WhatsApp banned, WhatsApp number blocked, quality rating, messaging limit, WhatsApp restricted, template paused",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 617
+  },
+  "Platform Help, How-to & Feature Questions": {
+   "group": "SOC",
+   "area": "Account Safety & Policies",
+   "tier": 1,
+   "signals": "social app help, platform feature help, app setting social, help center social, new feature social, tooltip social, how to on Instagram",
+   "reviewers": {
+    "3": [
+     "marketing"
+    ],
+    "4": [
+     "marketing",
+     "compliance"
+    ]
+   },
+   "n": 618
   },
   "Mobile-specific (iOS, Android, cross-platform)": {
    "group": "MOB",
@@ -7794,7 +10875,7 @@
      "qa"
     ]
    },
-   "n": 435
+   "n": 619
   },
   "iOS (Swift, SwiftUI, UIKit)": {
    "group": "MOB",
@@ -7810,7 +10891,7 @@
      "qa"
     ]
    },
-   "n": 436
+   "n": 620
   },
   "Android (Kotlin, Jetpack Compose)": {
    "group": "MOB",
@@ -7826,7 +10907,7 @@
      "qa"
     ]
    },
-   "n": 437
+   "n": 621
   },
   "React Native & Expo": {
    "group": "MOB",
@@ -7842,7 +10923,7 @@
      "qa"
     ]
    },
-   "n": 438
+   "n": 622
   },
   "Flutter & Dart": {
    "group": "MOB",
@@ -7858,7 +10939,7 @@
      "qa"
     ]
    },
-   "n": 439
+   "n": 623
   },
   "Kotlin Multiplatform & Compose Multiplatform": {
    "group": "MOB",
@@ -7874,7 +10955,7 @@
      "qa"
     ]
    },
-   "n": 440
+   "n": 624
   },
   ".NET MAUI & Xamarin": {
    "group": "MOB",
@@ -7890,7 +10971,7 @@
      "qa"
     ]
    },
-   "n": 441
+   "n": 625
   },
   "Electron, Tauri & Desktop Apps": {
    "group": "MOB",
@@ -7906,7 +10987,7 @@
      "qa"
     ]
    },
-   "n": 442
+   "n": 626
   },
   "Hybrid & WebView Apps (Capacitor, Cordova, PWA shell)": {
    "group": "MOB",
@@ -7922,7 +11003,7 @@
      "qa"
     ]
    },
-   "n": 443
+   "n": 627
   },
   "watchOS, tvOS, Wear & Widgets": {
    "group": "MOB",
@@ -7938,7 +11019,7 @@
      "qa"
     ]
    },
-   "n": 444
+   "n": 628
   },
   "Mobile App Architecture (MVVM, Clean, modules)": {
    "group": "MOB",
@@ -7954,7 +11035,7 @@
      "qa"
     ]
    },
-   "n": 445
+   "n": 629
   },
   "Offline-first, Local Storage & Sync": {
    "group": "MOB",
@@ -7970,7 +11051,7 @@
      "qa"
     ]
    },
-   "n": 446
+   "n": 630
   },
   "Mobile Networking, Retries & Connectivity": {
    "group": "MOB",
@@ -7986,7 +11067,7 @@
      "qa"
     ]
    },
-   "n": 447
+   "n": 631
   },
   "Mobile Auth, Keychain & Secure Storage": {
    "group": "MOB",
@@ -8002,7 +11083,7 @@
      "qa"
     ]
    },
-   "n": 448
+   "n": 632
   },
   "Push Notifications (mobile client)": {
    "group": "MOB",
@@ -8018,7 +11099,7 @@
      "qa"
     ]
    },
-   "n": 449
+   "n": 633
   },
   "Deep Links, Universal Links & App Links": {
    "group": "MOB",
@@ -8034,7 +11115,7 @@
      "qa"
     ]
    },
-   "n": 450
+   "n": 634
   },
   "Background Tasks & Battery": {
    "group": "MOB",
@@ -8050,7 +11131,7 @@
      "qa"
     ]
    },
-   "n": 451
+   "n": 635
   },
   "Mobile Permissions & Privacy Prompts": {
    "group": "MOB",
@@ -8066,7 +11147,7 @@
      "qa"
     ]
    },
-   "n": 452
+   "n": 636
   },
   "Camera, Media & Files on Mobile": {
    "group": "MOB",
@@ -8082,7 +11163,7 @@
      "qa"
     ]
    },
-   "n": 453
+   "n": 637
   },
   "Location, Maps & Geofencing": {
    "group": "MOB",
@@ -8098,7 +11179,7 @@
      "qa"
     ]
    },
-   "n": 454
+   "n": 638
   },
   "Mobile Payments (Apple Pay, Google Pay, IAP)": {
    "group": "MOB",
@@ -8116,7 +11197,7 @@
      "finance"
     ]
    },
-   "n": 455
+   "n": 639
   },
   "Mobile Performance (startup, jank, memory)": {
    "group": "MOB",
@@ -8132,7 +11213,7 @@
      "qa"
     ]
    },
-   "n": 456
+   "n": 640
   },
   "Mobile Crash Reporting & Analytics": {
    "group": "MOB",
@@ -8148,7 +11229,7 @@
      "qa"
     ]
    },
-   "n": 457
+   "n": 641
   },
   "Mobile Accessibility (VoiceOver, TalkBack)": {
    "group": "MOB",
@@ -8164,7 +11245,7 @@
      "qa"
     ]
    },
-   "n": 458
+   "n": 642
   },
   "Mobile Localization & RTL": {
    "group": "MOB",
@@ -8180,7 +11261,7 @@
      "qa"
     ]
    },
-   "n": 459
+   "n": 643
   },
   "App Store & Play Store Release": {
    "group": "MOB",
@@ -8196,7 +11277,7 @@
      "qa"
     ]
    },
-   "n": 460
+   "n": 644
   },
   "Mobile CI/CD & Code Signing": {
    "group": "MOB",
@@ -8212,7 +11293,7 @@
      "qa"
     ]
    },
-   "n": 461
+   "n": 645
   },
   "App Versioning, Forced Updates & Compatibility": {
    "group": "MOB",
@@ -8228,7 +11309,7 @@
      "qa"
     ]
    },
-   "n": 462
+   "n": 646
   },
   "OTA Updates & Feature Flags (mobile)": {
    "group": "MOB",
@@ -8244,7 +11325,7 @@
      "qa"
     ]
    },
-   "n": 463
+   "n": 647
   },
   "Device Fragmentation & OS Version Support": {
    "group": "MOB",
@@ -8260,7 +11341,7 @@
      "qa"
     ]
    },
-   "n": 464
+   "n": 648
   },
   "Mobile Testing (XCTest, Espresso, Detox, Maestro)": {
    "group": "MOB",
@@ -8276,7 +11357,7 @@
      "qa"
     ]
    },
-   "n": 465
+   "n": 649
   },
   "Mobile App Security (jailbreak, pinning, obfuscation)": {
    "group": "MOB",
@@ -8292,7 +11373,7 @@
      "qa"
     ]
    },
-   "n": 466
+   "n": 650
   },
   "App Size, Assets & Bundles": {
    "group": "MOB",
@@ -8308,7 +11389,7 @@
      "qa"
     ]
    },
-   "n": 467
+   "n": 651
   },
   "Desktop Packaging, Installers & Auto-update": {
    "group": "MOB",
@@ -8324,7 +11405,7 @@
      "qa"
     ]
    },
-   "n": 468
+   "n": 652
   },
   "Printing & Hardware Integration (POS, scanners, Bluetooth)": {
    "group": "MOB",
@@ -8340,7 +11421,7 @@
      "qa"
     ]
    },
-   "n": 469
+   "n": 653
   },
   "Quality Assurance (strategy & coverage)": {
    "group": "TEST",
@@ -8356,7 +11437,7 @@
      "qa"
     ]
    },
-   "n": 470
+   "n": 654
   },
   "Test Pyramid & What to Test Where": {
    "group": "TEST",
@@ -8372,7 +11453,7 @@
      "qa"
     ]
    },
-   "n": 471
+   "n": 655
   },
   "Coverage Targets & Gaps": {
    "group": "TEST",
@@ -8388,7 +11469,7 @@
      "qa"
     ]
    },
-   "n": 472
+   "n": 656
   },
   "Testability & Dependency Seams": {
    "group": "TEST",
@@ -8404,7 +11485,7 @@
      "qa"
     ]
    },
-   "n": 473
+   "n": 657
   },
   "Test Naming, Structure & Readability": {
    "group": "TEST",
@@ -8420,7 +11501,7 @@
      "qa"
     ]
    },
-   "n": 474
+   "n": 658
   },
   "Test Review & Assertion Quality": {
    "group": "TEST",
@@ -8436,7 +11517,7 @@
      "qa"
     ]
    },
-   "n": 475
+   "n": 659
   },
   "Test Documentation & Test Cases Catalog": {
    "group": "TEST",
@@ -8452,7 +11533,7 @@
      "qa"
     ]
    },
-   "n": 476
+   "n": 660
   },
   "Unit Test": {
    "group": "TEST",
@@ -8468,7 +11549,7 @@
      "qa"
     ]
    },
-   "n": 477
+   "n": 661
   },
   "Integration & API Test": {
    "group": "TEST",
@@ -8484,7 +11565,7 @@
      "qa"
     ]
    },
-   "n": 478
+   "n": 662
   },
   "End to End Test": {
    "group": "TEST",
@@ -8503,7 +11584,7 @@
    "ov": {
     "Work": "sonnet·high"
    },
-   "n": 479
+   "n": 663
   },
   "Contract & Snapshot Tests": {
    "group": "TEST",
@@ -8519,7 +11600,7 @@
      "qa"
     ]
    },
-   "n": 480
+   "n": 664
   },
   "Component & UI Tests": {
    "group": "TEST",
@@ -8535,7 +11616,7 @@
      "qa"
     ]
    },
-   "n": 481
+   "n": 665
   },
   "Property-based & Fuzz Testing": {
    "group": "TEST",
@@ -8551,7 +11632,7 @@
      "qa"
     ]
    },
-   "n": 482
+   "n": 666
   },
   "Mutation Testing": {
    "group": "TEST",
@@ -8567,7 +11648,7 @@
      "qa"
     ]
    },
-   "n": 483
+   "n": 667
   },
   "Database & Migration Tests": {
    "group": "TEST",
@@ -8583,7 +11664,7 @@
      "qa"
     ]
    },
-   "n": 484
+   "n": 668
   },
   "Visual Regression Tests": {
    "group": "TEST",
@@ -8599,7 +11680,7 @@
      "qa"
     ]
    },
-   "n": 485
+   "n": 669
   },
   "Accessibility Tests (axe, Lighthouse CI)": {
    "group": "TEST",
@@ -8615,7 +11696,7 @@
      "qa"
     ]
    },
-   "n": 486
+   "n": 670
   },
   "Security Tests (SAST, DAST, dependency scan in CI)": {
    "group": "TEST",
@@ -8631,7 +11712,7 @@
      "qa"
     ]
    },
-   "n": 487
+   "n": 671
   },
   "Chaos, Fault-injection & Resilience Tests": {
    "group": "TEST",
@@ -8647,7 +11728,7 @@
      "qa"
     ]
    },
-   "n": 488
+   "n": 672
   },
   "Smoke, Sanity & Post-deploy Checks": {
    "group": "TEST",
@@ -8663,7 +11744,7 @@
      "qa"
     ]
    },
-   "n": 489
+   "n": 673
   },
   "Regression & Smoke Check": {
    "group": "TEST",
@@ -8679,7 +11760,7 @@
      "qa"
     ]
    },
-   "n": 490
+   "n": 674
   },
   "Exploratory & Scripted Manual Tests": {
    "group": "TEST",
@@ -8695,7 +11776,7 @@
      "qa"
     ]
    },
-   "n": 491
+   "n": 675
   },
   "Acceptance & BDD Tests (Cucumber, SpecFlow)": {
    "group": "TEST",
@@ -8711,7 +11792,7 @@
      "qa"
     ]
    },
-   "n": 492
+   "n": 676
   },
   "Approval & Characterization Tests (legacy code)": {
    "group": "TEST",
@@ -8727,7 +11808,7 @@
      "qa"
     ]
    },
-   "n": 493
+   "n": 677
   },
   "Performance & Load Testing": {
    "group": "TEST",
@@ -8743,7 +11824,7 @@
      "qa"
     ]
    },
-   "n": 494
+   "n": 678
   },
   "Localization & RTL Tests": {
    "group": "TEST",
@@ -8759,7 +11840,7 @@
      "qa"
     ]
    },
-   "n": 495
+   "n": 679
   },
   "Email, SMS & Notification Tests": {
    "group": "TEST",
@@ -8775,7 +11856,7 @@
      "qa"
     ]
    },
-   "n": 496
+   "n": 680
   },
   "Test Data, Fixtures & Mocks": {
    "group": "TEST",
@@ -8791,7 +11872,7 @@
      "qa"
     ]
    },
-   "n": 497
+   "n": 681
   },
   "Mocking Strategy & Test Doubles": {
    "group": "TEST",
@@ -8807,7 +11888,7 @@
      "qa"
     ]
    },
-   "n": 498
+   "n": 682
   },
   "Fakes for External Services (WireMock, msw, Testcontainers)": {
    "group": "TEST",
@@ -8823,7 +11904,7 @@
      "qa"
     ]
    },
-   "n": 499
+   "n": 683
   },
   "Time, Randomness & Determinism in Tests": {
    "group": "TEST",
@@ -8839,7 +11920,7 @@
      "qa"
     ]
    },
-   "n": 500
+   "n": 684
   },
   "Test Databases & Isolation Between Tests": {
    "group": "TEST",
@@ -8855,7 +11936,7 @@
      "qa"
     ]
    },
-   "n": 501
+   "n": 685
   },
   "Golden Files, Snapshots & Approval Data": {
    "group": "TEST",
@@ -8871,7 +11952,7 @@
      "qa"
     ]
    },
-   "n": 502
+   "n": 686
   },
   "Synthetic & Anonymized Production-like Data": {
    "group": "TEST",
@@ -8889,7 +11970,7 @@
      "compliance"
     ]
    },
-   "n": 503
+   "n": 687
   },
   "Test Run & Suite Execution": {
    "group": "TEST",
@@ -8905,7 +11986,7 @@
      "qa"
     ]
    },
-   "n": 504
+   "n": 688
   },
   "Flaky Test Hunting": {
    "group": "TEST",
@@ -8921,7 +12002,7 @@
      "qa"
     ]
    },
-   "n": 505
+   "n": 689
   },
   "Test Speed, Parallelism & Sharding": {
    "group": "TEST",
@@ -8937,7 +12018,7 @@
      "qa"
     ]
    },
-   "n": 506
+   "n": 690
   },
   "Test Selection, Filtering & Tagging": {
    "group": "TEST",
@@ -8953,7 +12034,7 @@
      "qa"
     ]
    },
-   "n": 507
+   "n": 691
   },
   "Test Reports, Artifacts & Trends": {
    "group": "TEST",
@@ -8969,7 +12050,7 @@
      "qa"
     ]
    },
-   "n": 508
+   "n": 692
   },
   "Tests in CI (gates, required checks, retries)": {
    "group": "TEST",
@@ -8985,7 +12066,7 @@
      "qa"
     ]
    },
-   "n": 509
+   "n": 693
   },
   "Test Environment Setup & Config": {
    "group": "TEST",
@@ -9001,7 +12082,7 @@
      "qa"
     ]
    },
-   "n": 510
+   "n": 694
   },
   "Debugging Failing Tests": {
    "group": "TEST",
@@ -9017,7 +12098,7 @@
      "qa"
     ]
    },
-   "n": 511
+   "n": 695
   },
   "Test Frameworks & Runners (xUnit, Jest, pytest, JUnit)": {
    "group": "TEST",
@@ -9033,7 +12114,7 @@
      "qa"
     ]
    },
-   "n": 512
+   "n": 696
   },
   "Browser Automation Infrastructure (grids, headless, devices)": {
    "group": "TEST",
@@ -9049,7 +12130,7 @@
      "qa"
     ]
    },
-   "n": 513
+   "n": 697
   },
   "Test Code Health (duplication, helpers, page objects)": {
    "group": "TEST",
@@ -9065,7 +12146,7 @@
      "qa"
     ]
    },
-   "n": 514
+   "n": 698
   },
   "Benchmark Tests & Performance Regression Gates": {
    "group": "TEST",
@@ -9081,7 +12162,7 @@
      "qa"
     ]
    },
-   "n": 515
+   "n": 699
   },
   "Acceptance Criteria & Definition of Done": {
    "group": "QA",
@@ -9097,7 +12178,7 @@
      "tester"
     ]
    },
-   "n": 516
+   "n": 700
   },
   "Requirements Traceability & Coverage Matrix": {
    "group": "QA",
@@ -9113,7 +12194,7 @@
      "tester"
     ]
    },
-   "n": 517
+   "n": 701
   },
   "User Acceptance Testing (UAT)": {
    "group": "QA",
@@ -9129,7 +12210,7 @@
      "tester"
     ]
    },
-   "n": 518
+   "n": 702
   },
   "Release QA Sign-off & Go/No-go": {
    "group": "QA",
@@ -9145,7 +12226,7 @@
      "tester"
     ]
    },
-   "n": 519
+   "n": 703
   },
   "Regression Suites & Release Test Plans": {
    "group": "QA",
@@ -9161,7 +12242,7 @@
      "tester"
     ]
    },
-   "n": 520
+   "n": 704
   },
   "Feature Verification Against the Ticket": {
    "group": "QA",
@@ -9177,7 +12258,7 @@
      "tester"
     ]
    },
-   "n": 521
+   "n": 705
   },
   "Edge Cases, Boundaries & Negative Paths": {
    "group": "QA",
@@ -9193,7 +12274,7 @@
      "tester"
     ]
    },
-   "n": 522
+   "n": 706
   },
   "Cross-browser, Device & Environment Matrix QA": {
    "group": "QA",
@@ -9209,7 +12290,7 @@
      "tester"
     ]
    },
-   "n": 523
+   "n": 707
   },
   "Data Validation QA (reports, numbers, totals)": {
    "group": "QA",
@@ -9227,7 +12308,7 @@
      "data"
     ]
    },
-   "n": 524
+   "n": 708
   },
   "Localization & Content QA": {
    "group": "QA",
@@ -9243,7 +12324,7 @@
      "tester"
     ]
    },
-   "n": 525
+   "n": 709
   },
   "Bug Reporting & Reproduction Steps": {
    "group": "QA",
@@ -9259,7 +12340,7 @@
      "tester"
     ]
    },
-   "n": 526
+   "n": 710
   },
   "Defect Triage, Severity & Priority": {
    "group": "QA",
@@ -9275,7 +12356,7 @@
      "tester"
     ]
    },
-   "n": 527
+   "n": 711
   },
   "User Feedback & Bug Triage": {
    "group": "QA",
@@ -9291,7 +12372,7 @@
      "tester"
     ]
    },
-   "n": 528
+   "n": 712
   },
   "Root-cause Tagging & Defect Trends": {
    "group": "QA",
@@ -9307,7 +12388,7 @@
      "tester"
     ]
    },
-   "n": 529
+   "n": 713
   },
   "Test Case Management (TestRail, Xray, Zephyr)": {
    "group": "QA",
@@ -9323,7 +12404,7 @@
      "tester"
     ]
    },
-   "n": 530
+   "n": 714
   },
   "QA Environments, Test Accounts & Seeded Scenarios": {
    "group": "QA",
@@ -9339,7 +12420,7 @@
      "tester"
     ]
    },
-   "n": 531
+   "n": 715
   },
   "Exploratory Testing Charters & Session Notes": {
    "group": "QA",
@@ -9355,7 +12436,7 @@
      "tester"
     ]
    },
-   "n": 532
+   "n": 716
   },
   "Risk-based Testing & Prioritization": {
    "group": "QA",
@@ -9371,7 +12452,7 @@
      "tester"
     ]
    },
-   "n": 533
+   "n": 717
   },
   "QA Automation Strategy & Tool Selection": {
    "group": "QA",
@@ -9387,7 +12468,7 @@
      "tester"
     ]
    },
-   "n": 534
+   "n": 718
   },
   "Shift-left QA & Review of Specs": {
    "group": "QA",
@@ -9403,7 +12484,7 @@
      "tester"
     ]
    },
-   "n": 535
+   "n": 719
   },
   "Production Verification & Monitoring after Release": {
    "group": "QA",
@@ -9419,7 +12500,7 @@
      "tester"
     ]
    },
-   "n": 536
+   "n": 720
   },
   "Beta Programs, Canary Users & Feedback Loops": {
    "group": "QA",
@@ -9435,7 +12516,7 @@
      "tester"
     ]
    },
-   "n": 537
+   "n": 721
   },
   "Accessibility & Usability QA": {
    "group": "QA",
@@ -9451,7 +12532,7 @@
      "tester"
     ]
    },
-   "n": 538
+   "n": 722
   },
   "Security QA & Abuse Case Testing": {
    "group": "QA",
@@ -9469,7 +12550,7 @@
      "security"
     ]
    },
-   "n": 539
+   "n": 723
   },
   "Performance QA & Perceived Speed Checks": {
    "group": "QA",
@@ -9485,7 +12566,7 @@
      "tester"
     ]
    },
-   "n": 540
+   "n": 724
   },
   "Benchmarking & Micro-benchmarks": {
    "group": "PERF",
@@ -9501,7 +12582,7 @@
      "tester"
     ]
    },
-   "n": 541
+   "n": 725
   },
   "Profiling (CPU, allocations, flame graphs)": {
    "group": "PERF",
@@ -9517,7 +12598,7 @@
      "tester"
     ]
    },
-   "n": 542
+   "n": 726
   },
   "Latency, Percentiles & Tail Latency": {
    "group": "PERF",
@@ -9533,7 +12614,7 @@
      "tester"
     ]
    },
-   "n": 543
+   "n": 727
   },
   "Throughput, Concurrency & Saturation": {
    "group": "PERF",
@@ -9549,7 +12630,7 @@
      "tester"
     ]
    },
-   "n": 544
+   "n": 728
   },
   "Performance Budgets & SLOs": {
    "group": "PERF",
@@ -9565,7 +12646,7 @@
      "tester"
     ]
    },
-   "n": 545
+   "n": 729
   },
   "Load, Stress & Soak Testing": {
    "group": "PERF",
@@ -9581,7 +12662,7 @@
      "tester"
     ]
    },
-   "n": 546
+   "n": 730
   },
   "Capacity Planning & Headroom": {
    "group": "PERF",
@@ -9597,7 +12678,7 @@
      "tester"
     ]
    },
-   "n": 547
+   "n": 731
   },
   "Performance Regression Detection": {
    "group": "PERF",
@@ -9613,7 +12694,7 @@
      "tester"
     ]
    },
-   "n": 548
+   "n": 732
   },
   "Real-user Monitoring & Synthetic Checks": {
    "group": "PERF",
@@ -9629,7 +12710,7 @@
      "tester"
     ]
    },
-   "n": 549
+   "n": 733
   },
   "Hot Paths & Algorithmic Complexity": {
    "group": "PERF",
@@ -9645,7 +12726,7 @@
      "tester"
     ]
    },
-   "n": 550
+   "n": 734
   },
   "Memory Usage, GC & Allocations": {
    "group": "PERF",
@@ -9661,7 +12742,7 @@
      "tester"
     ]
    },
-   "n": 551
+   "n": 735
   },
   "CPU-bound Work & Parallelism": {
    "group": "PERF",
@@ -9677,7 +12758,7 @@
      "tester"
     ]
    },
-   "n": 552
+   "n": 736
   },
   "I/O, Async & Blocking Calls": {
    "group": "PERF",
@@ -9693,7 +12774,7 @@
      "tester"
     ]
    },
-   "n": 553
+   "n": 737
   },
   "Database Round-trips & Query Batching (app side)": {
    "group": "PERF",
@@ -9709,7 +12790,7 @@
      "tester"
     ]
    },
-   "n": 554
+   "n": 738
   },
   "Serialization & Payload Size": {
    "group": "PERF",
@@ -9725,7 +12806,7 @@
      "tester"
     ]
    },
-   "n": 555
+   "n": 739
   },
   "Startup Time & Cold Starts": {
    "group": "PERF",
@@ -9741,7 +12822,7 @@
      "tester"
     ]
    },
-   "n": 556
+   "n": 740
   },
   "Connection Reuse, Pools & Keep-alive": {
    "group": "PERF",
@@ -9757,7 +12838,7 @@
      "tester"
     ]
    },
-   "n": 557
+   "n": 741
   },
   "Caching for Performance (what, where, how long)": {
    "group": "PERF",
@@ -9773,7 +12854,7 @@
      "tester"
     ]
    },
-   "n": 558
+   "n": 742
   },
   "Pagination, Streaming & Large Result Sets": {
    "group": "PERF",
@@ -9789,7 +12870,7 @@
      "tester"
     ]
    },
-   "n": 559
+   "n": 743
   },
   "Frontend Rendering Performance": {
    "group": "PERF",
@@ -9805,7 +12886,7 @@
      "tester"
     ]
    },
-   "n": 560
+   "n": 744
   },
   "Network Performance (latency, CDN, HTTP/2, prefetch)": {
    "group": "PERF",
@@ -9821,7 +12902,7 @@
      "tester"
     ]
    },
-   "n": 561
+   "n": 745
   },
   "Background Job & Batch Throughput": {
    "group": "PERF",
@@ -9837,7 +12918,7 @@
      "tester"
     ]
    },
-   "n": 562
+   "n": 746
   },
   "Resource Leaks (handles, sockets, threads)": {
    "group": "PERF",
@@ -9853,7 +12934,7 @@
      "tester"
     ]
    },
-   "n": 563
+   "n": 747
   },
   "Performance Anti-patterns & Review": {
    "group": "PERF",
@@ -9869,7 +12950,7 @@
      "tester"
     ]
    },
-   "n": 564
+   "n": 748
   },
   "Cost-performance Trade-offs & Right-sizing": {
    "group": "PERF",
@@ -9885,7 +12966,7 @@
      "tester"
     ]
    },
-   "n": 565
+   "n": 749
   },
   "Bug Fix & Debugging": {
    "group": "DBG",
@@ -9901,7 +12982,7 @@
      "qa"
     ]
    },
-   "n": 566
+   "n": 750
   },
   "Reproducing Bugs & Minimal Repro": {
    "group": "DBG",
@@ -9917,7 +12998,7 @@
      "qa"
     ]
    },
-   "n": 567
+   "n": 751
   },
   "Stack Traces, Exceptions & Error Analysis": {
    "group": "DBG",
@@ -9933,7 +13014,7 @@
      "qa"
     ]
    },
-   "n": 568
+   "n": 752
   },
   "Debuggers, Breakpoints & Inspection": {
    "group": "DBG",
@@ -9949,7 +13030,7 @@
      "qa"
     ]
    },
-   "n": 569
+   "n": 753
   },
   "Log & Trace Investigation": {
    "group": "DBG",
@@ -9965,7 +13046,7 @@
      "qa"
     ]
    },
-   "n": 570
+   "n": 754
   },
   "Heisenbugs, Timing & Environment-specific Bugs": {
    "group": "DBG",
@@ -9981,7 +13062,7 @@
      "qa"
     ]
    },
-   "n": 571
+   "n": 755
   },
   "Concurrency Bugs & Deadlocks (debugging)": {
    "group": "DBG",
@@ -9997,7 +13078,7 @@
      "qa"
     ]
    },
-   "n": 572
+   "n": 756
   },
   "Memory Leaks & Resource Exhaustion": {
    "group": "DBG",
@@ -10013,7 +13094,7 @@
      "qa"
     ]
    },
-   "n": 573
+   "n": 757
   },
   "Crash Analysis & Core Dumps": {
    "group": "DBG",
@@ -10029,7 +13110,7 @@
      "qa"
     ]
    },
-   "n": 574
+   "n": 758
   },
   "Performance Debugging (why is it slow)": {
    "group": "DBG",
@@ -10045,7 +13126,7 @@
      "qa"
     ]
    },
-   "n": 575
+   "n": 759
   },
   "Data Bugs (wrong values, off-by-one, encoding)": {
    "group": "DBG",
@@ -10061,7 +13142,7 @@
      "qa"
     ]
    },
-   "n": 576
+   "n": 760
   },
   "Dependency & Version Conflicts": {
    "group": "DBG",
@@ -10077,7 +13158,7 @@
      "qa"
     ]
    },
-   "n": 577
+   "n": 761
   },
   "Build & Compile Errors": {
    "group": "DBG",
@@ -10093,7 +13174,7 @@
      "qa"
     ]
    },
-   "n": 578
+   "n": 762
   },
   "Configuration & Environment Mismatch Bugs": {
    "group": "DBG",
@@ -10109,7 +13190,7 @@
      "qa"
     ]
    },
-   "n": 579
+   "n": 763
   },
   "Network & Connectivity Debugging": {
    "group": "DBG",
@@ -10125,7 +13206,7 @@
      "qa"
     ]
    },
-   "n": 580
+   "n": 764
   },
   "Browser & Frontend Debugging": {
    "group": "DBG",
@@ -10141,7 +13222,7 @@
      "qa"
     ]
    },
-   "n": 581
+   "n": 765
   },
   "Mobile App Debugging": {
    "group": "DBG",
@@ -10157,7 +13238,7 @@
      "qa"
     ]
    },
-   "n": 582
+   "n": 766
   },
   "Debugging Third-party & Vendor Issues": {
    "group": "DBG",
@@ -10173,7 +13254,7 @@
      "qa"
     ]
    },
-   "n": 583
+   "n": 767
   },
   "Incident & Production Debug": {
    "group": "DBG",
@@ -10195,7 +13276,7 @@
    "caps": {
     "Analyse": 80
    },
-   "n": 584
+   "n": 768
   },
   "Incident Response & Communication": {
    "group": "DBG",
@@ -10211,7 +13292,7 @@
      "qa"
     ]
    },
-   "n": 585
+   "n": 769
   },
   "Hotfixes & Emergency Changes": {
    "group": "DBG",
@@ -10227,7 +13308,7 @@
      "qa"
     ]
    },
-   "n": 586
+   "n": 770
   },
   "Rollback & Recovery Decisions": {
    "group": "DBG",
@@ -10243,7 +13324,7 @@
      "qa"
     ]
    },
-   "n": 587
+   "n": 771
   },
   "Root Cause Analysis & Postmortem": {
    "group": "DBG",
@@ -10265,7 +13346,7 @@
    "caps": {
     "Analyse": 60
    },
-   "n": 588
+   "n": 772
   },
   "Data Corruption & Recovery": {
    "group": "DBG",
@@ -10281,7 +13362,7 @@
      "qa"
     ]
    },
-   "n": 589
+   "n": 773
   },
   "Degraded Mode, Partial Outages & Workarounds": {
    "group": "DBG",
@@ -10297,7 +13378,7 @@
      "qa"
     ]
    },
-   "n": 590
+   "n": 774
   },
   "Alert Triage & On-call Runbooks": {
    "group": "DBG",
@@ -10313,7 +13394,7 @@
      "qa"
     ]
    },
-   "n": 591
+   "n": 775
   },
   "Incident Metrics (MTTR, MTTD) & Follow-ups": {
    "group": "DBG",
@@ -10329,7 +13410,7 @@
      "qa"
     ]
    },
-   "n": 592
+   "n": 776
   },
   "Security Incident Handling & Breach Response": {
    "group": "DBG",
@@ -10349,7 +13430,7 @@
      "compliance"
     ]
    },
-   "n": 593
+   "n": 777
   },
   "Dependency Outages & Vendor Incidents": {
    "group": "DBG",
@@ -10365,7 +13446,7 @@
      "qa"
     ]
    },
-   "n": 594
+   "n": 778
   },
   "Capacity Incidents (disk full, quota, limits)": {
    "group": "DBG",
@@ -10381,7 +13462,7 @@
      "qa"
     ]
    },
-   "n": 595
+   "n": 779
   },
   "Clean Code (naming, structure, readability)": {
    "group": "CODE",
@@ -10397,7 +13478,7 @@
      "tester"
     ]
    },
-   "n": 596
+   "n": 780
   },
   "Naming Conventions & Vocabulary": {
    "group": "CODE",
@@ -10413,7 +13494,7 @@
      "tester"
     ]
    },
-   "n": 597
+   "n": 781
   },
   "Function Size, Parameters & Cohesion": {
    "group": "CODE",
@@ -10429,7 +13510,7 @@
      "tester"
     ]
    },
-   "n": 598
+   "n": 782
   },
   "Code Duplication & Reuse": {
    "group": "CODE",
@@ -10445,7 +13526,7 @@
      "tester"
     ]
    },
-   "n": 599
+   "n": 783
   },
   "Dead Code & Tech Debt": {
    "group": "CODE",
@@ -10461,7 +13542,7 @@
      "tester"
     ]
    },
-   "n": 600
+   "n": 784
   },
   "Code Comments & Inline Docs": {
    "group": "CODE",
@@ -10477,7 +13558,7 @@
      "tester"
     ]
    },
-   "n": 601
+   "n": 785
   },
   "Lint, Format & Style": {
    "group": "CODE",
@@ -10496,7 +13577,7 @@
    "ov": {
     "Work": "haiku·low"
    },
-   "n": 602
+   "n": 786
   },
   "Magic Numbers, Constants & Enums": {
    "group": "CODE",
@@ -10512,7 +13593,7 @@
      "tester"
     ]
    },
-   "n": 603
+   "n": 787
   },
   "Nullability, Optionals & Defensive Code": {
    "group": "CODE",
@@ -10528,7 +13609,7 @@
      "tester"
     ]
    },
-   "n": 604
+   "n": 788
   },
   "Conditionals, Nesting & Early Returns": {
    "group": "CODE",
@@ -10544,7 +13625,7 @@
      "tester"
     ]
    },
-   "n": 605
+   "n": 789
   },
   "Immutability & Side-effect Control": {
    "group": "CODE",
@@ -10560,7 +13641,7 @@
      "tester"
     ]
    },
-   "n": 606
+   "n": 790
   },
   "Code Smells Catalog & Review Checklist": {
    "group": "CODE",
@@ -10576,7 +13657,7 @@
      "tester"
     ]
    },
-   "n": 607
+   "n": 791
   },
   "Consistency Across the Codebase": {
    "group": "CODE",
@@ -10592,7 +13673,7 @@
      "tester"
     ]
    },
-   "n": 608
+   "n": 792
   },
   "Design Patterns (GoF) Usage & Misuse": {
    "group": "CODE",
@@ -10608,7 +13689,7 @@
      "tester"
     ]
    },
-   "n": 609
+   "n": 793
   },
   "Repository, Unit of Work & Data Access Patterns": {
    "group": "CODE",
@@ -10624,7 +13705,7 @@
      "tester"
     ]
    },
-   "n": 610
+   "n": 794
   },
   "CQRS, Mediator & Command Handlers": {
    "group": "CODE",
@@ -10640,7 +13721,7 @@
      "tester"
     ]
    },
-   "n": 611
+   "n": 795
   },
   "Dependency Inversion & Interfaces": {
    "group": "CODE",
@@ -10656,7 +13737,7 @@
      "tester"
     ]
    },
-   "n": 612
+   "n": 796
   },
   "SOLID & Object-oriented Design": {
    "group": "CODE",
@@ -10672,7 +13753,7 @@
      "tester"
     ]
    },
-   "n": 613
+   "n": 797
   },
   "Functional Patterns (Result, Option, pipelines)": {
    "group": "CODE",
@@ -10688,7 +13769,7 @@
      "tester"
     ]
    },
-   "n": 614
+   "n": 798
   },
   "Specification, Policy & Rule Objects": {
    "group": "CODE",
@@ -10704,7 +13785,7 @@
      "tester"
     ]
    },
-   "n": 615
+   "n": 799
   },
   "Event Sourcing & Domain Events (code level)": {
    "group": "CODE",
@@ -10720,7 +13801,7 @@
      "tester"
     ]
    },
-   "n": 616
+   "n": 800
   },
   "State Pattern & Finite State Machines (code)": {
    "group": "CODE",
@@ -10736,7 +13817,7 @@
      "tester"
     ]
    },
-   "n": 617
+   "n": 801
   },
   "Anti-patterns (God object, anemic model, service locator)": {
    "group": "CODE",
@@ -10752,7 +13833,7 @@
      "tester"
     ]
    },
-   "n": 618
+   "n": 802
   },
   "Pattern Selection & Over-engineering Check": {
    "group": "CODE",
@@ -10768,7 +13849,7 @@
      "tester"
     ]
    },
-   "n": 619
+   "n": 803
   },
   "Concurrency Patterns in Code (async, actors, channels)": {
    "group": "CODE",
@@ -10784,7 +13865,7 @@
      "tester"
     ]
    },
-   "n": 620
+   "n": 804
   },
   "Plugin, Extension & Strategy Registration": {
    "group": "CODE",
@@ -10800,7 +13881,7 @@
      "tester"
     ]
    },
-   "n": 621
+   "n": 805
   },
   "Refactoring (behavior-preserving)": {
    "group": "CODE",
@@ -10816,7 +13897,7 @@
      "tester"
     ]
    },
-   "n": 622
+   "n": 806
   },
   "Large-scale Refactors & Incremental Strategy": {
    "group": "CODE",
@@ -10832,7 +13913,7 @@
      "tester"
     ]
    },
-   "n": 623
+   "n": 807
   },
   "Project Structure & Folder Layout": {
    "group": "CODE",
@@ -10848,7 +13929,7 @@
      "tester"
     ]
    },
-   "n": 624
+   "n": 808
   },
   "Module Boundaries & Dependency Graph": {
    "group": "CODE",
@@ -10864,7 +13945,7 @@
      "tester"
     ]
    },
-   "n": 625
+   "n": 809
   },
   "Error Handling & Resilience": {
    "group": "CODE",
@@ -10880,7 +13961,7 @@
      "tester"
     ]
    },
-   "n": 626
+   "n": 810
   },
   "Exceptions vs Result Types & Error Taxonomy": {
    "group": "CODE",
@@ -10896,7 +13977,7 @@
      "tester"
     ]
    },
-   "n": 627
+   "n": 811
   },
   "Logging & Observability (instrumentation)": {
    "group": "CODE",
@@ -10912,7 +13993,7 @@
      "tester"
     ]
    },
-   "n": 628
+   "n": 812
   },
   "Type Safety & Static Analysis": {
    "group": "CODE",
@@ -10928,7 +14009,7 @@
      "tester"
     ]
    },
-   "n": 629
+   "n": 813
   },
   "Generics, Abstractions & Type Design": {
    "group": "CODE",
@@ -10944,7 +14025,7 @@
      "tester"
     ]
    },
-   "n": 630
+   "n": 814
   },
   "Configuration, Constants & Feature Toggles in Code": {
    "group": "CODE",
@@ -10960,7 +14041,7 @@
      "tester"
     ]
    },
-   "n": 631
+   "n": 815
   },
   "Code Generation & Templates (scaffolding, source generators)": {
    "group": "CODE",
@@ -10976,7 +14057,7 @@
      "tester"
     ]
    },
-   "n": 632
+   "n": 816
   },
   "Legacy Code Modernization": {
    "group": "CODE",
@@ -10992,7 +14073,7 @@
      "tester"
     ]
    },
-   "n": 633
+   "n": 817
   },
   "Code Review Practice & Review Comments": {
    "group": "CODE",
@@ -11008,7 +14089,7 @@
      "tester"
     ]
    },
-   "n": 634
+   "n": 818
   },
   "Commit Hygiene, PR Size & History": {
    "group": "CODE",
@@ -11024,7 +14105,7 @@
      "tester"
     ]
    },
-   "n": 635
+   "n": 819
   },
   "Code Metrics & Complexity Analysis": {
    "group": "CODE",
@@ -11040,7 +14121,7 @@
      "tester"
     ]
    },
-   "n": 636
+   "n": 820
   },
   "Architecture, Design Pattern & Stack Used": {
    "group": "ARCH",
@@ -11060,7 +14141,7 @@
    "caps": {
     "Plan": 200
    },
-   "n": 637
+   "n": 821
   },
   "Layered, Clean, Onion & Hexagonal Architecture": {
    "group": "ARCH",
@@ -11073,7 +14154,7 @@
      "security"
     ]
    },
-   "n": 638
+   "n": 822
   },
   "Microservices vs Monolith Decisions": {
    "group": "ARCH",
@@ -11090,7 +14171,7 @@
     "Plan": "fable·medium",
     "Work": "sonnet·medium"
    },
-   "n": 639
+   "n": 823
   },
   "Modular Monolith & Module Contracts": {
    "group": "ARCH",
@@ -11103,7 +14184,7 @@
      "security"
     ]
    },
-   "n": 640
+   "n": 824
   },
   "Event-driven & Messaging Architecture": {
    "group": "ARCH",
@@ -11116,7 +14197,7 @@
      "security"
     ]
    },
-   "n": 641
+   "n": 825
   },
   "Domain Modeling (DDD, entities, aggregates)": {
    "group": "ARCH",
@@ -11129,7 +14210,7 @@
      "security"
     ]
    },
-   "n": 642
+   "n": 826
   },
   "Bounded Contexts & Context Mapping": {
    "group": "ARCH",
@@ -11142,7 +14223,7 @@
      "security"
     ]
    },
-   "n": 643
+   "n": 827
   },
   "CQRS & Event Sourcing (architecture level)": {
    "group": "ARCH",
@@ -11155,7 +14236,7 @@
      "security"
     ]
    },
-   "n": 644
+   "n": 828
   },
   "Serverless & Function-based Architecture": {
    "group": "ARCH",
@@ -11168,7 +14249,7 @@
      "security"
     ]
    },
-   "n": 645
+   "n": 829
   },
   "Service Mesh, Sidecars & Service Communication": {
    "group": "ARCH",
@@ -11181,7 +14262,7 @@
      "security"
     ]
    },
-   "n": 646
+   "n": 830
   },
   "API Gateway & Backend-for-Frontend": {
    "group": "ARCH",
@@ -11194,7 +14275,7 @@
      "security"
     ]
    },
-   "n": 647
+   "n": 831
   },
   "Multi-region, Active-active & Data Residency": {
    "group": "ARCH",
@@ -11207,7 +14288,7 @@
      "security"
     ]
    },
-   "n": 648
+   "n": 832
   },
   "Resilience Patterns (bulkhead, circuit breaker, retry budgets)": {
    "group": "ARCH",
@@ -11220,7 +14301,7 @@
      "security"
     ]
    },
-   "n": 649
+   "n": 833
   },
   "Consistency Models & Distributed Transactions": {
    "group": "ARCH",
@@ -11233,7 +14314,7 @@
      "security"
     ]
    },
-   "n": 650
+   "n": 834
   },
   "Scalability & Capacity Planning": {
    "group": "ARCH",
@@ -11246,7 +14327,7 @@
      "security"
     ]
    },
-   "n": 651
+   "n": 835
   },
   "Caching Architecture & Tiers": {
    "group": "ARCH",
@@ -11259,7 +14340,7 @@
      "security"
     ]
    },
-   "n": 652
+   "n": 836
   },
   "Data Ownership & Service Data Boundaries": {
    "group": "ARCH",
@@ -11272,7 +14353,7 @@
      "security"
     ]
    },
-   "n": 653
+   "n": 837
   },
   "Framework & Language Migration": {
    "group": "ARCH",
@@ -11291,7 +14372,7 @@
    "caps": {
     "Plan": 200
    },
-   "n": 654
+   "n": 838
   },
   "Strangler Fig & Incremental Migration Strategy": {
    "group": "ARCH",
@@ -11304,7 +14385,7 @@
      "security"
     ]
    },
-   "n": 655
+   "n": 839
   },
   "Monorepo vs Polyrepo & Codebase Organization": {
    "group": "ARCH",
@@ -11317,7 +14398,7 @@
      "security"
     ]
    },
-   "n": 656
+   "n": 840
   },
   "Build vs Buy & Vendor Selection": {
    "group": "ARCH",
@@ -11330,7 +14411,7 @@
      "security"
     ]
    },
-   "n": 657
+   "n": 841
   },
   "Technical Debt Strategy & Architecture Roadmap": {
    "group": "ARCH",
@@ -11343,7 +14424,7 @@
      "security"
     ]
    },
-   "n": 658
+   "n": 842
   },
   "Architecture Review & Trade-off Analysis": {
    "group": "ARCH",
@@ -11359,7 +14440,7 @@
    "ov": {
     "Analyse": "fable·medium"
    },
-   "n": 659
+   "n": 843
   },
   "Architecture Decision Records (ADR)": {
    "group": "ARCH",
@@ -11372,7 +14453,7 @@
      "security"
     ]
    },
-   "n": 660
+   "n": 844
   },
   "System Diagrams & C4 Models": {
    "group": "ARCH",
@@ -11385,7 +14466,7 @@
      "security"
     ]
    },
-   "n": 661
+   "n": 845
   },
   "Non-functional Requirements & Quality Attributes": {
    "group": "ARCH",
@@ -11398,7 +14479,7 @@
      "security"
     ]
    },
-   "n": 662
+   "n": 846
   },
   "Multi-platform & Shared Core Strategy": {
    "group": "ARCH",
@@ -11411,7 +14492,7 @@
      "security"
     ]
    },
-   "n": 663
+   "n": 847
   },
   "Offline, Edge & Occasionally-connected Architecture": {
    "group": "ARCH",
@@ -11424,7 +14505,7 @@
      "security"
     ]
    },
-   "n": 664
+   "n": 848
   },
   "Real-time & Streaming Architecture": {
    "group": "ARCH",
@@ -11437,7 +14518,7 @@
      "security"
     ]
    },
-   "n": 665
+   "n": 849
   },
   "Plugin & Extensibility Architecture": {
    "group": "ARCH",
@@ -11450,7 +14531,7 @@
      "security"
     ]
    },
-   "n": 666
+   "n": 850
   },
   "AWS IAM Policies, Roles & Permissions": {
    "group": "AWS",
@@ -11466,7 +14547,7 @@
      "security"
     ]
    },
-   "n": 667
+   "n": 851
   },
   "AWS Organizations, Accounts & Landing Zones": {
    "group": "AWS",
@@ -11482,7 +14563,7 @@
      "security"
     ]
    },
-   "n": 668
+   "n": 852
   },
   "AWS S3 Buckets, Policies & Access": {
    "group": "AWS",
@@ -11498,7 +14579,7 @@
      "security"
     ]
    },
-   "n": 669
+   "n": 853
   },
   "S3 Lifecycle, Storage Classes & Versioning": {
    "group": "AWS",
@@ -11514,7 +14595,7 @@
      "security"
     ]
    },
-   "n": 670
+   "n": 854
   },
   "S3 Performance, Multipart & Event Notifications": {
    "group": "AWS",
@@ -11530,7 +14611,7 @@
      "security"
     ]
    },
-   "n": 671
+   "n": 855
   },
   "EBS, EFS & FSx Storage": {
    "group": "AWS",
@@ -11546,7 +14627,7 @@
      "security"
     ]
    },
-   "n": 672
+   "n": 856
   },
   "AWS Secrets Manager, Parameter Store & KMS": {
    "group": "AWS",
@@ -11562,7 +14643,7 @@
      "security"
     ]
    },
-   "n": 673
+   "n": 857
   },
   "AWS Cognito & Identity Federation": {
    "group": "AWS",
@@ -11578,7 +14659,7 @@
      "security"
     ]
    },
-   "n": 674
+   "n": 858
   },
   "EC2 Instances, AMIs & Auto Scaling": {
    "group": "AWS",
@@ -11594,7 +14675,7 @@
      "security"
     ]
    },
-   "n": 675
+   "n": 859
   },
   "AWS Lambda Functions & Triggers": {
    "group": "AWS",
@@ -11610,7 +14691,7 @@
      "security"
     ]
    },
-   "n": 676
+   "n": 860
   },
   "ECS, Fargate & Task Definitions": {
    "group": "AWS",
@@ -11626,7 +14707,7 @@
      "security"
     ]
    },
-   "n": 677
+   "n": 861
   },
   "EKS & Kubernetes on AWS": {
    "group": "AWS",
@@ -11642,7 +14723,7 @@
      "security"
     ]
    },
-   "n": 678
+   "n": 862
   },
   "Elastic Beanstalk, App Runner & Amplify Hosting": {
    "group": "AWS",
@@ -11658,7 +14739,7 @@
      "security"
     ]
    },
-   "n": 679
+   "n": 863
   },
   "AWS Step Functions & EventBridge": {
    "group": "AWS",
@@ -11674,7 +14755,7 @@
      "security"
     ]
    },
-   "n": 680
+   "n": 864
   },
   "AWS Batch, Glue Jobs & Scheduled Compute": {
    "group": "AWS",
@@ -11690,7 +14771,7 @@
      "security"
     ]
    },
-   "n": 681
+   "n": 865
   },
   "Amazon RDS & Aurora": {
    "group": "AWS",
@@ -11706,7 +14787,7 @@
      "security"
     ]
    },
-   "n": 682
+   "n": 866
   },
   "DynamoDB Tables, Indexes & Capacity": {
    "group": "AWS",
@@ -11722,7 +14803,7 @@
      "security"
     ]
    },
-   "n": 683
+   "n": 867
   },
   "ElastiCache (Redis, Memcached)": {
    "group": "AWS",
@@ -11738,7 +14819,7 @@
      "security"
     ]
    },
-   "n": 684
+   "n": 868
   },
   "Amazon SQS & SNS": {
    "group": "AWS",
@@ -11754,7 +14835,7 @@
      "security"
     ]
    },
-   "n": 685
+   "n": 869
   },
   "Amazon Kinesis & MSK": {
    "group": "AWS",
@@ -11770,7 +14851,7 @@
      "security"
     ]
    },
-   "n": 686
+   "n": 870
   },
   "Amazon OpenSearch Service": {
    "group": "AWS",
@@ -11786,7 +14867,7 @@
      "security"
     ]
    },
-   "n": 687
+   "n": 871
   },
   "Athena, Redshift & Data Lake on AWS": {
    "group": "AWS",
@@ -11802,7 +14883,7 @@
      "security"
     ]
    },
-   "n": 688
+   "n": 872
   },
   "AWS Backup, Snapshots & DR": {
    "group": "AWS",
@@ -11818,7 +14899,7 @@
      "security"
     ]
    },
-   "n": 689
+   "n": 873
   },
   "VPC, Subnets, Security Groups & NACLs": {
    "group": "AWS",
@@ -11834,7 +14915,7 @@
      "security"
     ]
    },
-   "n": 690
+   "n": 874
   },
   "AWS Load Balancers (ALB, NLB) & Target Groups": {
    "group": "AWS",
@@ -11850,7 +14931,7 @@
      "security"
     ]
    },
-   "n": 691
+   "n": 875
   },
   "CloudFront Distributions & Edge Functions": {
    "group": "AWS",
@@ -11866,7 +14947,7 @@
      "security"
     ]
    },
-   "n": 692
+   "n": 876
   },
   "Route 53 DNS & Health Checks": {
    "group": "AWS",
@@ -11882,7 +14963,7 @@
      "security"
     ]
    },
-   "n": 693
+   "n": 877
   },
   "API Gateway (REST, HTTP, WebSocket)": {
    "group": "AWS",
@@ -11898,7 +14979,7 @@
      "security"
     ]
    },
-   "n": 694
+   "n": 878
   },
   "AWS WAF, Shield & GuardDuty": {
    "group": "AWS",
@@ -11914,7 +14995,7 @@
      "security"
     ]
    },
-   "n": 695
+   "n": 879
   },
   "AWS Certificate Manager & TLS on AWS": {
    "group": "AWS",
@@ -11930,7 +15011,7 @@
      "security"
     ]
    },
-   "n": 696
+   "n": 880
   },
   "CloudWatch Logs, Metrics & Alarms": {
    "group": "AWS",
@@ -11946,7 +15027,7 @@
      "security"
     ]
    },
-   "n": 697
+   "n": 881
   },
   "AWS X-Ray & Distributed Tracing on AWS": {
    "group": "AWS",
@@ -11962,7 +15043,7 @@
      "security"
     ]
    },
-   "n": 698
+   "n": 882
   },
   "CloudTrail, Config & Audit on AWS": {
    "group": "AWS",
@@ -11980,7 +15061,7 @@
      "compliance"
     ]
    },
-   "n": 699
+   "n": 883
   },
   "AWS Cost Explorer, Budgets & Savings": {
    "group": "AWS",
@@ -11996,7 +15077,7 @@
      "security"
     ]
    },
-   "n": 700
+   "n": 884
   },
   "AWS CLI, SDKs & Credentials Setup": {
    "group": "AWS",
@@ -12012,7 +15093,7 @@
      "security"
     ]
    },
-   "n": 701
+   "n": 885
   },
   "CloudFormation, CDK & SAM": {
    "group": "AWS",
@@ -12028,7 +15109,7 @@
      "security"
     ]
    },
-   "n": 702
+   "n": 886
   },
   "AWS Deployment Pipelines (CodePipeline, CodeBuild, CodeDeploy)": {
    "group": "AWS",
@@ -12044,7 +15125,7 @@
      "security"
     ]
    },
-   "n": 703
+   "n": 887
   },
   "AWS SES, Pinpoint & Messaging Services": {
    "group": "AWS",
@@ -12060,7 +15141,7 @@
      "security"
     ]
    },
-   "n": 704
+   "n": 888
   },
   "AWS Transfer, DataSync & Storage Gateway": {
    "group": "AWS",
@@ -12076,7 +15157,7 @@
      "security"
     ]
    },
-   "n": 705
+   "n": 889
   },
   "AWS Service Quotas, Limits & Regions": {
    "group": "AWS",
@@ -12092,7 +15173,7 @@
      "security"
     ]
    },
-   "n": 706
+   "n": 890
   },
   "Azure Entra ID (AAD), App Registrations & RBAC": {
    "group": "AZG",
@@ -12108,7 +15189,7 @@
      "security"
     ]
    },
-   "n": 707
+   "n": 891
   },
   "Azure App Service & Web Apps": {
    "group": "AZG",
@@ -12124,7 +15205,7 @@
      "security"
     ]
    },
-   "n": 708
+   "n": 892
   },
   "Azure Functions & Durable Functions": {
    "group": "AZG",
@@ -12140,7 +15221,7 @@
      "security"
     ]
    },
-   "n": 709
+   "n": 893
   },
   "Azure Blob Storage, Files & Queues": {
    "group": "AZG",
@@ -12156,7 +15237,7 @@
      "security"
     ]
    },
-   "n": 710
+   "n": 894
   },
   "Azure SQL, Managed Instance & Cosmos DB": {
    "group": "AZG",
@@ -12172,7 +15253,7 @@
      "security"
     ]
    },
-   "n": 711
+   "n": 895
   },
   "Azure Key Vault & Managed Identities": {
    "group": "AZG",
@@ -12188,7 +15269,7 @@
      "security"
     ]
    },
-   "n": 712
+   "n": 896
   },
   "Azure Networking (VNet, NSG, Front Door, App Gateway)": {
    "group": "AZG",
@@ -12204,7 +15285,7 @@
      "security"
     ]
    },
-   "n": 713
+   "n": 897
   },
   "AKS & Container Apps": {
    "group": "AZG",
@@ -12220,7 +15301,7 @@
      "security"
     ]
    },
-   "n": 714
+   "n": 898
   },
   "Azure Service Bus, Event Grid & Event Hubs": {
    "group": "AZG",
@@ -12236,7 +15317,7 @@
      "security"
     ]
    },
-   "n": 715
+   "n": 899
   },
   "Azure Monitor, Application Insights & Log Analytics": {
    "group": "AZG",
@@ -12252,7 +15333,7 @@
      "security"
     ]
    },
-   "n": 716
+   "n": 900
   },
   "Azure DevOps Pipelines, Repos & Boards": {
    "group": "AZG",
@@ -12268,7 +15349,7 @@
      "security"
     ]
    },
-   "n": 717
+   "n": 901
   },
   "Bicep, ARM Templates & Azure IaC": {
    "group": "AZG",
@@ -12284,7 +15365,7 @@
      "security"
     ]
    },
-   "n": 718
+   "n": 902
   },
   "Azure Cost Management & Reservations": {
    "group": "AZG",
@@ -12300,7 +15381,7 @@
      "security"
     ]
    },
-   "n": 719
+   "n": 903
   },
   "Azure CLI, PowerShell & Subscriptions": {
    "group": "AZG",
@@ -12316,7 +15397,7 @@
      "security"
     ]
    },
-   "n": 720
+   "n": 904
   },
   "Azure Static Web Apps & CDN": {
    "group": "AZG",
@@ -12332,7 +15413,7 @@
      "security"
     ]
    },
-   "n": 721
+   "n": 905
   },
   "Azure Backup, Site Recovery & DR": {
    "group": "AZG",
@@ -12348,7 +15429,7 @@
      "security"
     ]
    },
-   "n": 722
+   "n": 906
   },
   "Azure Communication Services & Notification Hubs": {
    "group": "AZG",
@@ -12364,7 +15445,7 @@
      "security"
     ]
    },
-   "n": 723
+   "n": 907
   },
   "GCP IAM, Projects & Service Accounts": {
    "group": "AZG",
@@ -12380,7 +15461,7 @@
      "security"
     ]
    },
-   "n": 724
+   "n": 908
   },
   "Cloud Run, Cloud Functions & App Engine": {
    "group": "AZG",
@@ -12396,7 +15477,7 @@
      "security"
     ]
    },
-   "n": 725
+   "n": 909
   },
   "GKE & Kubernetes on GCP": {
    "group": "AZG",
@@ -12412,7 +15493,7 @@
      "security"
     ]
    },
-   "n": 726
+   "n": 910
   },
   "Cloud Storage (GCS) Buckets & Access": {
    "group": "AZG",
@@ -12428,7 +15509,7 @@
      "security"
     ]
    },
-   "n": 727
+   "n": 911
   },
   "Cloud SQL, Spanner & Firestore": {
    "group": "AZG",
@@ -12444,7 +15525,7 @@
      "security"
     ]
    },
-   "n": 728
+   "n": 912
   },
   "BigQuery Datasets, Queries & Cost": {
    "group": "AZG",
@@ -12460,7 +15541,7 @@
      "security"
     ]
    },
-   "n": 729
+   "n": 913
   },
   "Pub/Sub & Cloud Tasks": {
    "group": "AZG",
@@ -12476,7 +15557,7 @@
      "security"
     ]
    },
-   "n": 730
+   "n": 914
   },
   "Cloud Load Balancing, Cloud CDN & Cloud Armor": {
    "group": "AZG",
@@ -12492,7 +15573,7 @@
      "security"
     ]
    },
-   "n": 731
+   "n": 915
   },
   "VPC, Firewall Rules & Private Access (GCP)": {
    "group": "AZG",
@@ -12508,7 +15589,7 @@
      "security"
     ]
    },
-   "n": 732
+   "n": 916
   },
   "Cloud Logging, Monitoring & Trace (GCP)": {
    "group": "AZG",
@@ -12524,7 +15605,7 @@
      "security"
     ]
    },
-   "n": 733
+   "n": 917
   },
   "Cloud Build, Artifact Registry & Deploy": {
    "group": "AZG",
@@ -12540,7 +15621,7 @@
      "security"
     ]
    },
-   "n": 734
+   "n": 918
   },
   "Secret Manager & KMS (GCP)": {
    "group": "AZG",
@@ -12556,7 +15637,7 @@
      "security"
     ]
    },
-   "n": 735
+   "n": 919
   },
   "Firebase Auth, Firestore Rules & Hosting": {
    "group": "AZG",
@@ -12572,7 +15653,7 @@
      "security"
     ]
    },
-   "n": 736
+   "n": 920
   },
   "Firebase Cloud Messaging, Remote Config & Analytics": {
    "group": "AZG",
@@ -12588,7 +15669,7 @@
      "security"
     ]
    },
-   "n": 737
+   "n": 921
   },
   "GCP Billing, Budgets & Committed Use": {
    "group": "AZG",
@@ -12604,7 +15685,7 @@
      "security"
     ]
    },
-   "n": 738
+   "n": 922
   },
   "gcloud CLI, Terraform for GCP & Deployment Manager": {
    "group": "AZG",
@@ -12620,7 +15701,7 @@
      "security"
     ]
    },
-   "n": 739
+   "n": 923
   },
   "Multi-cloud & Cloud Migration Strategy": {
    "group": "AZG",
@@ -12636,7 +15717,7 @@
      "security"
     ]
    },
-   "n": 740
+   "n": 924
   },
   "Other Clouds (DigitalOcean, Hetzner, Oracle Cloud, Vercel, Netlify, Render, Fly.io)": {
    "group": "AZG",
@@ -12652,7 +15733,7 @@
      "security"
     ]
    },
-   "n": 741
+   "n": 925
   },
   "Cloudflare DNS, Proxy & Zone Settings": {
    "group": "EDGE",
@@ -12668,7 +15749,7 @@
      "security"
     ]
    },
-   "n": 742
+   "n": 926
   },
   "Cloudflare Workers, Pages & KV": {
    "group": "EDGE",
@@ -12684,7 +15765,7 @@
      "security"
     ]
    },
-   "n": 743
+   "n": 927
   },
   "Cloudflare R2 Object Storage": {
    "group": "EDGE",
@@ -12700,7 +15781,7 @@
      "security"
     ]
    },
-   "n": 744
+   "n": 928
   },
   "Cloudflare WAF, Rules & Bot Management": {
    "group": "EDGE",
@@ -12716,7 +15797,7 @@
      "security"
     ]
    },
-   "n": 745
+   "n": 929
   },
   "Cloudflare Caching, Purge & Cache Rules": {
    "group": "EDGE",
@@ -12732,7 +15813,7 @@
      "security"
     ]
    },
-   "n": 746
+   "n": 930
   },
   "Cloudflare Tunnels & Zero Trust Access": {
    "group": "EDGE",
@@ -12748,7 +15829,7 @@
      "security"
     ]
    },
-   "n": 747
+   "n": 931
   },
   "Cloudflare Images, Stream & Optimization": {
    "group": "EDGE",
@@ -12764,7 +15845,7 @@
      "security"
     ]
    },
-   "n": 748
+   "n": 932
   },
   "Cloudflare Load Balancing & Health Checks": {
    "group": "EDGE",
@@ -12780,7 +15861,7 @@
      "security"
     ]
    },
-   "n": 749
+   "n": 933
   },
   "Cloudflare Email Routing, Registrar & Domains": {
    "group": "EDGE",
@@ -12796,7 +15877,7 @@
      "security"
     ]
    },
-   "n": 750
+   "n": 934
   },
   "Cloudflare Errors (52x, 1020) & Troubleshooting": {
    "group": "EDGE",
@@ -12812,7 +15893,7 @@
      "security"
     ]
    },
-   "n": 751
+   "n": 935
   },
   "CDN Configuration & Origin Shielding": {
    "group": "EDGE",
@@ -12828,7 +15909,7 @@
      "security"
     ]
    },
-   "n": 752
+   "n": 936
   },
   "DNS Records, Propagation & TTL": {
    "group": "EDGE",
@@ -12844,7 +15925,7 @@
      "security"
     ]
    },
-   "n": 753
+   "n": 937
   },
   "Domains, Subdomains & Registrars": {
    "group": "EDGE",
@@ -12860,7 +15941,7 @@
      "security"
     ]
    },
-   "n": 754
+   "n": 938
   },
   "TLS Certificates, Renewal & HTTPS Setup": {
    "group": "EDGE",
@@ -12876,7 +15957,7 @@
      "security"
     ]
    },
-   "n": 755
+   "n": 939
   },
   "HSTS, TLS Versions & Cipher Suites": {
    "group": "EDGE",
@@ -12892,7 +15973,7 @@
      "security"
     ]
    },
-   "n": 756
+   "n": 940
   },
   "Email Authentication DNS (SPF, DKIM, DMARC)": {
    "group": "EDGE",
@@ -12908,7 +15989,7 @@
      "security"
     ]
    },
-   "n": 757
+   "n": 941
   },
   "Anycast, GeoDNS & Traffic Steering": {
    "group": "EDGE",
@@ -12924,7 +16005,7 @@
      "security"
     ]
    },
-   "n": 758
+   "n": 942
   },
   "Load Balancers & Health Checks (general)": {
    "group": "EDGE",
@@ -12940,7 +16021,7 @@
      "security"
     ]
    },
-   "n": 759
+   "n": 943
   },
   "Reverse Proxies (nginx, Caddy, Traefik, HAProxy, YARP)": {
    "group": "EDGE",
@@ -12956,7 +16037,7 @@
      "security"
     ]
    },
-   "n": 760
+   "n": 944
   },
   "nginx Configuration & Rewrites": {
    "group": "EDGE",
@@ -12972,7 +16053,7 @@
      "security"
     ]
    },
-   "n": 761
+   "n": 945
   },
   "API Gateways & Edge Routing (Kong, Envoy, Apigee)": {
    "group": "EDGE",
@@ -12988,7 +16069,7 @@
      "security"
     ]
    },
-   "n": 762
+   "n": 946
   },
   "Rate Limiting & Throttling at the Edge": {
    "group": "EDGE",
@@ -13004,7 +16085,7 @@
      "security"
     ]
    },
-   "n": 763
+   "n": 947
   },
   "WebSockets & Long Connections through Proxies": {
    "group": "EDGE",
@@ -13020,7 +16101,7 @@
      "security"
     ]
    },
-   "n": 764
+   "n": 948
   },
   "Timeouts, Buffers & Request Size Limits": {
    "group": "EDGE",
@@ -13036,7 +16117,7 @@
      "security"
     ]
    },
-   "n": 765
+   "n": 949
   },
   "Forwarded Headers, Real IP & Client Identification": {
    "group": "EDGE",
@@ -13052,7 +16133,7 @@
      "security"
     ]
    },
-   "n": 766
+   "n": 950
   },
   "Redirects, Canonical Hosts & URL Rewriting": {
    "group": "EDGE",
@@ -13068,7 +16149,7 @@
      "security"
     ]
    },
-   "n": 767
+   "n": 951
   },
   "HTTP/1.1, HTTP/2 & HTTP/3 Behaviour": {
    "group": "EDGE",
@@ -13084,7 +16165,7 @@
      "security"
     ]
    },
-   "n": 768
+   "n": 952
   },
   "TCP, UDP, Ports & Sockets": {
    "group": "EDGE",
@@ -13100,7 +16181,7 @@
      "security"
     ]
    },
-   "n": 769
+   "n": 953
   },
   "Firewalls, Security Groups & Port Exposure": {
    "group": "EDGE",
@@ -13116,7 +16197,7 @@
      "security"
     ]
    },
-   "n": 770
+   "n": 954
   },
   "VPN, Private Networking & Bastions": {
    "group": "EDGE",
@@ -13132,7 +16213,7 @@
      "security"
     ]
    },
-   "n": 771
+   "n": 955
   },
   "Zero Trust & Identity-aware Proxies": {
    "group": "EDGE",
@@ -13148,7 +16229,7 @@
      "security"
     ]
    },
-   "n": 772
+   "n": 956
   },
   "IP Addressing, NAT & Subnetting": {
    "group": "EDGE",
@@ -13164,7 +16245,7 @@
      "security"
     ]
    },
-   "n": 773
+   "n": 957
   },
   "mTLS & Service-to-service Authentication": {
    "group": "EDGE",
@@ -13180,7 +16261,7 @@
      "security"
     ]
    },
-   "n": 774
+   "n": 958
   },
   "Network Troubleshooting Tools (curl, dig, tcpdump, mtr)": {
    "group": "EDGE",
@@ -13196,7 +16277,7 @@
      "security"
     ]
    },
-   "n": 775
+   "n": 959
   },
   "DDoS Protection & Traffic Scrubbing": {
    "group": "EDGE",
@@ -13212,7 +16293,7 @@
      "security"
     ]
    },
-   "n": 776
+   "n": 960
   },
   "Latency, Bandwidth & Geographic Distribution": {
    "group": "EDGE",
@@ -13228,7 +16309,7 @@
      "security"
     ]
    },
-   "n": 777
+   "n": 961
   },
   "Email Infrastructure (SMTP servers, relays, bounces)": {
    "group": "EDGE",
@@ -13244,7 +16325,7 @@
      "security"
     ]
    },
-   "n": 778
+   "n": 962
   },
   "SFTP, FTP & File Transfer Protocols": {
    "group": "EDGE",
@@ -13260,7 +16341,7 @@
      "security"
     ]
    },
-   "n": 779
+   "n": 963
   },
   "Linux Server Administration": {
    "group": "SRV",
@@ -13276,7 +16357,7 @@
      "security"
     ]
    },
-   "n": 780
+   "n": 964
   },
   "systemd Services, Units & Boot": {
    "group": "SRV",
@@ -13292,7 +16373,7 @@
      "security"
     ]
    },
-   "n": 781
+   "n": 965
   },
   "SSH Access, Keys & Hardening": {
    "group": "SRV",
@@ -13308,7 +16389,7 @@
      "security"
     ]
    },
-   "n": 782
+   "n": 966
   },
   "Users, Groups, sudo & File Permissions": {
    "group": "SRV",
@@ -13324,7 +16405,7 @@
      "security"
     ]
    },
-   "n": 783
+   "n": 967
   },
   "Cron Jobs, Timers & Scheduled Tasks (OS)": {
    "group": "SRV",
@@ -13340,7 +16421,7 @@
      "security"
     ]
    },
-   "n": 784
+   "n": 968
   },
   "Disk, Partitions, Mounts & Storage": {
    "group": "SRV",
@@ -13356,7 +16437,7 @@
      "security"
     ]
    },
-   "n": 785
+   "n": 969
   },
   "Processes, Memory & CPU on the Host": {
    "group": "SRV",
@@ -13372,7 +16453,7 @@
      "security"
     ]
    },
-   "n": 786
+   "n": 970
   },
   "Environment Variables, Shells & Dotfiles": {
    "group": "SRV",
@@ -13388,7 +16469,7 @@
      "security"
     ]
    },
-   "n": 787
+   "n": 971
   },
   "Package Managers & System Updates": {
    "group": "SRV",
@@ -13404,7 +16485,7 @@
      "security"
     ]
    },
-   "n": 788
+   "n": 972
   },
   "Log Files, Rotation & journald": {
    "group": "SRV",
@@ -13420,7 +16501,7 @@
      "security"
     ]
    },
-   "n": 789
+   "n": 973
   },
   "Windows Server, IIS & PowerShell": {
    "group": "SRV",
@@ -13436,7 +16517,7 @@
      "security"
     ]
    },
-   "n": 790
+   "n": 974
   },
   "macOS & Developer Workstation Setup": {
    "group": "SRV",
@@ -13452,7 +16533,7 @@
      "security"
     ]
    },
-   "n": 791
+   "n": 975
   },
   "Shell Scripting & Automation (bash, PowerShell)": {
    "group": "SRV",
@@ -13468,7 +16549,7 @@
      "security"
     ]
    },
-   "n": 792
+   "n": 976
   },
   "Time Sync, Locale & Timezone on Servers": {
    "group": "SRV",
@@ -13484,7 +16565,7 @@
      "security"
     ]
    },
-   "n": 793
+   "n": 977
   },
   "Kernel, sysctl & OS Limits": {
    "group": "SRV",
@@ -13500,7 +16581,7 @@
      "security"
     ]
    },
-   "n": 794
+   "n": 978
   },
   "VPS, Dedicated & Shared Hosting": {
    "group": "SRV",
@@ -13516,7 +16597,7 @@
      "security"
     ]
    },
-   "n": 795
+   "n": 979
   },
   "Web Server Setup (nginx, Apache, IIS, Caddy)": {
    "group": "SRV",
@@ -13532,7 +16613,7 @@
      "security"
     ]
    },
-   "n": 796
+   "n": 980
   },
   "Static Site Hosting & Object-storage Websites": {
    "group": "SRV",
@@ -13548,7 +16629,7 @@
      "security"
     ]
    },
-   "n": 797
+   "n": 981
   },
   "Application Servers & Process Managers (pm2, gunicorn, PHP-FPM, Kestrel)": {
    "group": "SRV",
@@ -13564,7 +16645,7 @@
      "security"
     ]
    },
-   "n": 798
+   "n": 982
   },
   "Deploying to a Server (SSH deploy, rsync, systemd restart)": {
    "group": "SRV",
@@ -13580,7 +16661,7 @@
      "security"
     ]
    },
-   "n": 799
+   "n": 983
   },
   "Server Provisioning & Hardening Checklist": {
    "group": "SRV",
@@ -13596,7 +16677,7 @@
      "security"
     ]
    },
-   "n": 800
+   "n": 984
   },
   "Server Monitoring & Resource Alerts": {
    "group": "SRV",
@@ -13612,7 +16693,7 @@
      "security"
     ]
    },
-   "n": 801
+   "n": 985
   },
   "Server Backups & Snapshots": {
    "group": "SRV",
@@ -13628,7 +16709,7 @@
      "security"
     ]
    },
-   "n": 802
+   "n": 986
   },
   "Mail, DNS & Auxiliary Services on a Host": {
    "group": "SRV",
@@ -13644,7 +16725,7 @@
      "security"
     ]
    },
-   "n": 803
+   "n": 987
   },
   "Hosting Costs, Plans & Provider Choice": {
    "group": "SRV",
@@ -13660,7 +16741,7 @@
      "security"
     ]
    },
-   "n": 804
+   "n": 988
   },
   "Managed Hosting Panels (cPanel, Plesk, RunCloud, Forge, Coolify, Dokku)": {
    "group": "SRV",
@@ -13676,7 +16757,7 @@
      "security"
     ]
    },
-   "n": 805
+   "n": 989
   },
   "Edge & On-prem Servers, Appliances": {
    "group": "SRV",
@@ -13692,7 +16773,7 @@
      "security"
     ]
    },
-   "n": 806
+   "n": 990
   },
   "Game, Media & Streaming Servers": {
    "group": "SRV",
@@ -13708,7 +16789,7 @@
      "security"
     ]
    },
-   "n": 807
+   "n": 991
   },
   "Localhost Setup & Running the App Locally": {
    "group": "SRV",
@@ -13724,7 +16805,7 @@
      "security"
     ]
    },
-   "n": 808
+   "n": 992
   },
   "Local Ports, Hosts File & Loopback Issues": {
    "group": "SRV",
@@ -13740,7 +16821,7 @@
      "security"
     ]
    },
-   "n": 809
+   "n": 993
   },
   "Local HTTPS, Self-signed Certs & mkcert": {
    "group": "SRV",
@@ -13756,7 +16837,7 @@
      "security"
     ]
    },
-   "n": 810
+   "n": 994
   },
   "Local Databases & Services via Docker Compose": {
    "group": "SRV",
@@ -13772,7 +16853,7 @@
      "security"
     ]
    },
-   "n": 811
+   "n": 995
   },
   "Dev Containers, Codespaces & Reproducible Envs": {
    "group": "SRV",
@@ -13788,7 +16869,7 @@
      "security"
     ]
    },
-   "n": 812
+   "n": 996
   },
   "Environment Files & Local Secrets (.env, user-secrets)": {
    "group": "SRV",
@@ -13804,7 +16885,7 @@
      "security"
     ]
    },
-   "n": 813
+   "n": 997
   },
   "Hot Reload, Watch Mode & Dev Tooling": {
    "group": "SRV",
@@ -13820,7 +16901,7 @@
      "security"
     ]
    },
-   "n": 814
+   "n": 998
   },
   "Tunnels & Exposing Localhost (ngrok, cloudflared)": {
    "group": "SRV",
@@ -13836,7 +16917,7 @@
      "security"
     ]
    },
-   "n": 815
+   "n": 999
   },
   "Local Emulators & Mocks for Cloud Services": {
    "group": "SRV",
@@ -13852,7 +16933,7 @@
      "security"
     ]
    },
-   "n": 816
+   "n": 1000
   },
   "Seed, Reset & Fixture Scripts for Local Data": {
    "group": "SRV",
@@ -13868,7 +16949,7 @@
      "security"
     ]
    },
-   "n": 817
+   "n": 1001
   },
   "IDE, Editor & Debug Configuration": {
    "group": "SRV",
@@ -13884,7 +16965,7 @@
      "security"
     ]
    },
-   "n": 818
+   "n": 1002
   },
   "Windows/WSL, macOS & Linux Dev Differences": {
    "group": "SRV",
@@ -13900,7 +16981,7 @@
      "security"
     ]
    },
-   "n": 819
+   "n": 1003
   },
   "Monorepo Local Tooling & Workspaces": {
    "group": "SRV",
@@ -13916,7 +16997,7 @@
      "security"
     ]
    },
-   "n": 820
+   "n": 1004
   },
   "CI/CD & Build Pipelines": {
    "group": "OPS",
@@ -13933,7 +17014,7 @@
      "tester"
     ]
    },
-   "n": 821
+   "n": 1005
   },
   "GitHub Actions Workflows": {
    "group": "OPS",
@@ -13950,7 +17031,7 @@
      "tester"
     ]
    },
-   "n": 822
+   "n": 1006
   },
   "GitLab CI, Jenkins, CircleCI & TeamCity": {
    "group": "OPS",
@@ -13967,7 +17048,7 @@
      "tester"
     ]
    },
-   "n": 823
+   "n": 1007
   },
   "Build Caching, Artifacts & Pipeline Speed": {
    "group": "OPS",
@@ -13984,7 +17065,7 @@
      "tester"
     ]
    },
-   "n": 824
+   "n": 1008
   },
   "Pipeline Secrets, OIDC & Deploy Credentials": {
    "group": "OPS",
@@ -14001,7 +17082,7 @@
      "tester"
     ]
    },
-   "n": 825
+   "n": 1009
   },
   "Branch Protection, Required Checks & Merge Rules": {
    "group": "OPS",
@@ -14018,7 +17099,7 @@
      "tester"
     ]
    },
-   "n": 826
+   "n": 1010
   },
   "Deployment Pipelines, Environments & Approvals": {
    "group": "OPS",
@@ -14035,7 +17116,7 @@
      "tester"
     ]
    },
-   "n": 827
+   "n": 1011
   },
   "Self-hosted Runners & Build Agents": {
    "group": "OPS",
@@ -14052,7 +17133,7 @@
      "tester"
     ]
    },
-   "n": 828
+   "n": 1012
   },
   "Monorepo CI (affected builds, path filters)": {
    "group": "OPS",
@@ -14069,7 +17150,7 @@
      "tester"
     ]
    },
-   "n": 829
+   "n": 1013
   },
   "CI for Mobile, Desktop & Native Builds": {
    "group": "OPS",
@@ -14086,7 +17167,7 @@
      "tester"
     ]
    },
-   "n": 830
+   "n": 1014
   },
   "Pipeline as Code Patterns & Templates": {
    "group": "OPS",
@@ -14103,7 +17184,7 @@
      "tester"
     ]
    },
-   "n": 831
+   "n": 1015
   },
   "Release Automation (semantic-release, changesets, tagging)": {
    "group": "OPS",
@@ -14120,7 +17201,7 @@
      "tester"
     ]
    },
-   "n": 832
+   "n": 1016
   },
   "Docker, Containers & Orchestration": {
    "group": "OPS",
@@ -14137,7 +17218,7 @@
      "tester"
     ]
    },
-   "n": 833
+   "n": 1017
   },
   "Dockerfile Best Practices & Multi-stage Builds": {
    "group": "OPS",
@@ -14154,7 +17235,7 @@
      "tester"
     ]
    },
-   "n": 834
+   "n": 1018
   },
   "Docker Compose for Services & Environments": {
    "group": "OPS",
@@ -14171,7 +17252,7 @@
      "tester"
     ]
    },
-   "n": 835
+   "n": 1019
   },
   "Container Registries & Image Tagging": {
    "group": "OPS",
@@ -14188,7 +17269,7 @@
      "tester"
     ]
    },
-   "n": 836
+   "n": 1020
   },
   "Kubernetes Workloads (Deployments, Jobs, StatefulSets)": {
    "group": "OPS",
@@ -14205,7 +17286,7 @@
      "tester"
     ]
    },
-   "n": 837
+   "n": 1021
   },
   "Kubernetes Config (ConfigMaps, Secrets, env)": {
    "group": "OPS",
@@ -14222,7 +17303,7 @@
      "tester"
     ]
    },
-   "n": 838
+   "n": 1022
   },
   "Kubernetes Networking (Services, Ingress, NetworkPolicy)": {
    "group": "OPS",
@@ -14239,7 +17320,7 @@
      "tester"
     ]
    },
-   "n": 839
+   "n": 1023
   },
   "Kubernetes Resources, Autoscaling & Scheduling": {
    "group": "OPS",
@@ -14256,7 +17337,7 @@
      "tester"
     ]
    },
-   "n": 840
+   "n": 1024
   },
   "Kubernetes Storage & Persistent Volumes": {
    "group": "OPS",
@@ -14273,7 +17354,7 @@
      "tester"
     ]
    },
-   "n": 841
+   "n": 1025
   },
   "Helm Charts & Kustomize": {
    "group": "OPS",
@@ -14290,7 +17371,7 @@
      "tester"
     ]
    },
-   "n": 842
+   "n": 1026
   },
   "GitOps (ArgoCD, Flux)": {
    "group": "OPS",
@@ -14307,7 +17388,7 @@
      "tester"
     ]
    },
-   "n": 843
+   "n": 1027
   },
   "Kubernetes Operations (upgrades, RBAC, probes, debugging pods)": {
    "group": "OPS",
@@ -14324,7 +17405,7 @@
      "tester"
     ]
    },
-   "n": 844
+   "n": 1028
   },
   "Service Mesh & Sidecar Operations": {
    "group": "OPS",
@@ -14341,7 +17422,7 @@
      "tester"
     ]
    },
-   "n": 845
+   "n": 1029
   },
   "Container Security & Runtime Hardening": {
    "group": "OPS",
@@ -14358,7 +17439,7 @@
      "tester"
     ]
    },
-   "n": 846
+   "n": 1030
   },
   "Infra as Code & Cloud Config": {
    "group": "OPS",
@@ -14375,7 +17456,7 @@
      "tester"
     ]
    },
-   "n": 847
+   "n": 1031
   },
   "Terraform Modules, State & Workspaces": {
    "group": "OPS",
@@ -14392,7 +17473,7 @@
      "tester"
     ]
    },
-   "n": 848
+   "n": 1032
   },
   "Terraform Drift, Imports & Refactoring State": {
    "group": "OPS",
@@ -14409,7 +17490,7 @@
      "tester"
     ]
    },
-   "n": 849
+   "n": 1033
   },
   "Pulumi, CDK & Programmatic IaC": {
    "group": "OPS",
@@ -14426,7 +17507,7 @@
      "tester"
     ]
    },
-   "n": 850
+   "n": 1034
   },
   "Ansible, Chef & Configuration Management": {
    "group": "OPS",
@@ -14443,7 +17524,7 @@
      "tester"
     ]
    },
-   "n": 851
+   "n": 1035
   },
   "Environment Parity & Config Drift (dev, staging, prod)": {
    "group": "OPS",
@@ -14460,7 +17541,7 @@
      "tester"
     ]
    },
-   "n": 852
+   "n": 1036
   },
   "Environment & Config Files": {
    "group": "OPS",
@@ -14477,7 +17558,7 @@
      "tester"
     ]
    },
-   "n": 853
+   "n": 1037
   },
   "Secrets Management in Deployments": {
    "group": "OPS",
@@ -14494,7 +17575,7 @@
      "tester"
     ]
    },
-   "n": 854
+   "n": 1038
   },
   "Infrastructure Testing & Policy as Code": {
    "group": "OPS",
@@ -14511,7 +17592,7 @@
      "tester"
     ]
    },
-   "n": 855
+   "n": 1039
   },
   "Cost Tagging, FinOps & Cloud Spend Reviews": {
    "group": "OPS",
@@ -14528,7 +17609,7 @@
      "tester"
     ]
    },
-   "n": 856
+   "n": 1040
   },
   "Release, Versioning & Changelog": {
    "group": "OPS",
@@ -14545,7 +17626,7 @@
      "tester"
     ]
    },
-   "n": 857
+   "n": 1041
   },
   "Deployment Strategies (blue/green, canary, rolling)": {
    "group": "OPS",
@@ -14562,7 +17643,7 @@
      "tester"
     ]
    },
-   "n": 858
+   "n": 1042
   },
   "Feature Flags & Rollouts": {
    "group": "OPS",
@@ -14579,7 +17660,7 @@
      "tester"
     ]
    },
-   "n": 859
+   "n": 1043
   },
   "Rollback Plans & Deployment Safety": {
    "group": "OPS",
@@ -14596,7 +17677,7 @@
      "tester"
     ]
    },
-   "n": 860
+   "n": 1044
   },
   "Database Changes in Deployments (migrations in pipeline)": {
    "group": "OPS",
@@ -14613,7 +17694,7 @@
      "tester"
     ]
    },
-   "n": 861
+   "n": 1045
   },
   "Release Trains, Freeze Windows & Cadence": {
    "group": "OPS",
@@ -14630,7 +17711,7 @@
      "tester"
     ]
    },
-   "n": 862
+   "n": 1046
   },
   "Zero-downtime Deploys & Connection Draining": {
    "group": "OPS",
@@ -14647,7 +17728,7 @@
      "tester"
     ]
    },
-   "n": 863
+   "n": 1047
   },
   "Artifact Management & Package Publishing": {
    "group": "OPS",
@@ -14664,7 +17745,7 @@
      "tester"
     ]
    },
-   "n": 864
+   "n": 1048
   },
   "Git Workflow, Branching & Merging": {
    "group": "OPS",
@@ -14681,7 +17762,7 @@
      "tester"
     ]
    },
-   "n": 865
+   "n": 1049
   },
   "Merge Conflict Resolution": {
    "group": "OPS",
@@ -14699,7 +17780,7 @@
      "tester"
     ]
    },
-   "n": 866
+   "n": 1050
   },
   "History Rewrite & Force Push": {
    "group": "OPS",
@@ -14716,7 +17797,7 @@
      "tester"
     ]
    },
-   "n": 867
+   "n": 1051
   },
   "Multi-Session & Multi-Agent Git Coordination (worktrees, branch claims)": {
    "group": "OPS",
@@ -14733,7 +17814,7 @@
      "tester"
     ]
    },
-   "n": 868
+   "n": 1052
   },
   "Pull Requests & Code Review Flow (gh)": {
    "group": "OPS",
@@ -14750,7 +17831,7 @@
      "tester"
     ]
    },
-   "n": 869
+   "n": 1053
   },
   "Tags, Releases & Changelogs": {
    "group": "OPS",
@@ -14767,7 +17848,7 @@
      "tester"
     ]
    },
-   "n": 870
+   "n": 1054
   },
   "Git Operations & Repository Hygiene": {
    "group": "OPS",
@@ -14784,7 +17865,7 @@
      "tester"
     ]
    },
-   "n": 871
+   "n": 1055
   },
   "Pre-commit Hooks & Local Quality Gates": {
    "group": "OPS",
@@ -14801,7 +17882,7 @@
      "tester"
     ]
    },
-   "n": 872
+   "n": 1056
   },
   "Dependency Updates Automation (Dependabot, Renovate)": {
    "group": "OPS",
@@ -14818,7 +17899,7 @@
      "tester"
     ]
    },
-   "n": 873
+   "n": 1057
   },
   "Packages & Libs Updates": {
    "group": "OPS",
@@ -14838,7 +17919,7 @@
    "ov": {
     "Analyse": "sonnet·high"
    },
-   "n": 874
+   "n": 1058
   },
   "Build Systems & Compilation Pipelines": {
    "group": "OPS",
@@ -14855,7 +17936,7 @@
      "tester"
     ]
    },
-   "n": 875
+   "n": 1059
   },
   "Software Supply Chain in CI (SBOM, signing, provenance)": {
    "group": "OPS",
@@ -14873,7 +17954,7 @@
      "tester"
     ]
    },
-   "n": 876
+   "n": 1060
   },
   "Logging Design, Levels & What to Log": {
    "group": "OBS",
@@ -14889,7 +17970,7 @@
      "security"
     ]
    },
-   "n": 877
+   "n": 1061
   },
   "Structured Logging & Log Schemas": {
    "group": "OBS",
@@ -14905,7 +17986,7 @@
      "security"
     ]
    },
-   "n": 878
+   "n": 1062
   },
   "Correlation IDs & Request Tracing in Logs": {
    "group": "OBS",
@@ -14921,7 +18002,7 @@
      "security"
     ]
    },
-   "n": 879
+   "n": 1063
   },
   "Sensitive Data in Logs & Log Redaction": {
    "group": "OBS",
@@ -14939,7 +18020,7 @@
      "compliance"
     ]
    },
-   "n": 880
+   "n": 1064
   },
   "Log Aggregation (ELK, Loki, Datadog, Splunk, CloudWatch)": {
    "group": "OBS",
@@ -14955,7 +18036,7 @@
      "security"
     ]
    },
-   "n": 881
+   "n": 1065
   },
   "Log Queries & Search (KQL, LogQL, Lucene)": {
    "group": "OBS",
@@ -14971,7 +18052,7 @@
      "security"
     ]
    },
-   "n": 882
+   "n": 1066
   },
   "Log Retention, Volume & Cost": {
    "group": "OBS",
@@ -14987,7 +18068,7 @@
      "security"
     ]
    },
-   "n": 883
+   "n": 1067
   },
   "Audit Logs & Security Event Logging (ops)": {
    "group": "OBS",
@@ -15005,7 +18086,7 @@
      "compliance"
     ]
    },
-   "n": 884
+   "n": 1068
   },
   "Application Logging Frameworks & Configuration": {
    "group": "OBS",
@@ -15021,7 +18102,7 @@
      "security"
     ]
    },
-   "n": 885
+   "n": 1069
   },
   "Log Shipping, Agents & Sidecars": {
    "group": "OBS",
@@ -15037,7 +18118,7 @@
      "security"
     ]
    },
-   "n": 886
+   "n": 1070
   },
   "Log-based Alerts & Anomaly Detection": {
    "group": "OBS",
@@ -15053,7 +18134,7 @@
      "security"
     ]
    },
-   "n": 887
+   "n": 1071
   },
   "Debug Logging in Production & Dynamic Log Levels": {
    "group": "OBS",
@@ -15069,7 +18150,7 @@
      "security"
     ]
    },
-   "n": 888
+   "n": 1072
   },
   "Monitoring, Alerts & Health Checks": {
    "group": "OBS",
@@ -15085,7 +18166,7 @@
      "security"
     ]
    },
-   "n": 889
+   "n": 1073
   },
   "Metrics Design (counters, gauges, histograms, cardinality)": {
    "group": "OBS",
@@ -15101,7 +18182,7 @@
      "security"
     ]
    },
-   "n": 890
+   "n": 1074
   },
   "Prometheus, Grafana & Alertmanager": {
    "group": "OBS",
@@ -15117,7 +18198,7 @@
      "security"
     ]
    },
-   "n": 891
+   "n": 1075
   },
   "Operational Dashboards & Panels": {
    "group": "OBS",
@@ -15133,7 +18214,7 @@
      "security"
     ]
    },
-   "n": 892
+   "n": 1076
   },
   "Business & Product Metrics Dashboards (ops side)": {
    "group": "OBS",
@@ -15149,7 +18230,7 @@
      "security"
     ]
    },
-   "n": 893
+   "n": 1077
   },
   "Alerting Rules, Thresholds & Noise Reduction": {
    "group": "OBS",
@@ -15165,7 +18246,7 @@
      "security"
     ]
    },
-   "n": 894
+   "n": 1078
   },
   "SLIs, SLOs & Error Budgets": {
    "group": "OBS",
@@ -15181,7 +18262,7 @@
      "security"
     ]
    },
-   "n": 895
+   "n": 1079
   },
   "APM & Application Performance Monitoring (Datadog, New Relic, App Insights, Elastic APM)": {
    "group": "OBS",
@@ -15197,7 +18278,7 @@
      "security"
     ]
    },
-   "n": 896
+   "n": 1080
   },
   "Uptime Monitoring & Status Pages": {
    "group": "OBS",
@@ -15213,7 +18294,7 @@
      "security"
     ]
    },
-   "n": 897
+   "n": 1081
   },
   "Synthetic Monitoring & Browser Checks": {
    "group": "OBS",
@@ -15229,7 +18310,7 @@
      "security"
     ]
    },
-   "n": 898
+   "n": 1082
   },
   "Infrastructure Metrics (hosts, containers, DB, queues)": {
    "group": "OBS",
@@ -15245,7 +18326,7 @@
      "security"
     ]
    },
-   "n": 899
+   "n": 1083
   },
   "Custom Instrumentation & Metrics SDKs": {
    "group": "OBS",
@@ -15261,7 +18342,7 @@
      "security"
     ]
    },
-   "n": 900
+   "n": 1084
   },
   "Distributed Tracing (OpenTelemetry, Jaeger, Tempo, Zipkin)": {
    "group": "OBS",
@@ -15277,7 +18358,7 @@
      "security"
     ]
    },
-   "n": 901
+   "n": 1085
   },
   "Trace Sampling, Propagation & Context Loss": {
    "group": "OBS",
@@ -15293,7 +18374,7 @@
      "security"
     ]
    },
-   "n": 902
+   "n": 1086
   },
   "Error Tracking (Sentry, Rollbar, Bugsnag)": {
    "group": "OBS",
@@ -15309,7 +18390,7 @@
      "security"
     ]
    },
-   "n": 903
+   "n": 1087
   },
   "Exception Grouping, Noise & Ignore Rules": {
    "group": "OBS",
@@ -15325,7 +18406,7 @@
      "security"
     ]
    },
-   "n": 904
+   "n": 1088
   },
   "Profiling in Production & Continuous Profiling": {
    "group": "OBS",
@@ -15341,7 +18422,7 @@
      "security"
     ]
    },
-   "n": 905
+   "n": 1089
   },
   "Observability Pipelines & Cost Control (OTel Collector, Vector)": {
    "group": "OBS",
@@ -15357,7 +18438,7 @@
      "security"
     ]
    },
-   "n": 906
+   "n": 1090
   },
   "Observability for Serverless & Edge": {
    "group": "OBS",
@@ -15373,7 +18454,7 @@
      "security"
     ]
    },
-   "n": 907
+   "n": 1091
   },
   "Frontend & Mobile Telemetry (RUM, crash, session replay)": {
    "group": "OBS",
@@ -15389,7 +18470,7 @@
      "security"
     ]
    },
-   "n": 908
+   "n": 1092
   },
   "Runbooks, Dashboards-as-Code & Observability Hygiene": {
    "group": "OBS",
@@ -15405,7 +18486,7 @@
      "security"
     ]
    },
-   "n": 909
+   "n": 1093
   },
   "Health Checks Design (deep vs shallow, dependencies)": {
    "group": "OBS",
@@ -15421,7 +18502,7 @@
      "security"
     ]
    },
-   "n": 910
+   "n": 1094
   },
   "ETL / ELT Pipelines & Orchestration": {
    "group": "DATA",
@@ -15437,7 +18518,7 @@
      "qa"
     ]
    },
-   "n": 911
+   "n": 1095
   },
   "dbt Models, Tests & Transformations": {
    "group": "DATA",
@@ -15453,7 +18534,7 @@
      "qa"
     ]
    },
-   "n": 912
+   "n": 1096
   },
   "Data Warehouses (BigQuery, Snowflake, Redshift, Synapse)": {
    "group": "DATA",
@@ -15469,7 +18550,7 @@
      "qa"
     ]
    },
-   "n": 913
+   "n": 1097
   },
   "Data Lakes, Lakehouse & File Formats (Parquet, Delta, Iceberg)": {
    "group": "DATA",
@@ -15485,7 +18566,7 @@
      "qa"
     ]
    },
-   "n": 914
+   "n": 1098
   },
   "Spark, Databricks & Distributed Processing": {
    "group": "DATA",
@@ -15501,7 +18582,7 @@
      "qa"
     ]
    },
-   "n": 915
+   "n": 1099
   },
   "Streaming Analytics (Flink, Kafka Streams, ksqlDB)": {
    "group": "DATA",
@@ -15517,7 +18598,7 @@
      "qa"
     ]
    },
-   "n": 916
+   "n": 1100
   },
   "Change Data Capture & Replication to Analytics": {
    "group": "DATA",
@@ -15533,7 +18614,7 @@
      "qa"
     ]
    },
-   "n": 917
+   "n": 1101
   },
   "Data Modeling (star schema, dimensions, facts, SCD)": {
    "group": "DATA",
@@ -15549,7 +18630,7 @@
      "qa"
     ]
    },
-   "n": 918
+   "n": 1102
   },
   "Incremental Loads, Backfills & Idempotent Pipelines": {
    "group": "DATA",
@@ -15565,7 +18646,7 @@
      "qa"
     ]
    },
-   "n": 919
+   "n": 1103
   },
   "Data Quality, Validation & Freshness Checks": {
    "group": "DATA",
@@ -15581,7 +18662,7 @@
      "qa"
     ]
    },
-   "n": 920
+   "n": 1104
   },
   "Schema Evolution & Data Contracts": {
    "group": "DATA",
@@ -15597,7 +18678,7 @@
      "qa"
     ]
    },
-   "n": 921
+   "n": 1105
   },
   "Data Catalog, Lineage & Governance": {
    "group": "DATA",
@@ -15615,7 +18696,7 @@
      "compliance"
     ]
    },
-   "n": 922
+   "n": 1106
   },
   "Data Access Control & Row/Column Masking (analytics)": {
    "group": "DATA",
@@ -15633,7 +18714,7 @@
      "compliance"
     ]
    },
-   "n": 923
+   "n": 1107
   },
   "Data Retention, Partition Expiry & Archival (analytics)": {
    "group": "DATA",
@@ -15649,7 +18730,7 @@
      "qa"
     ]
    },
-   "n": 924
+   "n": 1108
   },
   "Pipeline Monitoring, SLAs & Failure Handling": {
    "group": "DATA",
@@ -15665,7 +18746,7 @@
      "qa"
     ]
    },
-   "n": 925
+   "n": 1109
   },
   "Data Migration Between Systems (one-off loads)": {
    "group": "DATA",
@@ -15681,7 +18762,7 @@
      "qa"
     ]
    },
-   "n": 926
+   "n": 1110
   },
   "Spreadsheet, CSV & Excel Data Handling": {
    "group": "DATA",
@@ -15697,7 +18778,7 @@
      "qa"
     ]
    },
-   "n": 927
+   "n": 1111
   },
   "Python Data Stack (pandas, Polars, NumPy, notebooks)": {
    "group": "DATA",
@@ -15713,7 +18794,7 @@
      "qa"
     ]
    },
-   "n": 928
+   "n": 1112
   },
   "BI Dashboards (Power BI, Metabase, Looker, Tableau, Superset)": {
    "group": "DATA",
@@ -15729,7 +18810,7 @@
      "qa"
     ]
    },
-   "n": 929
+   "n": 1113
   },
   "Metabase Setup, Questions & Embedding": {
    "group": "DATA",
@@ -15745,7 +18826,7 @@
      "qa"
     ]
    },
-   "n": 930
+   "n": 1114
   },
   "Power BI, Looker & Tableau Modeling": {
    "group": "DATA",
@@ -15761,7 +18842,7 @@
      "qa"
     ]
    },
-   "n": 931
+   "n": 1115
   },
   "Reporting SQL & Analytical Queries": {
    "group": "DATA",
@@ -15777,7 +18858,7 @@
      "qa"
     ]
    },
-   "n": 932,
+   "n": 1116,
    "suggest": [
     "dynamicwhere"
    ]
@@ -15796,7 +18877,7 @@
      "qa"
     ]
    },
-   "n": 933
+   "n": 1117
   },
   "Analytics & Tracking Events": {
    "group": "DATA",
@@ -15812,7 +18893,7 @@
      "qa"
     ]
    },
-   "n": 934
+   "n": 1118
   },
   "Event Taxonomy, Naming & Tracking Plans": {
    "group": "DATA",
@@ -15828,7 +18909,7 @@
      "qa"
     ]
    },
-   "n": 935
+   "n": 1119
   },
   "Attribution, Campaigns & Marketing Analytics": {
    "group": "DATA",
@@ -15844,7 +18925,7 @@
      "qa"
     ]
    },
-   "n": 936
+   "n": 1120
   },
   "Product Analytics (funnels, retention, cohorts)": {
    "group": "DATA",
@@ -15860,7 +18941,7 @@
      "qa"
     ]
    },
-   "n": 937
+   "n": 1121
   },
   "A/B Testing & Experiment Analysis": {
    "group": "DATA",
@@ -15876,7 +18957,7 @@
      "qa"
     ]
    },
-   "n": 938
+   "n": 1122
   },
   "Report Scheduling, Delivery & Subscriptions": {
    "group": "DATA",
@@ -15892,7 +18973,7 @@
      "qa"
     ]
    },
-   "n": 939
+   "n": 1123
   },
   "Dashboard Performance & Query Cost (BI)": {
    "group": "DATA",
@@ -15908,7 +18989,7 @@
      "qa"
     ]
    },
-   "n": 940
+   "n": 1124
   },
   "Data Export APIs & Customer-facing Analytics": {
    "group": "DATA",
@@ -15924,7 +19005,7 @@
      "qa"
     ]
    },
-   "n": 941,
+   "n": 1125,
    "suggest": [
     "dynamicwhere"
    ]
@@ -15943,7 +19024,7 @@
      "qa"
     ]
    },
-   "n": 942
+   "n": 1126
   },
   "Data Visualization Correctness (axes, aggregation, bias)": {
    "group": "DATA",
@@ -15959,7 +19040,7 @@
      "qa"
     ]
    },
-   "n": 943
+   "n": 1127
   },
   "Geospatial Analytics & Maps Data": {
    "group": "DATA",
@@ -15975,7 +19056,7 @@
      "qa"
     ]
    },
-   "n": 944
+   "n": 1128
   },
   "Logs & Events as Data (clickstream, telemetry analytics)": {
    "group": "DATA",
@@ -15991,7 +19072,7 @@
      "qa"
     ]
    },
-   "n": 945
+   "n": 1129
   },
   "AI / LLM Integration": {
    "group": "AI",
@@ -16010,7 +19091,7 @@
    "ov": {
     "Analyse": "opus·medium"
    },
-   "n": 946
+   "n": 1130
   },
   "Prompt Engineering & System Prompts": {
    "group": "AI",
@@ -16026,7 +19107,7 @@
      "security"
     ]
    },
-   "n": 947
+   "n": 1131
   },
   "Agents, Tool Use & Function Calling": {
    "group": "AI",
@@ -16042,7 +19123,7 @@
      "security"
     ]
    },
-   "n": 948
+   "n": 1132
   },
   "RAG, Chunking & Retrieval Quality": {
    "group": "AI",
@@ -16058,7 +19139,7 @@
      "security"
     ]
    },
-   "n": 949
+   "n": 1133
   },
   "Embeddings & Vector Databases": {
    "group": "AI",
@@ -16074,7 +19155,7 @@
      "security"
     ]
    },
-   "n": 950
+   "n": 1134
   },
   "Structured Output, JSON Mode & Parsing LLM Replies": {
    "group": "AI",
@@ -16090,7 +19171,7 @@
      "security"
     ]
    },
-   "n": 951
+   "n": 1135
   },
   "Streaming, Token Limits & Context Management": {
    "group": "AI",
@@ -16106,7 +19187,7 @@
      "security"
     ]
    },
-   "n": 952
+   "n": 1136
   },
   "LLM Cost, Caching & Model Selection": {
    "group": "AI",
@@ -16122,7 +19203,7 @@
      "security"
     ]
    },
-   "n": 953
+   "n": 1137
   },
   "Hallucination, Grounding & Citations": {
    "group": "AI",
@@ -16138,7 +19219,7 @@
      "security"
     ]
    },
-   "n": 954
+   "n": 1138
   },
   "Evals, Benchmarks & Regression Testing for LLMs": {
    "group": "AI",
@@ -16154,7 +19235,7 @@
      "security"
     ]
    },
-   "n": 955
+   "n": 1139
   },
   "Guardrails, Safety & Prompt Injection": {
    "group": "AI",
@@ -16171,7 +19252,7 @@
      "security"
     ]
    },
-   "n": 956
+   "n": 1140
   },
   "LLM Observability & Tracing (LangSmith, Langfuse)": {
    "group": "AI",
@@ -16187,7 +19268,7 @@
      "security"
     ]
    },
-   "n": 957
+   "n": 1141
   },
   "Conversational Memory & Personalization": {
    "group": "AI",
@@ -16205,7 +19286,7 @@
      "compliance"
     ]
    },
-   "n": 958
+   "n": 1142
   },
   "Multimodal (vision, audio, documents) & OCR": {
    "group": "AI",
@@ -16221,7 +19302,7 @@
      "security"
     ]
    },
-   "n": 959
+   "n": 1143
   },
   "Chatbots, Assistants & Copilots UX Logic": {
    "group": "AI",
@@ -16237,7 +19318,7 @@
      "security"
     ]
    },
-   "n": 960
+   "n": 1144
   },
   "AI Feature Product Decisions & Scope": {
    "group": "AI",
@@ -16253,7 +19334,7 @@
      "security"
     ]
    },
-   "n": 961
+   "n": 1145
   },
   "Fine-tuning, LoRA & Model Customization": {
    "group": "AI",
@@ -16269,7 +19350,7 @@
      "security"
     ]
    },
-   "n": 962
+   "n": 1146
   },
   "Classical ML Models (classification, regression, clustering)": {
    "group": "AI",
@@ -16285,7 +19366,7 @@
      "security"
     ]
    },
-   "n": 963
+   "n": 1147
   },
   "Recommendation Systems & Ranking": {
    "group": "AI",
@@ -16301,7 +19382,7 @@
      "security"
     ]
    },
-   "n": 964
+   "n": 1148
   },
   "Forecasting & Anomaly Detection Models": {
    "group": "AI",
@@ -16317,7 +19398,7 @@
      "security"
     ]
    },
-   "n": 965
+   "n": 1149
   },
   "Model Evaluation, Metrics & Validation": {
    "group": "AI",
@@ -16333,7 +19414,7 @@
      "security"
     ]
    },
-   "n": 966
+   "n": 1150
   },
   "Feature Stores & Training Data Pipelines": {
    "group": "AI",
@@ -16349,7 +19430,7 @@
      "security"
     ]
    },
-   "n": 967
+   "n": 1151
   },
   "Model Serving, Inference & Latency": {
    "group": "AI",
@@ -16365,7 +19446,7 @@
      "security"
     ]
    },
-   "n": 968
+   "n": 1152
   },
   "MLOps (experiment tracking, registry, deployment)": {
    "group": "AI",
@@ -16381,7 +19462,7 @@
      "security"
     ]
    },
-   "n": 969
+   "n": 1153
   },
   "Model Monitoring, Drift & Retraining": {
    "group": "AI",
@@ -16397,7 +19478,7 @@
      "security"
     ]
    },
-   "n": 970
+   "n": 1154
   },
   "GPU, Compute & Training Infrastructure": {
    "group": "AI",
@@ -16413,7 +19494,7 @@
      "security"
     ]
    },
-   "n": 971
+   "n": 1155
   },
   "AI Ethics, Bias & Fairness": {
    "group": "AI",
@@ -16431,7 +19512,7 @@
      "compliance"
     ]
    },
-   "n": 972
+   "n": 1156
   },
   "AI Data Governance & Training Data Rights": {
    "group": "AI",
@@ -16449,7 +19530,7 @@
      "compliance"
     ]
    },
-   "n": 973
+   "n": 1157
   },
   "Speech, Vision & Specialized Models": {
    "group": "AI",
@@ -16465,7 +19546,7 @@
      "security"
     ]
    },
-   "n": 974
+   "n": 1158
   },
   "Edge & On-device ML (Core ML, TFLite, ONNX Runtime)": {
    "group": "AI",
@@ -16481,7 +19562,7 @@
      "security"
     ]
    },
-   "n": 975
+   "n": 1159
   },
   "MCP Servers & Connectors": {
    "group": "AI",
@@ -16497,7 +19578,7 @@
      "security"
     ]
    },
-   "n": 976
+   "n": 1160
   },
   "Claude Code Plugins, Hooks & Skills": {
    "group": "AI",
@@ -16513,7 +19594,7 @@
      "security"
     ]
    },
-   "n": 977
+   "n": 1161
   },
   "Agent Orchestration Design (routing, budgets, handoffs)": {
    "group": "AI",
@@ -16529,7 +19610,7 @@
      "security"
     ]
    },
-   "n": 978
+   "n": 1162
   },
   "Agent Safety, Permissions & Sandboxing": {
    "group": "AI",
@@ -16546,7 +19627,7 @@
      "security"
     ]
    },
-   "n": 979
+   "n": 1163
   },
   "Prompt & Context Files (CLAUDE.md, AGENTS.md, cursor rules)": {
    "group": "AI",
@@ -16562,7 +19643,7 @@
      "security"
     ]
    },
-   "n": 980
+   "n": 1164
   },
   "AI Coding Assistants Workflow & Productivity": {
    "group": "AI",
@@ -16578,7 +19659,7 @@
      "security"
     ]
    },
-   "n": 981
+   "n": 1165
   },
   "LLM API SDKs & Provider Integration (Anthropic, OpenAI, Bedrock, Vertex)": {
    "group": "AI",
@@ -16594,7 +19675,7 @@
      "security"
     ]
    },
-   "n": 982
+   "n": 1166
   },
   "Token Accounting, Quotas & Usage Reporting": {
    "group": "AI",
@@ -16610,7 +19691,7 @@
      "security"
     ]
    },
-   "n": 983
+   "n": 1167
   },
   "Jira, Confluence & Atlassian Integration": {
    "group": "INT",
@@ -16626,7 +19707,7 @@
      "security"
     ]
    },
-   "n": 984
+   "n": 1168
   },
   "Slack, Teams & Discord Bots": {
    "group": "INT",
@@ -16642,7 +19723,7 @@
      "security"
     ]
    },
-   "n": 985
+   "n": 1169
   },
   "GitHub & GitLab API Integrations": {
    "group": "INT",
@@ -16658,7 +19739,7 @@
      "security"
     ]
    },
-   "n": 986
+   "n": 1170
   },
   "ERP Integrations (SAP, Oracle, Odoo, Dynamics, NetSuite)": {
    "group": "INT",
@@ -16676,7 +19757,7 @@
      "finance"
     ]
    },
-   "n": 987
+   "n": 1171
   },
   "CRM Integrations (Salesforce, HubSpot, Zoho)": {
    "group": "INT",
@@ -16692,7 +19773,7 @@
      "security"
     ]
    },
-   "n": 988
+   "n": 1172
   },
   "Accounting Software Integrations (QuickBooks, Xero, Zoho Books)": {
    "group": "INT",
@@ -16710,7 +19791,7 @@
      "finance"
     ]
    },
-   "n": 989
+   "n": 1173
   },
   "E-commerce Platforms (Shopify, WooCommerce, Magento)": {
    "group": "INT",
@@ -16726,7 +19807,7 @@
      "security"
     ]
    },
-   "n": 990
+   "n": 1174
   },
   "Government, Tax & E-invoicing Portals": {
    "group": "INT",
@@ -16746,7 +19827,7 @@
      "compliance"
     ]
    },
-   "n": 991
+   "n": 1175
   },
   "HR, Payroll & Identity Systems (Workday, BambooHR, SCIM)": {
    "group": "INT",
@@ -16762,7 +19843,7 @@
      "security"
     ]
    },
-   "n": 992
+   "n": 1176
   },
   "Calendar, Email & Office Integrations (Google, Microsoft 365)": {
    "group": "INT",
@@ -16778,7 +19859,7 @@
      "security"
     ]
    },
-   "n": 993
+   "n": 1177
   },
   "Document Signing & Storage (DocuSign, Dropbox, Box)": {
    "group": "INT",
@@ -16794,7 +19875,7 @@
      "security"
     ]
    },
-   "n": 994
+   "n": 1178
   },
   "Zapier, Make, n8n & iPaaS Automation": {
    "group": "INT",
@@ -16810,7 +19891,7 @@
      "security"
     ]
    },
-   "n": 995
+   "n": 1179
   },
   "SMS & Voice Providers (Twilio, Vonage, local gateways)": {
    "group": "INT",
@@ -16826,7 +19907,7 @@
      "security"
     ]
    },
-   "n": 996
+   "n": 1180
   },
   "Email Providers (SendGrid, SES, Postmark, Mailgun, Resend)": {
    "group": "INT",
@@ -16842,7 +19923,7 @@
      "security"
     ]
    },
-   "n": 997
+   "n": 1181
   },
   "WhatsApp Business, Telegram & Chat Channels": {
    "group": "INT",
@@ -16858,7 +19939,7 @@
      "security"
     ]
    },
-   "n": 998
+   "n": 1182
   },
   "Push Providers (FCM, APNs, OneSignal)": {
    "group": "INT",
@@ -16874,7 +19955,7 @@
      "security"
     ]
    },
-   "n": 999
+   "n": 1183
   },
   "Video, Audio & Streaming Services (Agora, Twilio Video, Mux, YouTube API)": {
    "group": "INT",
@@ -16890,7 +19971,7 @@
      "security"
     ]
    },
-   "n": 1000
+   "n": 1184
   },
   "Maps, Geocoding & Places (Google Maps, Mapbox, OSM)": {
    "group": "INT",
@@ -16906,7 +19987,7 @@
      "security"
     ]
    },
-   "n": 1001
+   "n": 1185
   },
   "Translation & Content APIs (Google Translate, DeepL)": {
    "group": "INT",
@@ -16922,7 +20003,7 @@
      "security"
     ]
    },
-   "n": 1002
+   "n": 1186
   },
   "File Conversion & Document APIs (PDF services, OCR vendors)": {
    "group": "INT",
@@ -16938,7 +20019,7 @@
      "security"
     ]
    },
-   "n": 1003
+   "n": 1187
   },
   "Payment Providers (Stripe, Adyen, PayPal, local PSPs)": {
    "group": "INT",
@@ -16956,7 +20037,7 @@
      "finance"
     ]
    },
-   "n": 1004
+   "n": 1188
   },
   "Banking APIs & Open Banking": {
    "group": "INT",
@@ -16974,7 +20055,7 @@
      "finance"
     ]
    },
-   "n": 1005
+   "n": 1189
   },
   "Identity Verification & KYC Vendors": {
    "group": "INT",
@@ -16992,7 +20073,7 @@
      "compliance"
     ]
    },
-   "n": 1006
+   "n": 1190
   },
   "Social Login & Identity Providers (Google, Apple, Microsoft, Auth0, Clerk)": {
    "group": "INT",
@@ -17008,7 +20089,7 @@
      "security"
     ]
    },
-   "n": 1007
+   "n": 1191
   },
   "Shipping & Logistics APIs (DHL, FedEx, Aramex, local couriers)": {
    "group": "INT",
@@ -17024,7 +20105,7 @@
      "security"
     ]
    },
-   "n": 1008
+   "n": 1192
   },
   "Ad & Marketing Platforms (Meta Ads, Google Ads, Mailchimp)": {
    "group": "INT",
@@ -17040,7 +20121,7 @@
      "security"
     ]
    },
-   "n": 1009
+   "n": 1193
   },
   "Analytics & Data Vendors (Segment, Amplitude, Mixpanel, GA4)": {
    "group": "INT",
@@ -17056,7 +20137,7 @@
      "security"
     ]
    },
-   "n": 1010
+   "n": 1194
   },
   "Search & AI Vendors (Algolia, OpenAI, Anthropic, ElevenLabs)": {
    "group": "INT",
@@ -17072,7 +20153,7 @@
      "security"
     ]
    },
-   "n": 1011
+   "n": 1195
   },
   "Partner & Public API Programs (keys, quotas, docs for partners)": {
    "group": "INT",
@@ -17088,7 +20169,7 @@
      "security"
     ]
    },
-   "n": 1012
+   "n": 1196
   },
   "OAuth Client Flows & Token Refresh for Integrations": {
    "group": "INT",
@@ -17104,7 +20185,7 @@
      "security"
     ]
    },
-   "n": 1013
+   "n": 1197
   },
   "Webhook Receivers (verification, retries, replay)": {
    "group": "INT",
@@ -17120,7 +20201,7 @@
      "security"
     ]
    },
-   "n": 1014
+   "n": 1198
   },
   "Polling vs Webhooks & Sync Strategies": {
    "group": "INT",
@@ -17136,7 +20217,7 @@
      "security"
     ]
    },
-   "n": 1015
+   "n": 1199
   },
   "Vendor Rate Limits, Quotas & Backoff": {
    "group": "INT",
@@ -17152,7 +20233,7 @@
      "security"
     ]
    },
-   "n": 1016
+   "n": 1200
   },
   "Data Mapping, Transformation & Field Mapping": {
    "group": "INT",
@@ -17168,7 +20249,7 @@
      "security"
     ]
    },
-   "n": 1017
+   "n": 1201
   },
   "Sandbox vs Production Credentials & Environments": {
    "group": "INT",
@@ -17184,7 +20265,7 @@
      "security"
     ]
    },
-   "n": 1018
+   "n": 1202
   },
   "Integration Error Handling & Partial Failures": {
    "group": "INT",
@@ -17200,7 +20281,7 @@
      "security"
     ]
    },
-   "n": 1019
+   "n": 1203
   },
   "Integration Monitoring, Logs & Replay Tools": {
    "group": "INT",
@@ -17216,7 +20297,7 @@
      "security"
     ]
    },
-   "n": 1020
+   "n": 1204
   },
   "Vendor Evaluation, Contracts & Lock-in": {
    "group": "INT",
@@ -17232,7 +20313,7 @@
      "security"
     ]
    },
-   "n": 1021
+   "n": 1205
   },
   "SDK Versioning & Vendor API Deprecations": {
    "group": "INT",
@@ -17248,7 +20329,7 @@
      "security"
     ]
    },
-   "n": 1022
+   "n": 1206
   },
   "File-based Integrations (SFTP drops, CSV feeds, EDI)": {
    "group": "INT",
@@ -17264,7 +20345,7 @@
      "security"
     ]
    },
-   "n": 1023
+   "n": 1207
   },
   "Legacy Protocols (SOAP, XML-RPC, WSDL, FTP)": {
    "group": "INT",
@@ -17280,7 +20361,7 @@
      "security"
     ]
    },
-   "n": 1024
+   "n": 1208
   },
   "Work on Document (README, guides)": {
    "group": "DOCS",
@@ -17291,7 +20372,7 @@
     "3": [],
     "4": []
    },
-   "n": 1025
+   "n": 1209
   },
   "Code Match Documents (docs vs code drift)": {
    "group": "DOCS",
@@ -17305,7 +20386,7 @@
    "caps": {
     "Analyse": 40
    },
-   "n": 1026
+   "n": 1210
   },
   "API Docs (OpenAPI / Swagger)": {
    "group": "DOCS",
@@ -17316,7 +20397,7 @@
     "3": [],
     "4": []
    },
-   "n": 1027
+   "n": 1211
   },
   "Runbooks & Operational Procedures": {
    "group": "DOCS",
@@ -17327,7 +20408,7 @@
     "3": [],
     "4": []
    },
-   "n": 1028
+   "n": 1212
   },
   "Onboarding Docs & Developer Setup Guides": {
    "group": "DOCS",
@@ -17338,7 +20419,7 @@
     "3": [],
     "4": []
    },
-   "n": 1029
+   "n": 1213
   },
   "Architecture & Design Docs (RFCs, design docs)": {
    "group": "DOCS",
@@ -17349,7 +20430,7 @@
     "3": [],
     "4": []
    },
-   "n": 1030
+   "n": 1214
   },
   "Changelogs, Release Notes & Migration Guides": {
    "group": "DOCS",
@@ -17360,7 +20441,7 @@
     "3": [],
     "4": []
    },
-   "n": 1031
+   "n": 1215
   },
   "Inline Help, Tooltips & In-app Documentation": {
    "group": "DOCS",
@@ -17371,7 +20452,7 @@
     "3": [],
     "4": []
    },
-   "n": 1032
+   "n": 1216
   },
   "Diagrams (Mermaid, PlantUML, sequence, ERD)": {
    "group": "DOCS",
@@ -17382,7 +20463,7 @@
     "3": [],
     "4": []
    },
-   "n": 1033
+   "n": 1217
   },
   "Docs Sites & Tooling (Docusaurus, MkDocs, Docsify, Starlight)": {
    "group": "DOCS",
@@ -17393,7 +20474,7 @@
     "3": [],
     "4": []
    },
-   "n": 1034
+   "n": 1218
   },
   "Code Examples, Snippets & Tutorials": {
    "group": "DOCS",
@@ -17404,7 +20485,7 @@
     "3": [],
     "4": []
    },
-   "n": 1035
+   "n": 1219
   },
   "Comments & Documentation Standards": {
    "group": "DOCS",
@@ -17415,7 +20496,7 @@
     "3": [],
     "4": []
    },
-   "n": 1036
+   "n": 1220
   },
   "Knowledge Base, Wiki & Decision Capture": {
    "group": "DOCS",
@@ -17426,7 +20507,7 @@
     "3": [],
     "4": []
    },
-   "n": 1037
+   "n": 1221
   },
   "Legal & Marketing Content & Translation": {
    "group": "DOCS",
@@ -17440,7 +20521,7 @@
    "ov": {
     "Analyse": "opus·medium"
    },
-   "n": 1038
+   "n": 1222
   },
   "i18n & l10n (strings, locales)": {
    "group": "DOCS",
@@ -17451,7 +20532,7 @@
     "3": [],
     "4": []
    },
-   "n": 1039
+   "n": 1223
   },
   "Translation Workflow & Translation Management (Crowdin, Lokalise)": {
    "group": "DOCS",
@@ -17462,7 +20543,7 @@
     "3": [],
     "4": []
    },
-   "n": 1040
+   "n": 1224
   },
   "Arabic & RTL Content Rules": {
    "group": "DOCS",
@@ -17473,7 +20554,7 @@
     "3": [],
     "4": []
    },
-   "n": 1041
+   "n": 1225
   },
   "UX Copy & Error Message Text (content)": {
    "group": "DOCS",
@@ -17484,7 +20565,7 @@
     "3": [],
     "4": []
    },
-   "n": 1042
+   "n": 1226
   },
   "Email & Notification Copy": {
    "group": "DOCS",
@@ -17495,7 +20576,7 @@
     "3": [],
     "4": []
    },
-   "n": 1043
+   "n": 1227
   },
   "Marketing Pages, Blog & SEO Content": {
    "group": "DOCS",
@@ -17506,7 +20587,7 @@
     "3": [],
     "4": []
    },
-   "n": 1044
+   "n": 1228
   },
   "Legal Text (terms, privacy, licenses, disclaimers)": {
    "group": "DOCS",
@@ -17521,7 +20602,7 @@
      "compliance"
     ]
    },
-   "n": 1045
+   "n": 1229
   },
   "Open-source Licensing & Attribution": {
    "group": "DOCS",
@@ -17532,7 +20613,7 @@
     "3": [],
     "4": []
    },
-   "n": 1046
+   "n": 1230
   },
   "Brand Voice, Tone & Style Guides": {
    "group": "DOCS",
@@ -17543,7 +20624,7 @@
     "3": [],
     "4": []
    },
-   "n": 1047
+   "n": 1231
   },
   "Accessibility of Content (alt text, captions, plain language)": {
    "group": "DOCS",
@@ -17554,7 +20635,7 @@
     "3": [],
     "4": []
    },
-   "n": 1048
+   "n": 1232
   },
   "Generated Docs from Code (XML docs, docstrings, typedoc)": {
    "group": "DOCS",
@@ -17565,7 +20646,7 @@
     "3": [],
     "4": []
    },
-   "n": 1049
+   "n": 1233
   },
   "Codebase Exploration & Onboarding": {
    "group": "DOCS",
@@ -17579,7 +20660,7 @@
    "caps": {
     "Read": 120
    },
-   "n": 1050
+   "n": 1234
   },
   "Explaining Code & Walkthroughs": {
    "group": "DOCS",
@@ -17590,7 +20671,7 @@
     "3": [],
     "4": []
    },
-   "n": 1051
+   "n": 1235
   },
   "Dependency & Usage Mapping": {
    "group": "DOCS",
@@ -17601,7 +20682,7 @@
     "3": [],
     "4": []
    },
-   "n": 1052
+   "n": 1236
   },
   "Reading Logs, Configs & Data Files (explore)": {
    "group": "DOCS",
@@ -17612,7 +20693,7 @@
     "3": [],
     "4": []
    },
-   "n": 1053
+   "n": 1237
   },
   "Repository Inventory & Tech Stack Discovery": {
    "group": "DOCS",
@@ -17623,7 +20704,7 @@
     "3": [],
     "4": []
    },
-   "n": 1054
+   "n": 1238
   },
   "Git History & Blame Investigation": {
    "group": "DOCS",
@@ -17634,7 +20715,7 @@
     "3": [],
     "4": []
    },
-   "n": 1055
+   "n": 1239
   },
   "Comparing Implementations & Reference Reading": {
    "group": "DOCS",
@@ -17645,7 +20726,7 @@
     "3": [],
     "4": []
    },
-   "n": 1056
+   "n": 1240
   },
   "Glossary, Domain Terms & Ubiquitous Language (docs)": {
    "group": "DOCS",
@@ -17656,7 +20737,7 @@
     "3": [],
     "4": []
    },
-   "n": 1057
+   "n": 1241
   },
   "Meeting Notes, Summaries & Handover Docs": {
    "group": "DOCS",
@@ -17667,7 +20748,7 @@
     "3": [],
     "4": []
    },
-   "n": 1058
+   "n": 1242
   },
   "Presentations, Slides & Demos": {
    "group": "DOCS",
@@ -17678,7 +20759,7 @@
     "3": [],
     "4": []
    },
-   "n": 1059
+   "n": 1243
   },
   "Check MVP vs Advance": {
    "group": "PROD",
@@ -17697,7 +20778,7 @@
     "Work": "sonnet·medium",
     "Verify": "sonnet·low"
    },
-   "n": 1060
+   "n": 1244
   },
   "Feature Scoping & Requirements": {
    "group": "PROD",
@@ -17715,7 +20796,7 @@
    "ov": {
     "Work": "sonnet·medium"
    },
-   "n": 1061
+   "n": 1245
   },
   "User Stories, Epics & Ticket Writing": {
    "group": "PROD",
@@ -17730,7 +20811,7 @@
      "qa"
     ]
    },
-   "n": 1062
+   "n": 1246
   },
   "Estimation, Sizing & Planning Poker": {
    "group": "PROD",
@@ -17745,7 +20826,7 @@
      "qa"
     ]
    },
-   "n": 1063
+   "n": 1247
   },
   "Prioritization Frameworks (RICE, MoSCoW, WSJF)": {
    "group": "PROD",
@@ -17760,7 +20841,7 @@
      "qa"
     ]
    },
-   "n": 1064
+   "n": 1248
   },
   "Roadmaps, Milestones & Release Planning": {
    "group": "PROD",
@@ -17775,7 +20856,7 @@
      "qa"
     ]
    },
-   "n": 1065
+   "n": 1249
   },
   "Trade-offs, Alternatives & Recommendation Writing": {
    "group": "PROD",
@@ -17790,7 +20871,7 @@
      "qa"
     ]
    },
-   "n": 1066
+   "n": 1250
   },
   "Competitor & Feature Parity Check": {
    "group": "PROD",
@@ -17808,7 +20889,7 @@
    "ov": {
     "Read": "sonnet·low"
    },
-   "n": 1067
+   "n": 1251
   },
   "Non-goals, Constraints & Assumptions": {
    "group": "PROD",
@@ -17823,7 +20904,7 @@
      "qa"
     ]
    },
-   "n": 1068
+   "n": 1252
   },
   "Success Metrics & OKRs for Features": {
    "group": "PROD",
@@ -17838,7 +20919,7 @@
      "qa"
     ]
    },
-   "n": 1069
+   "n": 1253
   },
   "Pricing & Packaging Decisions (product)": {
    "group": "PROD",
@@ -17855,7 +20936,7 @@
      "finance"
     ]
    },
-   "n": 1070
+   "n": 1254
   },
   "Discovery, Problem Framing & Jobs to be Done": {
    "group": "PROD",
@@ -17870,7 +20951,7 @@
      "qa"
     ]
    },
-   "n": 1071
+   "n": 1255
   },
   "Agile Ceremonies, Sprints & Retrospectives": {
    "group": "PROD",
@@ -17885,7 +20966,7 @@
      "qa"
     ]
    },
-   "n": 1072
+   "n": 1256
   },
   "Ticket Workflow, Boards & Status Hygiene": {
    "group": "PROD",
@@ -17900,7 +20981,7 @@
      "qa"
     ]
    },
-   "n": 1073
+   "n": 1257
   },
   "Code Review Process & Turnaround": {
    "group": "PROD",
@@ -17915,7 +20996,7 @@
      "qa"
     ]
    },
-   "n": 1074
+   "n": 1258
   },
   "Definition of Ready & Refinement": {
    "group": "PROD",
@@ -17930,7 +21011,7 @@
      "qa"
     ]
    },
-   "n": 1075
+   "n": 1259
   },
   "Stakeholder Communication & Status Reporting": {
    "group": "PROD",
@@ -17945,7 +21026,7 @@
      "qa"
     ]
    },
-   "n": 1076
+   "n": 1260
   },
   "Risk Register & Dependency Tracking": {
    "group": "PROD",
@@ -17960,7 +21041,7 @@
      "qa"
     ]
    },
-   "n": 1077
+   "n": 1261
   },
   "Technical Debt Tracking & Prioritization": {
    "group": "PROD",
@@ -17975,7 +21056,7 @@
      "qa"
     ]
    },
-   "n": 1078
+   "n": 1262
   },
   "Incident, Bug & Feature Intake Process": {
    "group": "PROD",
@@ -17990,7 +21071,7 @@
      "qa"
     ]
    },
-   "n": 1079
+   "n": 1263
   },
   "Team Conventions, Guidelines & Policies": {
    "group": "PROD",
@@ -18005,7 +21086,7 @@
      "qa"
     ]
    },
-   "n": 1080
+   "n": 1264
   },
   "Dependency, License & Security Policy Decisions": {
    "group": "PROD",
@@ -18022,7 +21103,7 @@
      "security"
     ]
    },
-   "n": 1081
+   "n": 1265
   },
   "Hiring, Onboarding & Knowledge Transfer Plans": {
    "group": "PROD",
@@ -18037,7 +21118,7 @@
      "qa"
     ]
    },
-   "n": 1082
+   "n": 1266
   },
   "Estimating Cost, Budget & Resourcing": {
    "group": "PROD",
@@ -18052,7 +21133,7 @@
      "qa"
     ]
    },
-   "n": 1083
+   "n": 1267
   },
   "Experiments, Hypotheses & Learning Loops": {
    "group": "PROD",
@@ -18067,7 +21148,7 @@
      "qa"
     ]
    },
-   "n": 1084
+   "n": 1268
   },
   "Release Communication & Customer Announcements": {
    "group": "PROD",
@@ -18082,7 +21163,7 @@
      "qa"
     ]
    },
-   "n": 1085
+   "n": 1269
   },
   "Vendor & Contract Management (SaaS seats, renewals)": {
    "group": "PROD",
@@ -18097,7 +21178,7 @@
      "qa"
     ]
    },
-   "n": 1086
+   "n": 1270
   },
   "Tracker Operations (Jira, ClickUp, Linear, Asana, monday)": {
    "group": "PROD",
@@ -18112,7 +21193,7 @@
      "qa"
     ]
    },
-   "n": 1087
+   "n": 1271
   },
   "Sprint Planning, Capacity & Velocity": {
    "group": "PROD",
@@ -18127,7 +21208,7 @@
      "qa"
     ]
    },
-   "n": 1088
+   "n": 1272
   },
   "Backlog Refinement & Epic Breakdown": {
    "group": "PROD",
@@ -18142,7 +21223,7 @@
      "qa"
     ]
    },
-   "n": 1089
+   "n": 1273
   },
   "Standup, Sprint & Blocker Reports": {
    "group": "PROD",
@@ -18157,7 +21238,7 @@
      "qa"
     ]
    },
-   "n": 1090
+   "n": 1274
   },
   "Ticket to Code Traceability (PRs, branches, commits)": {
    "group": "PROD",
@@ -18172,7 +21253,7 @@
      "qa"
     ]
    },
-   "n": 1091
+   "n": 1275
   },
   "C# & .NET Runtime (language features, async, LINQ)": {
    "group": "LANG",
@@ -18188,7 +21269,7 @@
      "security"
     ]
    },
-   "n": 1092
+   "n": 1276
   },
   "Java & JVM (language, generics, streams, GC)": {
    "group": "LANG",
@@ -18204,7 +21285,7 @@
      "security"
     ]
    },
-   "n": 1093
+   "n": 1277
   },
   "Kotlin (language, coroutines)": {
    "group": "LANG",
@@ -18220,7 +21301,7 @@
      "security"
     ]
    },
-   "n": 1094
+   "n": 1278
   },
   "Python (language, typing, async, packaging)": {
    "group": "LANG",
@@ -18236,7 +21317,7 @@
      "security"
     ]
    },
-   "n": 1095
+   "n": 1279
   },
   "JavaScript (language, async, modules, Node runtime)": {
    "group": "LANG",
@@ -18252,7 +21333,7 @@
      "security"
     ]
    },
-   "n": 1096
+   "n": 1280
   },
   "TypeScript (types, generics, strictness, tsconfig)": {
    "group": "LANG",
@@ -18268,7 +21349,7 @@
      "security"
     ]
    },
-   "n": 1097
+   "n": 1281
   },
   "Go (language, goroutines, modules, errors)": {
    "group": "LANG",
@@ -18284,7 +21365,7 @@
      "security"
     ]
    },
-   "n": 1098
+   "n": 1282
   },
   "Rust (ownership, async, cargo)": {
    "group": "LANG",
@@ -18300,7 +21381,7 @@
      "security"
     ]
    },
-   "n": 1099
+   "n": 1283
   },
   "PHP (language, Composer, versions)": {
    "group": "LANG",
@@ -18316,7 +21397,7 @@
      "security"
     ]
    },
-   "n": 1100
+   "n": 1284
   },
   "Ruby (language, gems, metaprogramming)": {
    "group": "LANG",
@@ -18332,7 +21413,7 @@
      "security"
     ]
    },
-   "n": 1101
+   "n": 1285
   },
   "C & C++ (memory, build, UB)": {
    "group": "LANG",
@@ -18348,7 +21429,7 @@
      "security"
     ]
    },
-   "n": 1102
+   "n": 1286
   },
   "Swift & Objective-C (language)": {
    "group": "LANG",
@@ -18364,7 +21445,7 @@
      "security"
     ]
    },
-   "n": 1103
+   "n": 1287
   },
   "Dart, Elixir, Scala & Other Languages": {
    "group": "LANG",
@@ -18380,7 +21461,7 @@
      "security"
     ]
    },
-   "n": 1104
+   "n": 1288
   },
   "SQL Procedural Languages (PL/pgSQL, T-SQL, PL/SQL code)": {
    "group": "LANG",
@@ -18396,7 +21477,7 @@
      "security"
     ]
    },
-   "n": 1105
+   "n": 1289
   },
   "Shell, Bash & PowerShell (language)": {
    "group": "LANG",
@@ -18412,7 +21493,7 @@
      "security"
     ]
    },
-   "n": 1106
+   "n": 1290
   },
   "Regular Expressions & Text Parsing": {
    "group": "LANG",
@@ -18428,7 +21509,7 @@
      "security"
     ]
    },
-   "n": 1107
+   "n": 1291
   },
   "Date, Time & Timezone Libraries": {
    "group": "LANG",
@@ -18444,7 +21525,7 @@
      "security"
     ]
    },
-   "n": 1108
+   "n": 1292
   },
   "Numeric Types, Floating Point & Big Numbers": {
    "group": "LANG",
@@ -18460,7 +21541,7 @@
      "security"
     ]
    },
-   "n": 1109
+   "n": 1293
   },
   "Strings, Encoding & Unicode": {
    "group": "LANG",
@@ -18476,7 +21557,7 @@
      "security"
     ]
    },
-   "n": 1110
+   "n": 1294
   },
   "Collections, Iterators & Data Structures": {
    "group": "LANG",
@@ -18492,7 +21573,7 @@
      "security"
     ]
    },
-   "n": 1111
+   "n": 1295
   },
   "Async, Concurrency & Parallelism Primitives": {
    "group": "LANG",
@@ -18508,7 +21589,7 @@
      "security"
     ]
    },
-   "n": 1112
+   "n": 1296
   },
   "Memory Management & Garbage Collection (runtime)": {
    "group": "LANG",
@@ -18524,7 +21605,7 @@
      "security"
     ]
    },
-   "n": 1113
+   "n": 1297
   },
   "Serialization Libraries (JSON, XML, Protobuf, MessagePack)": {
    "group": "LANG",
@@ -18540,7 +21621,7 @@
      "security"
     ]
    },
-   "n": 1114
+   "n": 1298
   },
   "Reflection, Metaprogramming & Dynamic Code": {
    "group": "LANG",
@@ -18556,7 +21637,7 @@
      "security"
     ]
    },
-   "n": 1115
+   "n": 1299
   },
   "Interop & FFI (native libraries, P/Invoke, WASM)": {
    "group": "LANG",
@@ -18572,7 +21653,7 @@
      "security"
     ]
    },
-   "n": 1116
+   "n": 1300
   },
   "Runtime Versions, EOL & Upgrade Paths": {
    "group": "LANG",
@@ -18588,7 +21669,7 @@
      "security"
     ]
    },
-   "n": 1117
+   "n": 1301
   },
   "Package Managers & Lockfiles (npm, pnpm, NuGet, pip, Maven, Composer)": {
    "group": "LANG",
@@ -18604,7 +21685,7 @@
      "security"
     ]
    },
-   "n": 1118
+   "n": 1302
   },
   "Dependency Resolution, Conflicts & Transitive Deps": {
    "group": "LANG",
@@ -18620,7 +21701,7 @@
      "security"
     ]
    },
-   "n": 1119
+   "n": 1303
   },
   "Monorepo Package Management & Workspaces": {
    "group": "LANG",
@@ -18636,7 +21717,7 @@
      "security"
     ]
    },
-   "n": 1120
+   "n": 1304
   },
   "Compilers, Transpilers & Build Targets": {
    "group": "LANG",
@@ -18652,7 +21733,7 @@
      "security"
     ]
    },
-   "n": 1121
+   "n": 1305
   },
   "Linters, Formatters & Static Analyzers per Language": {
    "group": "LANG",
@@ -18668,7 +21749,7 @@
      "security"
     ]
    },
-   "n": 1122
+   "n": 1306
   },
   "Language Server, IDE Tooling & Debuggers": {
    "group": "LANG",
@@ -18684,7 +21765,7 @@
      "security"
     ]
    },
-   "n": 1123
+   "n": 1307
   },
   "Scripting, CLI Tools & Automation Scripts": {
    "group": "LANG",
@@ -18700,7 +21781,7 @@
      "security"
     ]
    },
-   "n": 1124
+   "n": 1308
   },
   "Cross-platform Runtime Behaviour (paths, line endings, case)": {
    "group": "LANG",
@@ -18716,7 +21797,7 @@
      "security"
     ]
    },
-   "n": 1125
+   "n": 1309
   },
   "Native Extensions & Platform-specific Builds": {
    "group": "LANG",
@@ -18732,7 +21813,7 @@
      "security"
     ]
    },
-   "n": 1126
+   "n": 1310
   },
   "Standard Library vs Third-party Choices": {
    "group": "LANG",
@@ -18748,7 +21829,7 @@
      "security"
     ]
    },
-   "n": 1127
+   "n": 1311
   },
   "WebAssembly & Portable Runtimes": {
    "group": "LANG",
@@ -18764,7 +21845,7 @@
      "security"
     ]
    },
-   "n": 1128
+   "n": 1312
   },
   "Embedded, IoT & Firmware": {
    "group": "LANG",
@@ -18780,7 +21861,7 @@
      "security"
     ]
    },
-   "n": 1129
+   "n": 1313
   },
   "Game Development Engines & Loops (Unity, Godot, Unreal)": {
    "group": "LANG",
@@ -18796,7 +21877,7 @@
      "security"
     ]
    },
-   "n": 1130
+   "n": 1314
   },
   "Desktop GUI Frameworks (WPF, WinUI, Qt, GTK, Avalonia)": {
    "group": "LANG",
@@ -18812,7 +21893,7 @@
      "security"
     ]
    },
-   "n": 1131
+   "n": 1315
   },
   "Low-code, No-code & Spreadsheet Logic (Power Apps, AppSheet, Excel formulas)": {
    "group": "LANG",
@@ -18828,7 +21909,7 @@
      "security"
     ]
    },
-   "n": 1132
+   "n": 1316
   },
   "Blockchain & Smart Contracts": {
    "group": "LANG",
@@ -18847,7 +21928,7 @@
      "finance"
     ]
    },
-   "n": 1133
+   "n": 1317
   }
  },
  "tiers": {

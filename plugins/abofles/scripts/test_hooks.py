@@ -3334,6 +3334,10 @@ def main():
         check("review: parse_header reads the reviewer tags", R.parse_header("abofles: Payments & Gateway Integration / Security · T4")[1] == "Security" and R.parse_header("abofles: X / qa · T3")[1] == "QA"
               and R.parse_header("abofles: X / uiux · T3")[1] == "UIUX" and R.parse_header("abofles: X / Clean · T3")[1] == "Clean" and R.parse_header("abofles: X / Verify · T2")[1] == "Verify")
         check("review: side_of maps the reviewer agent types", R.side_of("abofles:abofles-security")[1] == "Security" and R.side_of("abofles:abofles-qa")[1] == "QA" and R.side_of("abofles:abofles-cleancoder")[1] == "Clean" and R.side_of("abofles:abofles-verifier")[1] == "Verify")
+        check("review: every reviewer tag parses in a prompt header (Design, Marketing too)", all(R.parse_header(f"abofles: Logo Design & Logomarks / {w} · T4")[1:] == (w, 4) for w in R.REVIEW_SIDES.values()))
+        sk2 = lambda t: [k for k, w in R.REVIEW_SIDES.items() if re.search(r"\b" + re.escape(w) + R.SKIP_TAIL, t, re.I)]
+        check("review gate: a topic name holding a tag word does not skip that reviewer", sk2("Logo Design & Logomarks: Compliance skipped: no assets") == ["compliance"] and sk2("Data Privacy Compliance skipped: x") == ["compliance"] and sk2("Design skipped: no deliverable") == ["design"])
+        check("review: side_of maps the Design and Marketing reviewers", R.side_of("abofles:abofles-design")[1] == "Design" and R.side_of("abofles:abofles-marketing")[1] == "Marketing")
         check("review: fable is refused for a reviewer", "fable is only for" in reason(run("pre", dict(agent("fable", "medium", "abofles:abofles-finance", cwd=str(P)), session_id="rv0"), led3)))
         check("review: workflow.json is generated and names the reviewers per topic", (R.workflow_table().get("topics") or {}).get("Payments & Gateway Integration", {}).get("reviewers", {}).get("4") == ["finance", "security", "tester"])
         # a T4 money change closed without its reviewers: refused once, then closed with a guide item
@@ -3675,7 +3679,7 @@ def main():
         check("session: status --resolve with an empty id plus a trailing empty --session still exits 2", sc_("status.py", "--resolve", "", "--session", "").returncode == 2)
         check("session: a non-trailing empty --session value still exits 2", sc_("status.py", "--resolve", "abc", "--session", "", "--trace").returncode == 2)
 
-    # ---- topics: 27 domains, 1,100+ topics looked up by scripts/topic.py, four new reviewers, suggestions
+    # ---- topics: 31 domains, 1,300+ topics looked up by scripts/topic.py, four new reviewers, suggestions
     with tempfile.TemporaryDirectory() as led, tempfile.TemporaryDirectory() as cwd, tempfile.TemporaryDirectory() as state:
         os.environ["ABOFLES_STATE_DIR"] = state
         os.environ["ABOFLES_TEST_CWD"] = cwd
@@ -3687,13 +3691,13 @@ def main():
         _hst = _iut.spec_from_file_location("abofles_hook_tp", str(HOOK)); HT = _iut.module_from_spec(_hst); _hst.loader.exec_module(HT)
         wf = HT.workflow_table()
         names = [l.split("|")[0].strip() for _, _, _, _, areas in TD.DOMAINS for _, rows in areas for l in rows]
-        check("topics: 27 domains and 1,000+ topics", len(TD.DOMAINS) == 27 and len(names) >= 1000 and len(wf.get("topics", {})) == len(names))
+        check("topics: 31 domains and 1,300+ topics", len(TD.DOMAINS) == 31 and len(names) >= 1300 and len(wf.get("topics", {})) == len(names))
         check("topics: names unique", len(set(names)) == len(names))
         legacy = ["Financial & Amount Calculations", "Codebase Exploration & Onboarding", "Notifications & Messaging", "Data Privacy, PII & Compliance", "Audit Logging & Traceability", "Unit Test", "Payments & Gateway Integration", "Clean Code (naming, structure, readability)", "Work on Document (README, guides)", "Check MVP vs Advance", "Architecture, Design Pattern & Stack Used"]
         check("topics: the legacy names used by hook, tests and docs are kept", all(n in wf["topics"] for n in legacy))
         check("topics: every topic has 3+ signals and a valid tier", all(len([x for x in (t.get("signals") or "").split(",") if x.strip()]) >= 3 and t.get("tier") in (1, 2, 3, 4) for t in wf["topics"].values()))
         rk = set(wf["reviewers"])
-        check("topics: 11 reviewers and every domain/topic reviewer key is one of them", len(rk) == 11 and {"dba", "ops", "perf", "data"} <= rk
+        check("topics: 13 reviewers and every domain/topic reviewer key is one of them", len(rk) == 13 and {"dba", "ops", "perf", "data", "design", "marketing"} <= rk
               and all(k in rk for g in wf["groups"].values() for t in ("3", "4") for k in g["reviewers"][t]) and all(k in rk for t in wf["topics"].values() for tt in ("3", "4") for k in t["reviewers"][tt]))
         check("topics: an agent file exists for every reviewer", all((sdir.parent / "agents" / f"{wf['reviewers'][k]['agent']}.md").exists() for k in rk))
         check("topics: DBA reviews databases, Ops the cloud, Perf the cache, Data the warehouse",
@@ -3709,6 +3713,20 @@ def main():
         check("lookup: cloudflare workers -> the Cloudflare Workers topic", "Cloudflare Workers" in HT.topic_matches("cloudflare workers kv", wf, 1)[0][1])
         check("lookup: otp expiry -> an OTP topic in SEC", (lambda r: r and "OTP" in r[0][1] and r[0][2]["group"] == "SEC")(HT.topic_matches("otp code expiry", wf, 1)))
         check("lookup: gibberish -> no match", HT.topic_matches("zzqx vvbbnn", wf, 3) == [])
+        check("lookup: small words never score (one STOP_WORDS set; the answer check has its own)", "on" in HT.STOP_WORDS and "my" in HT.STOP_WORDS and HT.STOP_WORDS is not HT.ANSWER_STOP_WORDS
+              and HT.topic_matches("pixel not firing on purchase", wf, 1)[0][1] == "Pixel, Conversions API & Ad Tracking")
+        check("lookup: dev asks stay out of the design and social domains", all(HT.topic_matches(q, wf, 1)[0][2]["group"] not in ("GFX", "VID", "SPC", "SOC")
+              for q in ("buffer overflow c", "stripe billing invoice", "aspect ratio css", "webgl shader", "canvas pixel manipulation", "discord oauth", "ffmpeg convert video", "api response time slow", "feature rollout plan", "team access rbac")))
+        check("lookup: design asks -> the design domains (logo, carousel, prepress, music rights, Blender)",
+              [HT.topic_matches(q, wf, 1)[0][1] for q in ("design a logo for a coffee shop", "make an instagram carousel", "print ready brochure bleed cmyk", "license music for my reel", "blender product render")]
+              == ["Logo Design & Logomarks", "Social Media Graphics & Carousels", "Print Production & Prepress", "Music & Audio Licensing Rights", "Product Visualization & 3D Mockups"])
+        check("lookup: social asks -> the social domain (caption, hacked account, Meta ads, rejected ad), and a Java thread pool stays out of it",
+              [HT.topic_matches(q, wf, 1)[0][1] for q in ("write instagram caption for my cafe", "my instagram account got hacked", "set up meta ads campaign", "ad rejected by meta policy")]
+              == ["Captions, Hashtags & Post Copy", "Hacked Accounts, Recovery & Account Security", "Meta Ads Manager Campaigns", "Ad Policies, Rejections & Restricted Categories"]
+              and HT.topic_matches("thread pool deadlock in java", wf, 1)[0][2]["group"] != "SOC")
+        check("topics: social reviews with Marketing; ad money adds Finance, hacked accounts Security", wf["groups"]["SOC"]["reviewers"]["3"] == ["marketing"] and "finance" in wf["topics"]["Ad Budgets, Bidding & Spend Limits"]["reviewers"]["4"] and "security" in wf["topics"]["Hacked Accounts, Recovery & Account Security"]["reviewers"]["4"])
+        check("topics: design domains review with Design, rights topics add Compliance; screens keep UIUX", wf["groups"]["GFX"]["reviewers"]["3"] == ["design"] and wf["groups"]["VID"]["reviewers"]["3"] == ["design"] and wf["groups"]["SPC"]["reviewers"]["3"] == ["design"] and wf["groups"]["UX"]["reviewers"]["3"] == ["uiux"]
+              and "compliance" in wf["topics"]["Stock Assets & Image Licensing"]["reviewers"]["3"] and "compliance" in wf["topics"]["Music & Audio Licensing Rights"]["reviewers"]["3"])
         check("lookup: cells = tier base unless the topic overrides", HT.topic_cells(wf["topics"]["Unit Test"], 2, wf)["Work"] == ("opus·medium", 20, "base") and HT.topic_cells(wf["topics"]["Financial & Amount Calculations"], 4, wf)["Analyse"] == ("fable·medium", 50, "topic"))
         sk = wf["topics"]["Secrets, Keys & Config Security"]
         check("matrix quality (default): Opus writes at every tier, Sonnet/Haiku verify, the specialist reviewers keep Opus at T4",
@@ -3742,7 +3760,7 @@ def main():
         r = tp("show", "#1")
         check("topic.py: show by number", r.returncode == 0 and "#1 " in r.stdout and "signals:" in r.stdout)
         r = tp("domains")
-        check("topic.py: domains lists 27 rows", r.returncode == 0 and len([l for l in r.stdout.splitlines() if l.startswith("| ") and not l.startswith("| Code")]) == 27)
+        check("topic.py: domains lists 31 rows", r.returncode == 0 and len([l for l in r.stdout.splitlines() if l.startswith("| ") and not l.startswith("| Code")]) == 31)
         r = tp("list", "DB")
         check("topic.py: list DB prints its areas and topics", r.returncode == 0 and "PostgreSQL" in r.stdout and "Replication & Availability:" in r.stdout)
         check("topic.py: list of an unknown code exits 1", tp("list", "NOPE").returncode == 1)

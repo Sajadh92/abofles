@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generator for the abofles topic matrix.
 
-Topics live in scripts/topics_data.py (DOMAINS: 27 domains, areas, 1,100+ topic lines); tiers, caps,
+Topics live in scripts/topics_data.py (DOMAINS: 31 domains, areas, 1,300+ topic lines); tiers, caps,
 reviewers, intents and workflows live below. Edit, then run:
 
     python3 scripts/gen_matrix.py
@@ -89,6 +89,8 @@ REVIEWERS = {
     "ops": ("Ops", "⚙️", "abofles-ops", "pipeline and deploy safety, IaC plan and drift, rollback path, secrets exposure, server and network config, blast radius", "read-only"),
     "perf": ("Perf", "⚡", "abofles-perf", "hot paths and complexity, N+1 and round-trips, allocations, caching, benchmark or load evidence before and after", "read + run benchmarks"),
     "data": ("Data", "📊", "abofles-data", "pipeline idempotency and backfills, metric definitions, aggregation correctness, double counting, freshness, data contracts", "read + run read-only queries"),
+    "design": ("Design", "🖌️", "abofles-design", "brief fit, brand, typography and layout, print and export specs, video and audio specs, 3D output, licences of fonts, images, music and AI assets", "all tools (measures with sips, pdfinfo, ffprobe; Better Design when connected; never publishes)"),
+    "marketing": ("Marketing", "📣", "abofles-marketing", "platform specs and limits, ad policy, honest claims and disclosure, hook and call to action, audience, budget and schedule, links and tracking, brand voice", "read + web fetch (never posts or changes a campaign)"),
 }
 
 # Specialists of the Work cell: not reviewers (no post-Verify step, no review gate), spawned instead of the generic worker for their kind of
@@ -110,8 +112,8 @@ TOPIC_REVIEWERS = {}  # filled by parse_topics()
 INTENTS = {
     "question": ("where is X, what calls Y, how does Z work", ["Read"]),
     "review": ("review X, find risks, audit, compare options", ["Read", "Analyse", "Review"]),
-    "design": ("plan how, design, migration strategy", ["Read", "Analyse", "Plan"]),
-    "change": ("add, fix, implement, refactor — by tier", None),
+    "design": ("plan how, design an approach or architecture, migration strategy", ["Read", "Analyse", "Plan"]),
+    "change": ("add, fix, implement, refactor, make, create, edit, export, schedule, launch (a logo, poster, video or post too) — by tier", None),
 }
 CHANGE_WORKFLOWS = {
     1: ["Work", "Verify"],
