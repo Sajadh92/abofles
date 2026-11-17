@@ -16,7 +16,8 @@
     memo.py note <text>          add a user note to Decisions (something settled in chat), tagged `(s:<session> p:<project>)`
     memo.py now < text           replace the Now section from stdin (what /abofles:memo writes)
     memo.py receipt < text       record the task's receipt (Receipt place = pane): it counts as printed, at once — the task closes and
-                                 the memo and the Abo Fles pane get it, the chat does not; exit 2 when stdin is no receipt
+                                 the memo and the Abo Fles pane get it, the chat does not; exit 2 when stdin is no receipt,
+                                 3 when its fields cannot be read (nothing recorded, the task stays open)
     memo.py path                 print the main memo path (`path mine`: this session's file)
     memo.py move <root>          move this session's memo (its file, its Needs-you items, its index line) to project <root> (a repository top)
                                  and make <root> the session's project — for a session that was started in the wrong folder
@@ -352,6 +353,11 @@ def main():
             sys.exit(2)
         own = has_receipt(text)
         foreign = not own and looks_like_receipt(text)
+        if H.parse_receipt(text) is None:  # a header the memo cannot read: refuse before the task closes, or the Journal never gets it
+            print("abofles: receipt not read — nothing recorded, the task stays open. Use the receipt lines as the hook gave them: "
+                  "the 🧾 header copied whole, then `- `done` → …` lines (short form: `· open: <items>` on the header line, "
+                  "or `· open:` with one indented `  - <item>` sub-bullet per item); record it again")
+            sys.exit(3)
         with state_lock(sid):  # the task closes now, as a printed receipt closes it at the turn's end: a next task in this turn counts apart
             stx = load_state(sid)
             root = H.project_root({"cwd": cwd}, stx)

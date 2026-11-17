@@ -481,6 +481,7 @@ OVERRIDE_KEYS = {
     "Sub session": {"kind": "text", "options": [], "default": ""},  # the same for a session another session started (the desktop app's side sessions); unset: Main session applies
     "Session cap": {"kind": "number", "options": [], "default": ""},
     "Context marks": {"kind": "list", "options": [], "default": ", ".join(str(m) for m in (500, 600, 700, 750, 800, 850, 900, 950))},
+    "Context stop": {"kind": "number", "options": [], "default": "500"},  # K tokens where the context watch stops the work, once (a mark of its own); the Context marks only warn and the work goes on; off = never stops
     "Receipt": {"kind": "select", "options": ["full", "short", "savings", "off"], "default": "full"},  # `savings` takes a threshold: `savings 30`
     "Break": {"kind": "number", "options": [], "default": "10"},  # minutes; `off` = never
     "Agents": {"kind": "select", "options": ["ask", "auto", "off"], "default": "ask"},  # or a fixed number N
@@ -565,6 +566,8 @@ def override_known(key, v):
     if spec["kind"] == "select":
         return select_of(key, v) is not None or (key == "Agents" and w.isdigit())
     if spec["kind"] == "number":
+        if key == "Context stop":
+            return bool(re.fullmatch(r"\d+[km]?", w)) or w in OFF_WORDS
         return bool(re.match(r"\d+", w)) or (key in ("Break", "Loop guard") and w in OFF_WORDS)
     if spec["kind"] == "list":
         return len(re.findall(r"\d+", v or "")) >= (4 if key == "Agent budgets" else 1)
@@ -769,14 +772,33 @@ def close_task(st, why):
     st.pop("close_on_prompt", None)
 
 
-CONTEXT_MARKS = (500, 600, 700, 750, 800, 850, 900, 950)  # thousands of tokens
+CONTEXT_MARKS = (500, 600, 700, 750, 800, 850, 900, 950)  # thousands of tokens: each one warns
+CONTEXT_STOP = 500  # thousands of tokens: where the watch stops the work (Context stop)
 
 
 def context_marks(cwd):
-    """`- Context marks = 100, 150, 180` (thousands of tokens; `500K` and `1M` read too) in the override block, else the defaults. 0 is no mark."""
+    """`- Context marks = 100, 150, 180` (thousands of tokens; `500K` and `1M` read too) in the override block, else the defaults. 0 is no mark.
+    A `Context stop = N` is a mark too, so the watch speaks when N is passed even when no warning mark is there."""
     v = override_value(cwd, "Context marks")
-    marks = sorted({int(n) * (1000 if u.lower() == "m" else 1) for n, u in re.findall(r"(\d+)\s*([kKmM]?)", v or "")} - {0})
-    return tuple(marks) or CONTEXT_MARKS
+    marks = set(sorted({int(n) * (1000 if u.lower() == "m" else 1) for n, u in re.findall(r"(\d+)\s*([kKmM]?)", v or "")} - {0}) or CONTEXT_MARKS)
+    stop = context_stop(cwd)
+    return tuple(sorted(marks | ({stop} if stop else set())))
+
+
+def context_stop(cwd):
+    """`- Context stop = N | off`, the context size (K tokens; `1M` reads too) where the watch stops the work, once: the block is the turn's
+    last output and no new work starts. Every Context mark only warns and the work goes on, under N and above it. Unset or unreadable:
+    CONTEXT_STOP. Returns N, or None for `off` (no stop at all)."""
+    w = first_word(override_value(cwd, "Context stop"))
+    if w in OFF_WORDS:
+        return None
+    m = re.fullmatch(r"(\d+)([km]?)", w)
+    return int(m.group(1)) * (1000 if m.group(2) == "m" else 1) if m else CONTEXT_STOP
+
+
+def context_stops(cwd, mark):
+    """Whether passing `mark` (K tokens) stops the work — only the Context stop mark does — or only warns."""
+    return mark == context_stop(cwd)
 
 
 # ── Guide: what to do next, computed from the ledger, the memo, the state and the context size ───────────────
@@ -1971,19 +1993,37 @@ def parse_receipt(text):
             h = re.sub(r"\*\*", "", line[1:]).strip()
             if " · open:" in h:
                 h, _, op = h.partition(" · open:")
+                op, _, g = op.partition(" · 🧭")  # the short form's guide tail is its `next`, not an open item
+                if g.strip():
+                    out["next"], out["items"]["next"] = "🧭" + g.rstrip(), ["🧭" + g.rstrip()]
+                    out["inline"].add("next")
                 if not out["open"] and op.strip():
                     out["open"], out["items"]["open"] = op.strip(), [op.strip()]
                     out["inline"].add("open")
+                elif not out["open"]:
+                    cur = "open"  # `· open:` with nothing after it: its items follow as sub-bullets, as the hook asks for 2+ items
             out["header"] = h.strip()
+            continue
+        g = re.match(r"^·\s*(🧭.*)$", line)  # the short form's guide on its own line, after the open sub-bullets
+        if g and out["header"] and not out["next"]:
+            out["next"], out["items"]["next"] = g.group(1).strip(), [g.group(1).strip()]
+            out["inline"].add("next")
             continue
         m = re.match(r"^-\s*`(done|why|workflow|check|open|next)`\s*→\s*(.*)$", line) or re.match(r"^(done|why|workflow|check|open|next)\s{2,}(\S.*)$", line)
         if m and not out[m.group(1)]:
             out[m.group(1)] = m.group(2).strip()
             cur = m.group(1)
+            if cur == "open" and " · 🧭" in out["open"]:  # `- `open` → none · 🧭 …`: the guide tail is `next`, not part of open
+                out["open"], _, g = out["open"].partition(" · 🧭")
+                out["open"] = out["open"].strip()
+                if not out["next"]:
+                    out["next"], out["items"]["next"] = "🧭" + g.rstrip(), ["🧭" + g.rstrip()]
+                    out["inline"].add("next")
             if out[cur]:
                 out["items"][cur] = [out[cur]]
                 out["inline"].add(cur)
-    real = out["header"] and (out["done"] and (out["check"] or out["why"]) or out["open"] and " · " in out["header"])
+    short = " · " in out["header"] or re.match(r"\d+ (?:Agents?|Spawns?)\b", out["header"])  # a short form's header: the computed one, or one cut to its agent count
+    real = out["header"] and (out["done"] and (out["check"] or out["why"]) or out["open"] and short)
     return out if real else None
 
 
@@ -1993,7 +2033,8 @@ def needs_items(open_line, cands=None):
     if not open_line or re.match(r"none\b", open_line.strip(), re.I):
         return []
     cands = re.split(r";\s*", open_line) if cands is None else cands
-    return [clip(x) for x in cands if x.strip() and NEEDS_RE.search(x)]
+    cands = [re.split(r"\s·\s🧭|^\s*🧭", x)[0].strip() for x in cands]  # the 🧭 guide line is advice, never an item: a tail of it is cut, an item of it dropped
+    return [clip(x) for x in cands if x and not re.match(r"none\b", x, re.I) and NEEDS_RE.search(x)]
 
 
 TRACE_RE = re.compile(r"· ((resolved|reopened) by hand|moved here from \S+):")  # a hand-trace journal line is not a receipt: receipt counters skip it
@@ -2085,7 +2126,8 @@ def _op_trace(cwd, session_id, project, text):
 
 
 def memo_journal(cwd, session_id, rc, project=None):
-    memo_apply(cwd, "journal", session_id, project, rc=rc)
+    if rc:  # an unread receipt writes nothing (memo.py receipt refuses one before it closes the task)
+        memo_apply(cwd, "journal", session_id, project, rc=rc)
 
 
 JOURNAL_FIELDS = {"done": 400, "why": 300, "workflow": 400, "check": 400, "open": 600, "next": 300}  # characters each keeps of a receipt: the pane's Full details shows them whole
@@ -2093,7 +2135,9 @@ JOURNAL_FIELDS = {"done": 400, "why": 300, "workflow": 400, "check": 400, "open"
 
 def journal_bits(rc):
     """The parts of a receipt's Journal line: its header, then every field it has, in the receipt's order. The session file's cap trims the oldest lines."""
-    return [clip(rc["header"], 200)] + [f"{k}: {clip(rc[k], n)}" for k, n in JOURNAL_FIELDS.items() if rc.get(k)]
+    if not rc:
+        return []
+    return [clip(rc.get("header") or "", 200)] + [f"{k}: {clip(rc[k], n)}" for k, n in JOURNAL_FIELDS.items() if rc.get(k)]
 
 
 def _op_journal(cwd, session_id, project, rc):
@@ -4795,11 +4839,22 @@ def ends_with_question(text):
     return bool(lines) and lines[-1].endswith("?")
 
 
-def context_block(tokens, mark, marks, in_task, auto=True):
+def context_block(tokens, mark, marks, in_task, auto=True, stops=True, stop=0):
     """Both advice branches are always in the block; the model knows whether a task is really open, a hook does not
     (the agent count is stale inside a single long turn — run 17). `in_task` is kept for callers but unused. `auto` = Memo on compact is auto:
-    the compact saves the memo by itself, /abofles:memo is optional (a sharper Now); with `off` the memo is saved by hand first."""
+    the compact saves the memo by itself, /abofles:memo is optional (a sharper Now); with `off` the memo is saved by hand first.
+    `stops` = this mark stops the work (Context stop); else the block only warns and the work goes on. `stop` = context_stop()."""
     nxt = next((m for m in marks if m > mark), None)
+    if not stops:
+        memo = "Run `/compact` when the task ends — the memo saves itself." if auto else "Run `/abofles:memo`, then `/compact`, when the task ends."
+        ahead = bool(stop) and stop > mark  # the stop is still to come
+        nxt_line = (f"Next warning at {nxt}K." if nxt and not (ahead and nxt >= stop) else "") if nxt else "This is the last mark."
+        stop_line = f"Work stops at {stop}K." if ahead else "" if stop else "The work never stops for the context (`Context stop = off`)."
+        block = (f"# ⚠️ **CONTEXT {tokens // 1000}K — compact at the next task boundary**\n"
+                 f"**Abo Fles (ابو فليس):** passed **{mark}K tokens**. {(nxt_line + ' ' + stop_line).strip()}\n"
+                 f"**The work goes on:** this mark only warns. {memo}")
+        return (f"abofles CONTEXT WATCH: {tokens:,} tokens (mark {mark}K, a warning only). Print the block below **verbatim** (all three lines), "
+                f"then carry on with the work as before — this mark stops nothing.\n\n{block}")
     nxt_line = f"Next warning at {nxt}K." if nxt else "This is the last mark — compact before the window is full."
     if auto:
         block = (f"# ⚠️ **CONTEXT {tokens // 1000}K — run /compact at a task boundary — the memo saves itself**\n"
@@ -4838,11 +4893,13 @@ def context_watch(data, st):
         warned = st["context_warned_at"] = crossed[-1] if crossed else 0  # a mark the compacted context still passes stays quiet
     if not crossed:
         return None
-    mark = crossed[-1]
+    root = project_root(data, st)
+    stop = context_stop(root)
+    mark = stop if stop in crossed and warned < stop else crossed[-1]  # one jump past the stop and a mark above it: the stop speaks first, the mark at the next Stop
     if warned >= mark:
         return None
     st["context_warned_at"] = mark
-    return context_block(tokens, mark, marks, in_task, memo_on_compact(project_root(data, st)) == "auto")
+    return context_block(tokens, mark, marks, in_task, memo_on_compact(root) == "auto", stops=context_stops(root, mark), stop=context_stop(root))
 
 
 def newest_transcript():
@@ -6692,6 +6749,27 @@ def receipt_close(root, st, sid, text, rc, own, foreign, stop_active):
     return True, rc, None
 
 
+def receipt_unread_text(root, st, sid):
+    """The Stop's one refusal of a printed receipt whose fields cannot be read, with the receipt form it should have."""
+    _, instruction = receipt_decision(root, st, sid)
+    return ("abofles: the receipt was not read — its fields are not in receipt form, so the memo and the Abo Fles pane would not get it. "
+            "Give it again, the 🧾 header copied whole and every field as below.\n" + (instruction[len("abofles: "):] if instruction.startswith("abofles: ") else instruction))
+
+
+def receipt_fallback(text):
+    """A receipt that still cannot be read after the one refusal, kept as written: its 🧾 line is the header, the lines after it
+    (bullets and backticks dropped) are `done`, so the Journal and the pane get it instead of nothing. None when there is no 🧾 line."""
+    lines = (text or "").splitlines()
+    i = next((n for n, l in enumerate(lines) if l.strip().startswith("🧾")), None)
+    if i is None:
+        return None
+    body = [re.sub(r"^[-*•]\s*|`", "", l.strip()) for l in lines[i + 1:i + 12] if l.strip()]
+    done = "(receipt not read, kept as written) " + "; ".join(body) if body else "(receipt not read, kept as written)"
+    rc = {"header": re.sub(r"\*\*", "", lines[i].strip()[1:]).strip(), "done": done, "why": "", "workflow": "", "check": "", "open": "", "next": "",
+          "items": {"done": [done]}, "inline": {"done"}}
+    return rc
+
+
 def receipt(data):
     """Stop: (1) if this turn started abofles agents and the final message has no receipt block, refuse the stop
     once so the 5-line receipt gets printed (`stop_hook_active` means we already did); (2) the context watch —
@@ -6735,7 +6813,13 @@ def receipt(data):
         ok_before = st.get("judge_ok", 0)  # reset_task below zeroes it
         unasked_md = bool(st.get("explain_md"))
         ex_keep = {k: st[k] for k in EXPLAIN_KEYS if k in st}  # reset_task clears the explain state; an unlock that survives it keeps its own
-        closing, rc, refusal = receipt_close(root, st, sid, text, rc, own, foreign, bool(data.get("stop_hook_active")))
+        unread = bool((own or foreign) and rc is None and pending)  # a printed receipt the memo cannot read: closing on it would drop it silently
+        if unread and not data.get("stop_hook_active"):
+            closing, refusal = False, receipt_unread_text(root, st, sid)  # refused once: the task stays open, the receipt is printed again
+        else:
+            if unread:
+                rc = receipt_fallback(text)  # the one refusal is spent: the Journal keeps the receipt as written, never nothing
+            closing, rc, refusal = receipt_close(root, st, sid, text, rc, own, foreign, bool(data.get("stop_hook_active")))
         refused = refusal is not None
         if refused:
             reasons.append(refusal)

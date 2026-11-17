@@ -99,8 +99,8 @@ export type Pane = {
 }
 
 // ---- what runs now, kept by the mod from the engine's events (running.tsx); no hook and no model call feeds it.
-export type WorkLoop = { startedAt: number; now: string | null; uses: number; tokens: number; model: string | null; effort: string | null; recent?: { at: number; s: string }[] } // startedAt: ms; now: its last tool, in words; recent: its last tools, oldest first
-export type WorkTask = { id: string; kind: string; desc: string; detail: string | null; startedAt: number; out?: string | null } // a background command, monitor or workflow; out: its output file
+export type WorkLoop = { startedAt: number; now: string | null; uses: number; tokens: number; model: string | null; effort: string | null; recent?: { at: number; s: string }[]; endedAt?: number } // startedAt: ms; now: its last tool, in words; recent: its last tools, oldest first; endedAt: an agent's turn ended (its reply is in), while the engine may still hold it on background work it owns
+export type WorkTask = { id: string; kind: string; desc: string; detail: string | null; startedAt: number; out?: string | null; owner?: string | null } // a background command, monitor or workflow; out: its output file; owner: the agent whose loop started it (none: the main session)
 export type WorkCron = { id: string; schedule: string; recurring: boolean; prompt: string }
 export type Work = { main: WorkLoop | null; agents: Record<string, WorkLoop>; tasks: WorkTask[]; crons: WorkCron[] }
 

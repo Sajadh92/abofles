@@ -129,19 +129,29 @@ export async function getWorkBusy($: EngineInterface): Promise<number> {
 export async function noteTurnStart($: EngineInterface, agentId?: string) {
   try {
     const at = await $.clock.now()
-    await update($, work, w => (agentId ? (w.agents[agentId] ? w : { ...w, agents: { ...w.agents, [agentId]: fresh(at) } }) : { ...w, main: fresh(at) }))
+    await update($, work, w => {
+      if (!agentId) return { ...w, main: fresh(at) }
+      const l = w.agents[agentId]
+      if (!l) return { ...w, agents: { ...w.agents, [agentId]: fresh(at) } }
+      if (l.endedAt === undefined) return w
+      const { endedAt: _woke, ...rest } = l // a message woke it: it works again
+      return { ...w, agents: { ...w.agents, [agentId]: rest } }
+    })
     if (agentId) await syncBusy($)
   } catch {
     // the page keeps what it has
   }
 }
 
+// An agent's turn ended: its reply is in. The engine may still list it as `waiting` on background work it owns (a CI wait it started),
+// so its notes stay, marked, and its row says it replied; the next Stop or SubagentStop drops them once the list no longer names it.
 export async function noteTurnEnd($: EngineInterface, agentId?: string) {
   try {
+    const at = await $.clock.now()
     await update($, work, w => {
       if (!agentId) return { ...w, main: null }
-      const { [agentId]: _gone, ...rest } = w.agents
-      return { ...w, agents: rest }
+      const l = w.agents[agentId]
+      return l ? { ...w, agents: { ...w.agents, [agentId]: { ...l, endedAt: at } } } : w
     })
     await syncBusy($)
   } catch {
@@ -177,7 +187,7 @@ export async function noteTool($: EngineInterface, e: { tool: string; agentId?: 
 }
 
 // A command moved to the background shows at once, not only at the next Stop. A stopped task goes at once too.
-export async function noteToolDone($: EngineInterface, e: { tool: string }, ran: unknown) {
+export async function noteToolDone($: EngineInterface, e: { tool: string; agentId?: string }, ran: unknown) {
   try {
     const a = e as unknown as Record<string, unknown>
     const out = isObj(ran) && isObj(ran.result) ? ran.result : null
@@ -194,7 +204,7 @@ export async function noteToolDone($: EngineInterface, e: { tool: string }, ran:
     const desc = plain(isStr(a.description) && a.description ? a.description : firstLine(command))
     // the output file, as the result names it: only a path ending in this task's own id
     const file = new RegExp(`([^\\s"'\\\\]+/${id.replace(/[^\w-]/g, '')}\\.output)`).exec(JSON.stringify(ran) ?? '')?.[1] ?? null
-    const task: WorkTask = { id, kind: e.tool === 'Monitor' ? 'monitor' : 'shell', desc, detail: command ? plain(firstLine(command)) : null, startedAt: at, out: file }
+    const task: WorkTask = { id, kind: e.tool === 'Monitor' ? 'monitor' : 'shell', desc, detail: command ? plain(firstLine(command)) : null, startedAt: at, out: file, owner: e.agentId ?? null }
     await update($, work, w => (w.tasks.some(t => t.id === id) ? w : { ...w, tasks: [...w.tasks, task] }))
     await syncBusy($)
   } catch {
@@ -221,7 +231,7 @@ export async function noteBackground($: EngineInterface, e: { background_tasks?:
             if (!isObj(t) || !isStr(t.id) || t.type === 'subagent' || live.has(t.id)) return []
             const was = known.get(t.id)
             const detail = [t.command, t.name, t.tool].find(isStr)
-            return [{ id: t.id, kind: isStr(t.type) ? t.type : 'task', desc: plain(isStr(t.description) ? t.description : ''), detail: detail ? plain(firstLine(detail)) : was?.detail ?? null, startedAt: was?.startedAt ?? at, out: was?.out ?? null }]
+            return [{ id: t.id, kind: isStr(t.type) ? t.type : 'task', desc: plain(isStr(t.description) ? t.description : ''), detail: detail ? plain(firstLine(detail)) : was?.detail ?? null, startedAt: was?.startedAt ?? at, out: was?.out ?? null, owner: was?.owner ?? null }]
           })
       const crons: WorkCron[] = !Array.isArray(e.session_crons)
         ? w.crons
@@ -288,6 +298,13 @@ function typeName(type: string): string {
 const word = (status: string): { word: string; wordTone: 'amber' | 'blue' | null; tone: 'amber' | 'blue' } =>
   status === 'waiting' ? { word: 'waiting', wordTone: 'amber', tone: 'amber' } : status === 'pending' ? { word: 'starting', wordTone: 'blue', tone: 'blue' } : { word: '', wordTone: null, tone: 'blue' }
 
+// A `waiting` agent whose turn ended: it replied, and what it still waits for is a background command of its own (a CI wait).
+function repliedOf(owned: WorkTask[]): Pick<RunRow, 'word' | 'wordTone' | 'tone' | 'now'> {
+  const first = owned[0]?.desc
+  const now = owned.length > 1 ? `Waits for its ${owned.length} background commands` : first ? `Waits for its command: ${first}` : 'Waits for its background work'
+  return { word: 'replied', wordTone: 'green', tone: 'green', now: now.length > NOW_MAX ? `${now.slice(0, NOW_MAX - 1)}…` : now }
+}
+
 export async function runningOf($: EngineInterface, p: Pane | null): Promise<Running> {
   const w = await read($, work)
   await read($, workTick)
@@ -295,15 +312,21 @@ export async function runningOf($: EngineInterface, p: Pane | null): Promise<Run
   const now = await $.clock.now()
   const labels = Object.fromEntries((p?.spawns.totals.by_model ?? []).map(m => [m.model, m.label]))
   const since = (l: { startedAt: number } | undefined) => (l ? fmtElapsed(now - l.startedAt) : '')
+  const sides = new Map<string, string>()
   const agents = (await activeAgents($)).map((a): RunRow => {
     const l = w.agents[a.id]
     const desc = plain(a.description)
     const live = p?.spawns.live.find(x => plain(x.description) === desc)
-    return { id: a.id, ...word(a.status), side: live?.side || typeName(a.type), desc, cost: since(l), now: l?.now ?? '', meta: loopMeta(l, loopModel(l, labels, live ?? undefined)), stop: 'agent', open: true }
+    const side = live?.side || typeName(a.type)
+    sides.set(a.id, side)
+    const row: RunRow = { id: a.id, ...word(a.status), side, desc, cost: since(l), now: l?.now ?? '', meta: loopMeta(l, loopModel(l, labels, live ?? undefined)), stop: 'agent', open: true }
+    // its reply is in and the engine holds it only on its own background work: not stuck, so it says so
+    return a.status === 'waiting' && l?.endedAt !== undefined ? { ...row, ...repliedOf(w.tasks.filter(t => t.owner === a.id)) } : row
   })
   const tasks = w.tasks.map((t): RunRow => {
     const detail = t.detail && t.detail !== t.desc ? t.detail : ''
-    return { id: t.id, tone: 'blue', word: '', wordTone: null, side: typeName(t.kind), desc: t.desc, cost: since(t), now: detail, meta: '', stop: 'command', open: !!t.out }
+    const owner = t.owner ? sides.get(t.owner) : undefined
+    return { id: t.id, tone: 'blue', word: '', wordTone: null, side: typeName(t.kind), desc: t.desc, cost: since(t), now: detail, meta: owner ? `started by ${owner}` : '', stop: 'command', open: !!t.out }
   })
   const crons = w.crons.map((c): RunRow => ({ id: c.id, tone: 'grey', word: '', wordTone: null, side: 'Scheduled', desc: c.prompt, cost: '', now: '', meta: `${c.schedule} · ${c.recurring ? 'repeats' : 'once'}`, stop: null, open: false }))
   const main: RunRow | null = w.main ? { id: 'main', tone: 'blue', word: '', wordTone: null, side: 'Main session', desc: '', cost: since(w.main), now: w.main.now ?? '', meta: loopMeta(w.main, loopModel(w.main, labels)), stop: null, open: false } : null

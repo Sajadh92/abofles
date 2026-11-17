@@ -1599,7 +1599,10 @@ def main():
         check("receipt: full note, header computed (0.5 u vs Opus 5.5 · Medium 40 u)", "🧾 **1 Agent · 0.5 u · Saved 99%** vs Opus 5.5 · Medium" in out and "- `open` → " in out and "no code block" in out)
         out = rn(run("post", dict(agent("opus", "xhigh", "abofles:abofles-planner", resp="STATUS: done\nCONFIDENCE: high\nPLAN:\n1. s\nRISKS:\n- r\nVERIFY: v\nOPEN: none", cwd=cwd), session_id="rm"), led))
         check("receipt: header accumulates, negative saving as cost", "🧾 **2 Agents · 100 u · Cost +26%** vs Opus 5.5 · Medium" in out)
+        # a printed receipt the memo cannot read (only `done`): the Stop refuses once, the task stays open (it was closed silently, nothing journaled)
         out = run("receipt", {"session_id": "rm", "cwd": cwd, "stop_hook_active": False, "last_assistant_message": "🧾 **2 Agents · 100 u · Cost +25%** vs Opus 5.5 · Medium\n- `done` → x"}, led)
+        check("receipt unread: the first Stop refuses it once with the form it should have; the task stays open", "receipt was not read" in (out or {}).get("reason", "") and "- `check` → " in (out or {}).get("reason", "") and json.loads(Path(state, "rm.json").read_text()).get("task_units", 0) > 0)
+        out = run("receipt", {"session_id": "rm", "cwd": cwd, "stop_hook_active": False, "last_assistant_message": "🧾 **2 Agents · 100 u · Cost +25%** vs Opus 5.5 · Medium\n- `done` → x\n- `check` → ok"}, led)
         check("receipt: new format accepted, task reset", out is None and json.loads(Path(state, "rm.json").read_text()).get("task_units") == 0)
         Path(cwd, "CLAUDE.md").write_text("## abofles overrides\n- Receipt = savings 50\n")
         out = rn(run("post", dict(agent("sonnet", "medium", resp=good, cwd=cwd), session_id="rm"), led))
@@ -1666,6 +1669,10 @@ def main():
         check("tokens: Stop header sums sync + background", "🧾 **2 Agents · 1.6M Tokens · $0.29 · Saved 74% ($0.81)** vs Opus 5.5" in (out or {}).get("reason", ""))
         check("tokens: the dominant agent is named", "largest: Read Sonnet 5.5 · Medium $0.15 (52%)" in (out or {}).get("reason", ""))
         run("receipt", {"session_id": "tk", "cwd": cwd, "transcript_path": str(tr), "stop_hook_active": True, "last_assistant_message": "🧾 **2 Agents · 1 u · Saved 1%** vs Opus 5.5\n- `done` → x"}, led)  # a printed receipt closes the task
+        smp_ = _H.session_memo_path(cwd, "tk")
+        check("receipt unread, second Stop (the refusal spent): the task closes and the Journal keeps the receipt as written, never nothing",
+              json.loads(Path(state, "tk.json").read_text()).get("spawns_since_receipt", 0) == 0 and smp_.exists() and "(receipt not read, kept as written) done → x" in smp_.read_text())
+        check("receipt_fallback: no 🧾 line -> None", _H.receipt_fallback("done → x") is None)
         # main session on fable: baseline priced at fable
         with open(tr, "a") as f:
             f.write(json.dumps({"type": "assistant", "message": {"model": "claude-fable-5-1", "usage": {"input_tokens": 1, "cache_read_input_tokens": 1, "cache_creation_input_tokens": 0, "output_tokens": 1}}}) + "\n")
@@ -2356,11 +2363,32 @@ def main():
         check("context: same mark not repeated (second stop goes through)", cwatch(530_000, active=True) == "")
         check("context: sidechain usage ignored", cwatch(650_000, side=True) == "")
         out = cwatch(620_000, active=True)
-        check("context: stop_hook_active still warns a new mark", "**600K tokens**" in out and "700K" in out)
+        check("context: stop_hook_active still warns a new mark; a mark after the stop (500K) only warns", "**600K tokens**" in out and "700K" in out and "a warning only" in out and "Work stops" not in out)
         check("context: compact re-arms the marks", cwatch(90_000) == "" and "**500K tokens**" in cwatch(505_000))
         check("context: last mark wording", "last mark" in cwatch(955_000))
         check("context: a compact that stays above a mark re-arms the marks above the new size, the passed one stays quiet",
               cwatch(520_000) == "" and "**600K tokens**" in cwatch(610_000))
+        run("start", {"session_id": "cs0", "cwd": cwd}, led)
+        out = cwatch(650_000, sid="cs0")
+        check("context stop default 500: one jump past 500K and 600K -> the stop speaks first (last output), the 600K warning at the next Stop", "passed **500K tokens**" in out and "last output" in out
+              and "a warning only" in cwatch(651_000, sid="cs0") and cwatch(652_000, sid="cs0") == "")
+        # Context stop = N: the marks under N only warn and the work goes on; N is a mark of its own and stops the work, the marks above it too
+        Path(cwd, "CLAUDE.md").write_text("## abofles overrides\n- Context marks = 200, 250, 300\n- Context stop = 280\n")
+        run("start", {"session_id": "cs1", "cwd": cwd}, led)
+        out = cwatch(210_000, sid="cs1")
+        check("context stop N: a mark under N warns only — says so, the work goes on, names the next warning and the stop", "a warning only" in out and "carry on with the work" in out and "**The work goes on:**" in out
+              and "Next warning at 250K. Work stops at 280K." in out and "last output" not in out and "start no new work" not in out)
+        out = cwatch(260_000, sid="cs1")
+        check("context stop N: the last warning before N names only the stop", "passed **250K tokens**" in out and "Work stops at 280K." in out and "Next warning" not in out)
+        out = cwatch(285_000, sid="cs1")
+        check("context stop N: N is a mark of its own and stops the work (the old block: last output, no new work)", "passed **280K tokens**" in out and "last output" in out and "start no new work" in out and "Next warning at 300K" in out and "a warning only" not in out)
+        out = cwatch(305_000, sid="cs1")
+        check("context stop N: a mark above N only warns (the work stopped once, at N)", "a warning only" in out and "Work stops" not in out and "last output" not in out)
+        Path(cwd, "CLAUDE.md").write_text("## abofles overrides\n- Context marks = 200, 250\n- Context stop = off\n")
+        run("start", {"session_id": "cs2", "cwd": cwd}, led)
+        out = cwatch(210_000, sid="cs2")
+        check("context stop off: every mark warns only", "a warning only" in out and "The work never stops for the context (`Context stop = off`)." in out and "last output" not in out)
+        check("context stop off: the last mark warns only too", "a warning only" in cwatch(255_000, sid="cs2") )
         # receipt and context together -> one block with both
         Path(cwd, "CLAUDE.md").write_text("## abofles overrides\n- Context marks = 60, 80\n")
         run("start", {"session_id": "cw3", "cwd": cwd}, led)
@@ -2650,6 +2678,12 @@ def main():
         o3m_ = o3p("- Context marks = 500K, 1M, 0\n- Review memory = 0\n- Archive items = 0\n")
         check("overrides: Context marks reads K and M and drops 0; Review memory = 0 is 0 hours; Archive items = 0 is still the default",
               H.context_marks(o3m_) == (500, 1000) and H.number_override(o3m_, "Review memory", zero=True) == 0 and H.number_override(o3m_, "Archive items") == 7)
+        o3s_ = o3p("- Context marks = 500, 600\n- Context stop = 650K\n")
+        check("Context stop: N (K, M read) is a mark too and the only one that stops; default 500; off = none; a bad value is flagged and reads as the default",
+              H.context_marks(o3s_) == (500, 600, 650) and H.context_stop(o3s_) == 650 and not H.context_stops(o3s_, 600) and H.context_stops(o3s_, 650) and not H.context_stops(o3s_, 500)
+              and H.context_stop(o3p("- Context stop = 1M\n")) == 1000 and H.context_stop(o3p("- Context stop = off\n")) is None and H.context_stop(o3p("- Context marks = 500\n")) == 500
+              and H.context_stops(o3p("- Context marks = 500\n"), 500) and not H.context_stops(o3p("- Context marks = 500\n"), 600) and H.context_marks(o3p("- Context marks = 200, 300\n")) == (200, 300, 500)
+              and H.override_known("Context stop", "650K") and H.override_known("Context stop", "off") and not H.override_known("Context stop", "marks") and H.context_stop(o3p("- Context stop = soon\n")) == 500)
         o3i_ = o3p("- Git guard = strict\n- Agent budgets = 1, 2\n- Main session = big\n- Spawns place = output\n- Language = Arabic\n- Agents = 4\n")
         o3k_ = {k["key"]: k for k in H.pane_overrides(o3i_, "")["keys"]}
         check("pane overrides: a value the hooks cannot read is marked invalid (only those); a line under a key's old name is that key, not a raw line",
@@ -4069,6 +4103,8 @@ def main():
         hdr_ = re.search(r"^🧾 \*\*.*$", rs_, re.M).group(0)
         menv_ = dict(os.environ, ABOFLES_STATE_DIR=state)
         bad_ = subprocess.run([sys.executable, str(mp_), "receipt", "--session", ps], input="no receipt here", capture_output=True, text=True, env=menv_, cwd=pd)
+        unread_ = subprocess.run([sys.executable, str(mp_), "receipt", "--session", ps], input="🧾 **1 Agent**\n- `done` → only done", capture_output=True, text=True, env=menv_, cwd=pd)
+        check("memo.py receipt: a receipt whose fields cannot be read -> exit 3, says so, the task stays open (no silent 'recorded')", unread_.returncode == 3 and "not read" in unread_.stdout and "recorded —" not in unread_.stdout and gstate(ps).get("spawns_since_receipt", 0) > 0 and "receipt_saved" not in gstate(ps))
         rec_ = subprocess.run([sys.executable, str(mp_), "receipt", "--session", ps], input=hdr_ + "\n- `done` → recorded the cap test\n- `why` → pane\n- `check` → ok\n- `open` → none", capture_output=True, text=True, env=menv_, cwd=pd)
         check("memo.py receipt: stdin without a receipt -> exit 2; a receipt -> exit 0, kept in the state for the Stop", bad_.returncode == 2 and rec_.returncode == 0 and "recorded" in rec_.stdout and (gstate(ps).get("receipt_saved") or {}).get("text", "").startswith("🧾"))
         st_rec_ = gstate(ps)
@@ -4276,7 +4312,7 @@ def main():
         check("README: ... and every COMPLEX_FORMS form (one row each)", len(form_marks) == len(HG.COMPLEX_FORMS) and all(re.search(r"^\| `" + re.escape(m), sec_, re.M) for m in form_marks))
         check("README: ... with defaults from the code, the pane editor, /abofles:pane and /abofles:history", all(f"| `{k}` |" in sec_ and (v["default"] in sec_ if v["default"] else True) for k, v in HG.OVERRIDE_KEYS.items()) and "/abofles:pane" in sec_ and "/abofles:history" in sec_ and "pane" in sec_.split("| `Main session`")[0])
         check("overrides.md: the five place forms are described and the form count matches the code", all(f"`{w} place = " in (HOOK.parent.parent / "skills/abofles/references/overrides.md").read_text() for w in ("Guide", "Resume", "Agents", "Receipt", "Running"))
-              and f"Forty forms" in (HOOK.parent.parent / "skills/abofles/references/overrides.md").read_text() and len(HG.OVERRIDE_KEYS) + len(HG.COMPLEX_FORMS) == 40)
+              and f"Forty-one forms" in (HOOK.parent.parent / "skills/abofles/references/overrides.md").read_text() and len(HG.OVERRIDE_KEYS) + len(HG.COMPLEX_FORMS) == 41)
 
         # a receipt's Journal line keeps every field, and reads back
         rc_ = HG.parse_receipt("🧾 **1 Agent · 63K Tokens · $0.03**\n- `done` → the page\n- `why` → asked\n- `workflow` → Read ✓ · Work ✓\n- `check` → 181 pass\n- `open` → none\n- `next` → run /compact")
@@ -4286,6 +4322,22 @@ def main():
         back_ = HG.journal_receipt("- 11-09 10:57 · " + " · ".join(bits_))
         check("receipt: a Journal line reads back field by field", back_ and back_[1]["done"] == "the page" and back_[1]["workflow"] == "Read ✓ · Work ✓" and back_[1]["next"] == "run /compact" and back_[1]["check"] == "181 pass")
         check("receipt: an older Journal line still reads", HG.journal_receipt("- 11-09 10:57 · 1 Spawn · done: a · check: b · open: c")[1]["check"] == "b")
+        # the short form with 2+ open items: `· open:` then one sub-bullet each, the guide on the line after (2.7.0 dropped it: nothing reached the Journal)
+        sf_ = HG.parse_receipt("🧾 **1 Agent · 1K Tokens** vs Opus 5.5 · open:\n  - a\n  - b\n· 🧭 ✅ y")
+        check("receipt short form: `open:` with nothing after it reads its sub-bullets; the guide line after them is `next`", sf_ and sf_["items"]["open"] == ["a", "b"] and sf_["next"] == "🧭 ✅ y" and sf_["header"] == "1 Agent · 1K Tokens vs Opus 5.5")
+        sf_ = HG.parse_receipt("🧾 **1 Agent · 1K Tokens** vs Opus 5.5 · open: a; b · 🧭 ✅ y")
+        check("receipt short form: the guide tail on the header line is `next`, not part of `open`", sf_ and sf_["open"] == "a; b" and sf_["next"] == "🧭 ✅ y")
+        sf_ = HG.parse_receipt("🧾 **1 Agent** vs Opus 5.5 · open: a · 🧭 b")
+        check("receipt short form: a header cut to its agent count still reads", sf_ and sf_["open"] == "a" and sf_["next"] == "🧭 b")
+        check("receipt: a 🧾 line with no agent count and no fields is still no receipt", HG.parse_receipt("🧾 **Receipt** · open: x") is None)
+        sf_ = HG.parse_receipt("🧾 **1 Agent · 434K Tokens · $1.20 · Saved 40%** vs Opus 5.5 · open: none · 🧭 🔴 open FAIL · Security Headers: fix it")
+        check("receipt short form: `open: none · 🧭 🔴 open FAIL …` -> open is none, the guide is next, nothing for Needs you (2.7.0 made it an owner decision)",
+              sf_ and sf_["open"] == "none" and sf_["next"].startswith("🧭 🔴 open FAIL") and HG.needs_items(sf_["open"], HG.receipt_items(sf_, "open")) == [])
+        ff_ = HG.parse_receipt("🧾 **1 Agent · 1 u · Saved 1%** vs Opus 5.5\n- `done` → d\n- `check` → ok\n- `open` → none · 🧭 🔴 open FAIL · x")
+        check("receipt full form: a 🧭 tail on the open line is next, not open", ff_ and ff_["open"] == "none" and ff_["next"].startswith("🧭 🔴"))
+        check("needs_items: a 🧭 item is dropped, a 🧭 tail cut, a `none` item skipped — only real decisions stay",
+              HG.needs_items("x", ["🧭 🔴 open FAIL · x", "none", "owner decision: keep it? · 🧭 🔴 open FAIL"]) == ["owner decision: keep it?"])
+        check("journal_bits: no receipt -> no parts (no TypeError)", HG.journal_bits(None) == [])
         # Main session / Sub session: the owner's setting takes the tier table's place
         with tempfile.TemporaryDirectory() as td_:
             pr_ = Path(td_) / "proj"; pr_.mkdir(); apps_ = Path(td_) / "apps" / "a" / "b"; apps_.mkdir(parents=True)

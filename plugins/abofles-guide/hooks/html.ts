@@ -200,9 +200,11 @@ export function estLines(text: string, room: number, size = 14, bold = false): n
 
 // A text clamped to `lines` lines, its block exactly that tall. `cls` adds classes (dim, b, small); `dir="auto"` lets an Arabic
 // line run right to left.
-export function clamped(text: string, lines: number, cls = '', lineH = LINE): Block {
+// `loose`: the block keeps only its own lines and the spare estimated line falls under the card's last row, not between this text and
+// the row under it (a one-line ask held two lines' room above its command).
+export function clamped(text: string, lines: number, cls = '', lineH = LINE, loose = false): Block {
   const h = lines * lineH
-  return { html: `<div class="clamp ${cls}" dir="auto" style="-webkit-line-clamp:${lines};height:${h}px">${esc(text)}</div>`, h }
+  return { html: `<div class="clamp ${cls}" dir="auto" style="-webkit-line-clamp:${lines};${loose ? 'max-height' : 'height'}:${h}px">${esc(text)}</div>`, h }
 }
 
 // Blocks stacked in a column with `gap` px between them.
@@ -532,7 +534,7 @@ export type SpawnsIn = SpendIn & {
 // detail page); the muted meta line (time, model, tokens) with the status word in its tone.
 function spawnBlock(x: SpawnRow, room: number, max = 2): Block {
   const top: Block = { html: `<div class="row"><span class="dot t-${x.tone}"></span><span class="b grow one" dir="auto">${esc(x.side || '?')}</span>${x.cost ? `<span class="dim num fix">${esc(x.cost)}</span>` : ''}</div>`, h: LINE }
-  const d = x.desc ? fit(x.desc, room - 16, max) : null
+  const d = !x.desc ? null : max >= WHOLE ? fit(x.desc, room - 16, max) : clamped(x.desc, Math.min(estLines(x.desc, (room - 16) * 0.94), max), '', LINE, true)
   const word = x.word ? ` · <span class="word${x.wordTone ? ` ink t-${x.wordTone}` : ''}">${esc(x.word)}</span>` : ''
   // the meta line wraps to a second line rather than cutting the tokens or the status word
   const metaText = [x.meta, x.word].filter(Boolean).join(' · ')

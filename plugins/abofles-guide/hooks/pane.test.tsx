@@ -1731,6 +1731,40 @@ test('a waiting agent says so; one with no notes yet still draws, by its type', 
   await ui.unmount()
 })
 
+test('an agent whose reply is in but holds its own background command says replied, not waiting; its command says who started it', async ($, on) => {
+  const list = { value: [{ id: 'g1', description: 'Push DRP-461 BE', type: 'abofles:abofles-git', status: 'running' }] as object[] }
+  workOn(on, list, [], e => (e.tool === 'Bash' ? { result: { backgroundTaskId: 'ci1' }, text: 'started' } : { result: {}, text: 'ok' }))
+  await harness($, on, { guide: guideOf([item()]), pane: panePayload() })
+  await $.turn.start({ text: 'go', turnId: 't1', agentId: 'g1' } as never)
+  await $.tool.call({ tool: 'Bash', command: 'gh run watch 42', description: 'Wait for CI', run_in_background: true, agentId: 'g1' } as never)
+  await $.turn.complete({ answer: 'pushed', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer', agentId: 'g1' } as never)
+  list.value = [{ id: 'g1', description: 'Push DRP-461 BE', type: 'abofles:abofles-git', status: 'waiting' }]
+  const ui = await mountDesk($, 'running')
+  const lines = await altLines(ui)
+  for (const t of ['Git', 'Push DRP-461 BE', 'replied', 'Waits for its command: Wait for CI', 'Wait for CI', 'started by Git']) expect([t, lines.includes(t)]).toEqual([t, true])
+  expect(lines).not.toContain('waiting')
+  await ui.unmount()
+  // a message wakes it: it works again, and a held turn says waiting once more
+  await $.turn.start({ text: 'ci done', turnId: 't2', agentId: 'g1' } as never)
+  const again = await mountDesk($, 'running')
+  const after = await altLines(again)
+  expect(after).toContain('waiting')
+  expect(after).not.toContain('replied')
+  await again.unmount()
+})
+
+test('a one-line ask keeps only its own line: the spare estimated line falls under the card, not above the command', async ($, on) => {
+  workOn(on, { value: [] }, [], () => ({ result: { backgroundTaskId: 'v1' }, text: 'started' }))
+  await harness($, on, { guide: guideOf([item()]), pane: panePayload() })
+  await $.tool.call({ tool: 'Bash', command: 'python3 clone.py --all', description: 'Generate full clip in each cloned voice', run_in_background: true } as never)
+  const ui = await mountDesk($, 'running')
+  const row = (await ui.findAll({ type: 'Svg' })).find((x: any) => String(x.props.alt).startsWith('Shell\nGenerate full clip')) // the command's own card, not the main turn's last tool
+  const src = String(row?.props.source)
+  expect(src).toContain('python3 clone.py --all')
+  expect(/-webkit-line-clamp:\d;max-height:\d+px/.test(src)).toBe(true) // the ask's room is a ceiling, not a fixed height
+  await ui.unmount()
+})
+
 test('a background command shows at once; Stop asks first, Keep running takes it back, Stop command runs TaskStop and the row goes', async ($, on) => {
   const calls: any[] = []
   workOn(on, { value: [] }, calls, e => (e.tool === 'Bash' ? { result: { backgroundTaskId: 'b1' }, text: 'started' } : { result: {}, text: 'stopped' }))
