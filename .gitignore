@@ -1,6 +1,8 @@
 .DS_Store
-# working notes for the plugin session, not for GitHub
+# owner's side work, never on GitHub: working notes, marketing, local project rules
 docs/
+marketing/
+/CLAUDE.md
 .claude/abofles-memo.*
 __pycache__/
 *.pyc
