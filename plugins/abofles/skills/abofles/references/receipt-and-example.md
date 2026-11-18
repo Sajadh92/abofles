@@ -16,7 +16,7 @@ At the end of every task that started agents, print the receipt as **plain markd
 - `done` → <what changed, one line, files named>
 - `why` → <the reason or rule that drove it, one line>
 - `check` → <the command that proves it → its decisive result>
-- `workflow` → <🟠/🔴 changes only: `Read ✓ · Analyse ✓ · Plan ✓ · Work ✓ · Verify ✓ · Finance ✓ · Security ✓ · Tester skipped: <reason>` — every step and reviewer of the workflow line, done or skipped with its reason; the review gate reads the skipped ones>
+- `workflow` → <🟠/🔴 changes only: `Read ✓ · Analyse ✓ · Plan ✓ · Work ✓ · Verify ✓ · Finance ✓ · Security ✓ · Tester skipped: <reason>` — every step and reviewer of the workflow line, done or skipped with its reason; the review gate reads skips from this line only, and a reviewer counts as done only when its last verdict is PASS>
 - `open` → <follow-ups — or "none">
 - `next` → 🧭 <the guide line the hook hands you — copy it as given>
 
@@ -31,7 +31,7 @@ At the end of every task that started agents, print the receipt as **plain markd
   - ATTENTION: USD orders uncapped (`OrderPricingRules.cs:77`)
   - owner decision: cap per currency?
 
-The hooks parse both shapes; the memo journal and Needs you take each sub-bullet as one item.
+The hooks parse both shapes; the memo journal and Needs you take each sub-bullet as one item. They also read `->` for `→`, `*` bullets, bold field names in any case and numbered sub-bullets (`  1. …`); a `  - 🧭 …` sub-bullet under `open` is the `next` line. The receipt ends at the first line that is not indented and not a field. In `open`, a `none` item stops at its first `;`: `none blocking; owner decision: ship Friday?` still raises the decision.
 
 The first line is **computed by the hook** — never by you. `Agents` counts the work agents; `+ N gate` the Judge/Explainer runs of the question gate (shown only when there were any). `Tokens` is every token the subagents were billed for — input, cache writes, **cache reads of each call's context**, output — summed over all their calls, so it is far larger than the harness's per-agent `totalTokens` (which counts a context once); the dollars are priced from exactly these tokens at list price, and the same tokens at the main session's model give the saving. When the baseline would have been cheaper the header reads `Cost +P% ($Z)`. An agent whose transcript is missing is counted as ` · N unpriced` at the end of the line; only when no agent has a transcript does the line fall back to the unit estimate (`… u …`). After every start the `PostToolUse` hook hands you the current header (`abofles: Receipt at task end … 🧾 **…**`); copy the newest one exactly. A task with no agent gets no receipt. The project or user override `Receipt = …` decides the form, and the hook's note already tells you which one applies: `full` (default, the 5 lines), `short` (one line: header + ` · open: …`), `savings N` (full when the task saved ≥ N%, else no receipt), `off` (never). With no receipt, still name every open follow-up in prose. Where the receipt goes is `Receipt place`: with `pane` (the default when the abofles-guide pane is installed) the hook's note says **record** it — run the `memo.py receipt` command it gives with the receipt lines on stdin, do not print them, and end the turn with one short sentence; the hook reads the recorded receipt exactly as a printed one. With `output` print it as below.
 

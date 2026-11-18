@@ -54,7 +54,7 @@ const KEY_INFO: Record<string, { group: (typeof GROUPS)[number]; help: string }>
   'Budget raise': { group: 'Agents', help: 'auto: +half the start budget, twice at most, then asks; ask: always asks' },
   'Git guard': { group: 'Agents', help: 'Warn or deny git writes outside the git agent, or off' },
   'Loop guard': { group: 'Agents', help: 'Rounds with no word from you before a fix or Judge loop stops and asks you; off = never' },
-  'Sub sessions': { group: 'Agents', help: 'Open sub sessions one session may start; off = no cap' },
+  'Sub sessions': { group: 'Agents', help: 'Open sub sessions one session may start; 0 = none allowed; off = no cap' },
   'Session routing': { group: 'Agents', help: 'on: a sub session must carry the routed model and effort; warn: note only; off' },
   'Judge notes': { group: 'Memo', help: 'Judge answers that also go to Needs you' },
   'Memo agent': { group: 'Memo', help: 'auto: tidies after a compact; manual: /abofles:memo only; off: rules only' },
@@ -124,7 +124,11 @@ export function plansOf(ov: PaneOverrides, d: Draft): Record<Scope, Record<strin
 export const changedKeys = (ov: PaneOverrides, d: Draft): PaneOverrideKey[] => ov.keys.filter(k => isChanged(k, d))
 
 const linesOf = (text: string): string[] => text.split('\n').map(l => l.replace(/^\s*-\s*/, '').trim()).filter(Boolean)
-const rawBase = (ov: PaneOverrides, scope: Scope): string[] => ov.raw.filter(r => r.source === scope).map(r => r.line)
+// A raw line of the payload; `path`: the file it is in (newer hooks). Project scope has two files (CLAUDE.md, .claude/CLAUDE.md): the lines edited are
+// only those of the file Save writes to, so another file's lines are never copied into it.
+type RawLine = PaneOverrides['raw'][number] & { path?: string }
+const inTarget = (ov: PaneOverrides, r: RawLine, scope: Scope): boolean => r.source === scope && (r.path === undefined || r.path === ov.files[scope])
+export const rawBase = (ov: PaneOverrides, scope: Scope): string[] => ov.raw.filter(r => inTarget(ov, r, scope)).map(r => r.line)
 const rawLines = (ov: PaneOverrides, d: Draft, scope: Scope): string[] => (d[RAW] === undefined ? rawBase(ov, scope) : linesOf(d[RAW]))
 const rawChanged = (ov: PaneOverrides, d: Draft, scope: Scope): boolean => d[RAW] !== undefined && rawLines(ov, d, scope).join('\n') !== rawBase(ov, scope).join('\n')
 
@@ -376,7 +380,7 @@ async function editorState($: EngineInterface, p: Pane, ov: PaneOverrides) {
   const home = (await $.env.get('HOME')) ?? ''
   const scope = scopeOf(d)
   const files = { project: shortPath(ov.files.project, p.root, home) || 'CLAUDE.md', user: shortPath(ov.files.user, p.root, home) || '~/.claude/CLAUDE.md' }
-  return { d, scope, files, dirty: dirtyCount(ov, d) }
+  return { d, scope, files, home, dirty: dirtyCount(ov, d) }
 }
 
 const unreadable = 'Pane data unreadable — update both abofles and abofles-guide'
@@ -386,10 +390,7 @@ function pageTop($: EngineInterface, ui: Ui, dirty: number) {
   const { Box, Button, Text } = ui
   return (
     <Box flexDirection="row" justifyContent="space-between" alignItems="center" columnGap={1}>
-      <Button key="back" plain onPress={() => setPaneView($, 'main')}>
-        <Text dimColor>{'‹ '}</Text>
-        <Text weight="medium">Overrides</Text>
-      </Button>
+      <Button key="back" plain label="‹ Overrides" onPress={() => setPaneView($, 'main')} />
       {dirty > 0 ? <Text color="warning">{`${dirty} unsaved`}</Text> : null}
     </Box>
   )
@@ -413,10 +414,12 @@ export async function overridesPage($: EngineInterface, ui: Ui, p: Pane | null, 
       </Box>
     )
   }
-  const { d, scope, files, dirty } = await editorState($, p, ov)
+  const { d, scope, files, home, dirty } = await editorState($, p, ov)
   const saving = (await getPaneSaving($)) === true
   const raw = rawLines(ov, d, scope)
-  const others = ov.raw.filter(r => r.source !== scope)
+  const others: RawLine[] = ov.raw.filter(r => !inTarget(ov, r, scope))
+  // a line of the other scope: switch to edit it; one of this project's other file: Save does not write that file
+  const where = (r: RawLine) => (r.source === scope && r.path ? `${shortPath(r.path, p.root, home)}; edit it in that file` : `${WHERE[r.source] ?? r.source}; switch above to edit it`)
   const groups = GROUPS.map(name => ({ name, keys: ov.keys.filter(k => (KEY_INFO[k.key]?.group ?? 'More') === name) })).filter(g => g.keys.length > 0)
   const rawEdited = rawChanged(ov, d, scope)
   const setKeys = ov.keys.filter(k => isSet(k) && valueOf(k, d) !== '')
@@ -450,7 +453,7 @@ export async function overridesPage($: EngineInterface, ui: Ui, p: Pane | null, 
           <Text size="caption" dimColor>{`${files[scope]} · one per line: topic tiers, cells, reviewers, workflows — e.g. Reviewers: Money = finance, tester`}</Text>
           <Input key="raw" rows={Math.min(8, Math.max(2, raw.length + 1))} placeholder="Topic: Billing = T3" value={d[RAW] ?? rawBase(ov, scope).join('\n')} onInput={v => setDraft($, RAW, v)} onSubmit={v => setDraft($, RAW, v)} />
           {others.map(r => (
-            <Text size="caption" dimColor>{`${r.line} — in ${WHERE[r.source] ?? r.source}; switch above to edit it`}</Text>
+            <Text size="caption" dimColor>{`${r.line} — in ${where(r)}`}</Text>
           ))}
         </Box>,
       )])}
@@ -534,9 +537,7 @@ export async function overridesCard($: EngineInterface, ui: Ui, p: Pane | null, 
     <Box flexDirection="column" rowGap={1}>
       {rows.length > 0 ? <Box flexDirection="column">{rows}</Box> : null}
       {ov.raw.length > 0 ? (
-        <Button key="edit-other" plain dimColor onPress={() => openEditor($, 'g:Other')}>
-          {`${ov.raw.length} other line${ov.raw.length === 1 ? '' : 's'} · tiers, reviewers ›`}
-        </Button>
+        <Button key="edit-other" plain dimColor label={`${ov.raw.length} other line${ov.raw.length === 1 ? '' : 's'} · tiers, reviewers ›`} onPress={() => openEditor($, 'g:Other')} />
       ) : null}
       <Box flexDirection="row" justifyContent="space-between" alignItems="center" columnGap={1}>
         <Text size="caption" dimColor>{set.length > 0 ? 'Everything else uses the defaults.' : 'Everything uses the defaults.'}</Text>

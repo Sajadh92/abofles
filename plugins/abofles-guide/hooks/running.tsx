@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface } from 'claude-code'
 
-import type { Pane, Work, WorkCron, WorkLoop, WorkTask } from '../types'
+import type { Pane, PaneLive, Work, WorkCron, WorkLoop, WorkTask } from '../types'
 import { WHOLE, runCard, runOutput, runRecent, runningHome, subhead } from './html'
 import type { Block, IconName, SpawnRow, Tone } from './html'
 import {
@@ -31,7 +31,9 @@ import type { Folds, Look, RenderEvent, Ui } from './shared'
 // command comes from the Bash result and from the `background_tasks` every Stop and SubagentStop carry. The engine's own progress summaries
 // (one model call per agent every 30 s) are left off: a mod cannot read them, and the last tool says what an agent does for free.
 
-const EMPTY: Work = { main: null, agents: {}, tasks: [], crons: [] }
+// bg: the agents the last Stop named as background tasks, which TaskStop takes
+type WorkNow = Work & { bg?: string[] }
+const EMPTY: WorkNow = { main: null, agents: {}, tasks: [], crons: [] }
 const work = atom({ plugin: 'abofles-guide', key: 'work' } as const, EMPTY)
 const workTick = atom({ plugin: 'abofles-guide', key: 'workTick' } as const, 0) // bumped while anything runs: the elapsed times move
 const workBusy = atom({ plugin: 'abofles-guide', key: 'workBusy' } as const, 0) // agents + background commands: the nav bar's dot reads this alone, so it redraws only when the count changes
@@ -218,7 +220,8 @@ async function dropTask($: EngineInterface, id: string) {
 }
 
 // Every Stop and SubagentStop names all the work still in flight: the one list that also sees what ended quietly. The agents are
-// `$.agent.list()`'s to show, so a subagent's task is left out; a loop no list names (an engine fork) leaves its notes here.
+// `$.agent.list()`'s to show, so a subagent's task is left out (its id is kept: Stop can stop it); a loop no list names (an engine fork)
+// leaves its notes here. A command noted after this handler started is newer than the list: it stays.
 export async function noteBackground($: EngineInterface, e: { background_tasks?: unknown; session_crons?: unknown }) {
   try {
     const at = await $.clock.now()
@@ -233,10 +236,13 @@ export async function noteBackground($: EngineInterface, e: { background_tasks?:
             const detail = [t.command, t.name, t.tool].find(isStr)
             return [{ id: t.id, kind: isStr(t.type) ? t.type : 'task', desc: plain(isStr(t.description) ? t.description : ''), detail: detail ? plain(firstLine(detail)) : was?.detail ?? null, startedAt: was?.startedAt ?? at, out: was?.out ?? null, owner: was?.owner ?? null }]
           })
+      const listed = new Set(tasks.map(t => t.id))
+      const newer = Array.isArray(e.background_tasks) ? w.tasks.filter(t => t.startedAt > at && !listed.has(t.id)) : []
       const crons: WorkCron[] = !Array.isArray(e.session_crons)
         ? w.crons
         : e.session_crons.flatMap(c => (isObj(c) && isStr(c.id) && isStr(c.schedule) ? [{ id: c.id, schedule: c.schedule, recurring: c.recurring === true, prompt: plain(isStr(c.prompt) ? c.prompt : '') }] : []))
-      return { ...w, tasks, crons, agents: Object.fromEntries(Object.entries(w.agents).filter(([id]) => live.has(id))) }
+      const bg = Array.isArray(e.background_tasks) ? e.background_tasks.flatMap(t => (isObj(t) && isStr(t.id) && t.type === 'subagent' ? [t.id] : [])) : (w as WorkNow).bg
+      return { ...w, tasks: [...tasks, ...newer], crons, agents: Object.fromEntries(Object.entries(w.agents).filter(([id]) => live.has(id))), ...(bg ? { bg } : {}) }
     })
     await syncBusy($)
   } catch {
@@ -277,7 +283,8 @@ export function startTick($: EngineInterface) {
 
 // ---- the rows
 
-export type RunRow = SpawnRow & { id: string; stop: 'agent' | 'command' | null; open: boolean }
+// stop: what the row is, for its Stop and its Full details; stoppable: Stop is drawn (TaskStop takes background work and named agents only).
+export type RunRow = SpawnRow & { id: string; stop: 'agent' | 'command' | null; open: boolean; stoppable?: boolean }
 export type Running = { main: RunRow | null; agents: RunRow[]; tasks: RunRow[]; crons: RunRow[]; n: number; confirm: string | null; alt: string[] }
 
 const ALIAS = /(haiku|sonnet|opus|fable)/
@@ -293,6 +300,40 @@ const loopMeta = (l: WorkLoop | undefined, model: string): string =>
 function typeName(type: string): string {
   const t = type.split(':').pop()?.replace(/^abofles-/, '') ?? type
   return t ? t[0].toUpperCase() + t.slice(1) : 'Agent'
+}
+
+type Live = PaneLive & { agent_id?: string | null }
+
+// Each agent's ledger row (side, model): the row with its agent id; else, as a fallback, the first row with its ask that no other agent took
+// and that names no other agent — two agents with one ask each get their own.
+export function liveOf(agents: { id: string; description: string }[], live: Live[]): Map<string, Live> {
+  const out = new Map<string, Live>()
+  const ids = new Set(agents.map(a => a.id))
+  const taken = new Set<Live>()
+  for (const a of agents) {
+    const row = live.find(x => x.agent_id === a.id)
+    if (row) {
+      out.set(a.id, row)
+      taken.add(row)
+    }
+  }
+  for (const a of agents) {
+    if (out.has(a.id)) continue
+    const desc = plain(a.description)
+    const row = live.find(x => !taken.has(x) && !(x.agent_id && ids.has(x.agent_id)) && plain(x.description) === desc)
+    if (row) {
+      out.set(a.id, row)
+      taken.add(row)
+    }
+  }
+  return out
+}
+
+// TaskStop takes a background task, a teammate or a named background agent, not a foreground agent: one the engine names (`name`, its own for a
+// background agent), a teammate, a plugin's spawn (always background), one the last Stop listed as a background task, or one whose ledger row
+// (by its id) is still pending, which only a background agent's is.
+export function canStop(a: { id: string; name?: string; teammateId?: string; spawnedBy?: string }, bg: string[], row: Live | undefined): boolean {
+  return !!a.name || !!a.teammateId || !!a.spawnedBy || bg.includes(a.id) || (!!row && row.agent_id === a.id)
 }
 
 const word = (status: string): { word: string; wordTone: 'amber' | 'blue' | null; tone: 'amber' | 'blue' } =>
@@ -313,13 +354,16 @@ export async function runningOf($: EngineInterface, p: Pane | null): Promise<Run
   const labels = Object.fromEntries((p?.spawns.totals.by_model ?? []).map(m => [m.model, m.label]))
   const since = (l: { startedAt: number } | undefined) => (l ? fmtElapsed(now - l.startedAt) : '')
   const sides = new Map<string, string>()
-  const agents = (await activeAgents($)).map((a): RunRow => {
+  const list = await activeAgents($)
+  const rows = liveOf(list, p?.spawns.live ?? [])
+  const bg = (w as WorkNow).bg
+  const agents = list.map((a): RunRow => {
     const l = w.agents[a.id]
     const desc = plain(a.description)
-    const live = p?.spawns.live.find(x => plain(x.description) === desc)
+    const live = rows.get(a.id)
     const side = live?.side || typeName(a.type)
     sides.set(a.id, side)
-    const row: RunRow = { id: a.id, ...word(a.status), side, desc, cost: since(l), now: l?.now ?? '', meta: loopMeta(l, loopModel(l, labels, live ?? undefined)), stop: 'agent', open: true }
+    const row: RunRow = { id: a.id, ...word(a.status), side, desc, cost: since(l), now: l?.now ?? '', meta: loopMeta(l, loopModel(l, labels, live)), stop: 'agent', open: true, stoppable: canStop(a, Array.isArray(bg) ? bg : [], live) }
     // its reply is in and the engine holds it only on its own background work: not stuck, so it says so
     return a.status === 'waiting' && l?.endedAt !== undefined ? { ...row, ...repliedOf(w.tasks.filter(t => t.owner === a.id)) } : row
   })
@@ -374,9 +418,10 @@ async function stopTask($: EngineInterface, id: string) {
 // Full details (the terminal: Open, for an agent) and Stop under a row. Stop cannot be undone, so its press asks first, in place.
 function rowButtons($: EngineInterface, ui: Ui, look: Look, r: RunRow, confirm: string | null, viewing: string | null) {
   const { Button } = ui
-  if (!r.stop && !r.open) return null
+  const stop = r.stop !== null && r.stoppable !== false
+  if (!stop && !r.open) return null
   const desk = hasSvg(ui, look)
-  if (confirm === r.id) {
+  if (confirm === r.id && stop) {
     return buttonRow(ui, [
       <Button key={`stop-yes:${r.id}`} label={r.stop === 'agent' ? 'Stop agent' : 'Stop command'} variant="primary" onPress={() => stopTask($, r.id)} />,
       <Button key={`stop-no:${r.id}`} label="Keep running" variant="secondary" onPress={() => askStop($, null)} />,
@@ -385,7 +430,7 @@ function rowButtons($: EngineInterface, ui: Ui, look: Look, r: RunRow, confirm: 
   return buttonRow(ui, [
     r.open && desk ? <Button key={`open:${r.id}`} label={glyph(look, GLYPH.detail, 'Full details')} variant="secondary" onPress={() => openDetail($, `run:${r.id}`)} /> : null,
     r.open && !desk && r.stop === 'agent' && viewing !== r.id ? <Button key={`open:${r.id}`} label={glyph(look, GLYPH.open, 'Open')} variant="secondary" onPress={() => openAgent($, r.id)} /> : null,
-    r.stop ? <Button key={`stop:${r.id}`} label={glyph(look, GLYPH.stop, 'Stop')} variant="secondary" onPress={() => askStop($, r.id)} /> : null,
+    stop ? <Button key={`stop:${r.id}`} label={glyph(look, GLYPH.stop, 'Stop')} variant="secondary" onPress={() => askStop($, r.id)} /> : null,
   ])
 }
 

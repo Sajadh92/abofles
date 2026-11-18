@@ -14283,9 +14283,12 @@
    "tier": 4,
    "signals": "multi region, active active, data residency, region failover, geo routing, latency based routing",
    "reviewers": {
-    "3": [],
+    "3": [
+     "compliance"
+    ],
     "4": [
-     "security"
+     "security",
+     "compliance"
     ]
    },
    "n": 832

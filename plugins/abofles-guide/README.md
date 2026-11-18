@@ -82,11 +82,12 @@ first rows and `Show all N` (`Show fewer` to fold it back).
   and the answer under it after an arrow in semibold (a note is its text alone; the Judge's `judge:` lead is dropped), a light rule
   between decisions; five, then `Show all`; an empty group says so. Drawn after Resume whenever the hooks wrote decisions, with no
   `places` key of its own; older hooks write none and the card is absent.
-- **Running**: what works now, from the engine's own events, with no model call: the main turn, each agent (its side, ask, last tool, model, tool count, tokens, elapsed), background commands and scheduled wake-ups. An agent has `Full details` (the tools it ran, newest first) and `Stop`; a command has `Full details` (the end of its output) and `Stop`, and Stop asks first. In the terminal an agent has `Open` instead, which puts its transcript in the main view: a desktop has no main view a plugin can switch. The nav icon carries a dot while an agent or a command runs, and Home shows the first three of them. `Running place = off` hides the page and the card.
+- **Running**: what works now, from the engine's own events, with no model call: the main turn, each agent (its side, ask, last tool, model, tool count, tokens, elapsed), background commands and scheduled wake-ups. An agent has `Full details` (the tools it ran, newest first) and, when TaskStop can stop it (a background, named or teammate agent), `Stop`; a command has `Full details` (the end of its output) and `Stop`, and Stop asks first. In the terminal an agent has `Open` instead, which puts its transcript in the main view: a desktop has no main view a plugin can switch. The nav icon carries a dot while an agent or a command runs, and Home shows the first three of them. `Running place = off` hides the page and the card.
 - **Agents**: the saving first (`32% saved`, `$14.36 of $21.26 on Opus 5.5`), a meter split by model and a table with five titled
   columns (Model, Tokens, Agents, Cost, %; a pane too narrow for them puts the numbers under each model, each with its word), total Tokens, and Open FAIL in red when a FAIL is still open (one resolved by
   hand with evidence is not). History (newest first, five rows, then `Show all`) holds activity rows: the status dot
-  (green done/pass, red fail, amber partial/blocked, blue running; a status it does not know is grey with its word, never red), the side in
+  (green done/pass, red fail, amber partial/blocked, orange pending while a background agent still works; a sub session's row is
+  `open`, grey with its word, until it is `done`, green; a status it does not know is grey with its word, never red), the side in
   semibold (a sub session the main session started reads `🪟 Session`, its title as the ask) and the ask (two rows, then Read more), the
   cost at the right, and a muted line under them (`14:24 · Sonnet 5.5 · Medium · 810K tokens · PASS`; the status word only when it
   means something). History is grouped by day under a small `Today` / `Yesterday` / `Nov 3` caption. What `/abofles:history` prints
@@ -135,14 +136,16 @@ draft is kept). It edits the simple keys of the `## abofles overrides` block (th
   every project. Nothing is written until Save.
 - **Other overrides** (folded while the chosen file has none): its own `This project` | `All projects`, and a multi-line
   input for the other forms (cell, cap, tier, `Reviewers`, `Workflow`, `Review` lines) of the chosen file, one per line; lines
-  of the other file are listed under it and edited there. Switching drops the typed lines (they belong to one file).
+  of the other file are listed under it and edited there, and so are the lines of the project's other file (`CLAUDE.md` and
+  `.claude/CLAUDE.md`: only the one Save writes to is edited here). A line taken out of the input is removed from the file on Save.
+  Switching drops the typed lines (they belong to one file).
 - Edits are kept as a draft; the page header and the main page's card say `N unsaved`.
 - `Save N changes` runs the abofles plugin's `scripts/overrides.py` (the argv the hook publishes as `pane.cmd.overrides`)
   once per file, all projects first, with the changes on stdin: it edits the block in place, adds new keys, removes the ones
-  set to the default, and keeps everything else in the file as it was. It toasts `Saved to <file>` (both when both changed), the fields show the new values and the draft is
+  set to the default (a project key from both project files), and keeps everything else in the file as it was. It toasts `Saved to <file>` (both when both changed), the fields show the new values and the draft is
   cleared. A refused value (exit 2) toasts the first line of the error and keeps the draft.
 - `Ask Claude` puts `Apply in <file> \`## abofles overrides\`: - Key = value …` (only the changed keys) in the prompt box
-  instead, so Claude makes the edit. `Discard` (a link, shown while there are edits) clears the draft.
+  instead, so Claude makes the edit. `Discard` (a secondary button, shown while there are edits) clears the draft.
 - If the file changed while you were editing (exit 3), Save toasts `CLAUDE.md changed while saving — reload the pane and
   save again` and keeps the draft.
 

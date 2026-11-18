@@ -1086,7 +1086,7 @@ architecture styles, DDD, microservices, event-driven, boundaries, scalability, 
 - 829. Serverless & Function-based Architecture · T3
 - 830. Service Mesh, Sidecars & Service Communication · T3
 - 831. API Gateway & Backend-for-Frontend · T3
-- 832. Multi-region, Active-active & Data Residency · T4
+- 832. Multi-region, Active-active & Data Residency · T4 — +Compliance
 - 833. Resilience Patterns (bulkhead, circuit breaker, retry budgets) · T3
 - 834. Consistency Models & Distributed Transactions · T4
 - 835. Scalability & Capacity Planning · T3

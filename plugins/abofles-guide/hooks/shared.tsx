@@ -720,7 +720,7 @@ function cleanHealth(v: unknown): PaneHealth | null {
 
 function cleanLive(v: unknown): PaneLive | null {
   if (!isObj(v)) return null
-  return { side: strOr(v.side, ''), model: strOr(v.model, ''), effort: strOr(v.effort, ''), description: strOr(v.description, ''), ts: numOrNull(v.ts) }
+  return { side: strOr(v.side, ''), model: strOr(v.model, ''), effort: strOr(v.effort, ''), description: strOr(v.description, ''), ts: numOrNull(v.ts), ...(isStr(v.agent_id) && v.agent_id ? { agent_id: v.agent_id } : {}) }
 }
 
 function cleanRow(v: unknown): PaneRow | null {
@@ -755,7 +755,7 @@ function cleanSpawns(raw: unknown): PaneSpawns {
   const rows = Array.isArray(s.rows) ? s.rows.map(cleanRow).filter((r): r is PaneRow => r !== null) : []
   const t = isObj(s.totals) ? s.totals : {}
   const byModel = Array.isArray(t.by_model) ? t.by_model.map(cleanModel).filter((m): m is PaneModel => m !== null) : []
-  const totals: PaneTotals = { spawns: isNum(t.spawns) ? t.spawns : rows.length, tokens: isNum(t.tokens) ? t.tokens : 0, usd: isNum(t.usd) ? t.usd : 0, base_usd: isNum(t.base_usd) ? t.base_usd : 0, saved_pct: isNum(t.saved_pct) ? t.saved_pct : 0, open_fail: isNum(t.open_fail) ? t.open_fail : 0, base_label: strOr(t.base_label, ''), by_model: byModel }
+  const totals: PaneTotals = { spawns: isNum(t.spawns) ? t.spawns : rows.length, tokens: isNum(t.tokens) ? t.tokens : 0, usd: isNum(t.usd) ? t.usd : 0, base_usd: isNum(t.base_usd) ? t.base_usd : 0, saved_pct: isNum(t.saved_pct) ? t.saved_pct : 0, open_fail: isNum(t.open_fail) ? t.open_fail : 0, base_label: strOr(t.base_label, ''), by_model: byModel, sessions: isNum(t.sessions) ? t.sessions : 0 }
   return { live, rows, totals }
 }
 
@@ -772,7 +772,7 @@ function cleanOverrides(raw: unknown): PaneOverrides | null {
   if (!isObj(raw)) return null
   const f = isObj(raw.files) ? raw.files : {}
   const keys = Array.isArray(raw.keys) ? raw.keys.map(cleanOverrideKey).filter((k): k is PaneOverrideKey => k !== null) : []
-  const lines = Array.isArray(raw.raw) ? raw.raw.filter(isObj).filter(r => isStr(r.line)).map(r => ({ line: r.line as string, source: strOr(r.source, '') })) : []
+  const lines = Array.isArray(raw.raw) ? raw.raw.filter(isObj).filter(r => isStr(r.line)).map(r => ({ line: r.line as string, source: strOr(r.source, ''), ...(isStr(r.path) && r.path ? { path: r.path } : {}) })) : []
   return { files: { project: strOr(f.project, ''), user: strOr(f.user, '') }, keys, raw: lines }
 }
 

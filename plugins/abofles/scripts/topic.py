@@ -68,8 +68,8 @@ def cells_line(name, info, tier, wf, cwd):
         if pcap and pcap.strip().isdigit():
             cap, ov = int(pcap), True
         parts.append(f"{side} {cell}/{cap}" + ("*" if src == "topic" and not pc else ""))
-    git = override_value(cwd, f"{name} / Git") if cwd else None
-    git = (git or "").strip() or topic_cells(info, tier, wf, cwd, economy=True)["Work"][0]
+    git = next((v for v in ((override_value(cwd, f"{name} / {k}") or "").strip() for k in ("Git", "Scrum", "Work")) if v), "") if cwd else ""  # the hook's order: Git, Scrum, Work
+    git = git or topic_cells(info, tier, wf, cwd, economy=True)["Work"][0]
     parts.append(f"Git/Scrum {git}")  # the Git and Scrum agents: the economy Work cell in both matrices
     sm, se, ssrc = session_cell(cwd, name, tier)
     if ssrc == f"{name} / Session":

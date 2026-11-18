@@ -42,6 +42,11 @@ def agent(model=None, effort=None, stype="abofles:abofles-reader", prompt="abofl
     return d
 
 
+def open_task(sid, cwd, led):
+    """2.9.1: a receipt is journaled only when it closes its task — one agent opens one."""
+    run("post", dict(agent("haiku", "low", resp="STATUS: done\nCONFIDENCE: high\nFACTS:\n- none\nGAPS: none", cwd=cwd), session_id=sid), led)
+
+
 def memo_health_tests(check):
     """memo_health (archive, index, dedupe, caps, throttle), the PreCompact / PostCompact hooks and `Other items`. Own temp projects and state dir;
     the environment is put back at the end."""
@@ -1622,7 +1627,8 @@ def sub_session_tests(check):
         check("inside: the main: line fits the routed setting", S.main_line({**sq, "main_model": "sonnet", "effort": "medium"}, None, str(proj), q) == "main: Sonnet 5.5 · Medium fits this 🟡 Normal sub-session task")
         check("inside: ... or suggests it", S.main_line({**sq, "main_model": "opus", "effort": "xhigh"}, None, str(proj), q).startswith("main: suggest Sonnet 5.5 · Medium for this 🟡 Normal sub-session task (now Opus 5.5 · Extra)"))
         block("Sub session = opus·high")
-        check("inside: a Sub session key still wins", S.main_line({**sq, "main_model": "opus", "effort": "high"}, None, str(proj), q) == "main: Opus 5.5 · High fits your setting")
+        check("inside: a Sub session key set after the first prompt leaves the routed pick (session_cell applied the keys at routing)",
+              S.main_line({**sq, "main_model": "sonnet", "effort": "medium"}, None, str(proj), q) == "main: Sonnet 5.5 · Medium fits this 🟡 Normal sub-session task")
         block()
         call(S.prompt, {"session_id": q, "cwd": str(proj), "prompt": "abofles: Other / Session · T4\nlater prompt"})
         check("inside: only the first prompt sets it", S.load_state(q)["sub_route"]["tier"] == 2)
@@ -1643,6 +1649,431 @@ def sub_session_tests(check):
         check("hooks: session_pre fails open on bad input (exit 0, no output)", rr.returncode == 0 and not rr.stdout.strip())
         tp = subprocess.run([sys.executable, str(HOOK.parent.parent / "scripts" / "topic.py"), "find", "refund chargeback", "--limit", "1", "--cwd", str(proj)], capture_output=True, text=True, env=env)
         check("topic.py: each match line carries the Session cell after Git/Scrum", re.search(r"Git/Scrum \S+ · Session opus·high", tp.stdout) is not None)
+
+
+# --- 2.9.1 overrides editor ---
+def overrides_editor_tests(check):
+    """The pane editor's writer (overrides.py): a raw line taken out is removed, each project file's own lines, a reset reaches every project file,
+    the off words and Sub sessions = 0, Context stop in K / M / tokens. Own temp dirs."""
+    import overrides as OE
+    ovp = Path(__file__).resolve().parent / "overrides.py"
+    with tempfile.TemporaryDirectory() as hh:
+        env = dict(os.environ, ABOFLES_STATE_DIR=str(Path(hh, "st")), ABOFLES_USER_CLAUDE_MD=str(Path(hh, "user.md")))
+        def ov(proj, args, req=None):
+            return subprocess.run([sys.executable, str(ovp), *args, "--cwd", str(proj)], input=json.dumps(req) if req is not None else "", capture_output=True, text=True, env=env)
+        def proj(name, main=None, dot=None):
+            d = Path(hh, name); (d / ".claude").mkdir(parents=True)
+            if main is not None: (d / "CLAUDE.md").write_text(main)
+            if dot is not None: (d / ".claude" / "CLAUDE.md").write_text(dot)
+            return d
+        # 1. a line taken out of Other overrides (a typo the hooks cannot read) is removed from the block
+        p1 = proj("p1", "## abofles overrides\n\n- Pace = fast\n- Topci: Billing = T3\n- Topic: Billing = T3\n\nprose\n")
+        r_ = ov(p1, ["set", "--scope", "project"], {"set": {}, "raw": ["Topic: Billing = T3"]})
+        check("2.9.1 overrides editor: a raw line missing from `raw` (a typo) is removed from the block; the rest stays",
+              r_.returncode == 0 and (p1 / "CLAUDE.md").read_text() == "## abofles overrides\n\n- Pace = fast\n- Topic: Billing = T3\n\nprose\n" and [x["line"] for x in json.loads(r_.stdout)["raw"]] == ["Topic: Billing = T3"])
+        p1b = proj("p1b", "## abofles overrides\n- Topci:  Billing = T3\n- Topic: A = T2\n")
+        r_ = ov(p1b, ["set", "--scope", "project"], {"set": {}, "raw": ["Topci: Billing = T3", "Topic: A = T2", "Topic: B = T1"]})
+        check("2.9.1 overrides editor: ... a kept typo is matched whatever its spacing and stays in place; a new form lands after them",
+              r_.returncode == 0 and (p1b / "CLAUDE.md").read_text() == "## abofles overrides\n- Topci:  Billing = T3\n- Topic: A = T2\n- Topic: B = T1\n")
+        # 2. two project files: each raw line carries its file, and Save never copies the second file's lines into the first
+        p2 = proj("p2", "## abofles overrides\n- Topic: A = T2\n", "## abofles overrides\n- Topic: B = T3\n")
+        g_ = json.loads(ov(p2, ["get", "--json"]).stdout)
+        check("2.9.1 overrides editor: each raw line of the payload names the file it is in",
+              g_["raw"] == [{"line": "Topic: A = T2", "source": "project", "path": str(p2 / "CLAUDE.md")}, {"line": "Topic: B = T3", "source": "project", "path": str(p2 / ".claude" / "CLAUDE.md")}])
+        r_ = ov(p2, ["set", "--scope", "project"], {"set": {}, "raw": ["Topic: A = T2", "Topic: B = T3"]})
+        check("2.9.1 overrides editor: an old pane that sends both project files' lines does not copy .claude/CLAUDE.md's line into CLAUDE.md",
+              r_.returncode == 0 and (p2 / "CLAUDE.md").read_text() == "## abofles overrides\n- Topic: A = T2\n" and (p2 / ".claude" / "CLAUDE.md").read_text() == "## abofles overrides\n- Topic: B = T3\n")
+        # 3. a reset reaches the key in every project file the hooks read, not only the one the editor writes to
+        p3 = proj("p3", "## abofles overrides\n- Pace = fast\n", "## abofles overrides\n- Break = 5\n- Pace = normal\n")
+        r_ = ov(p3, ["set", "--scope", "project"], {"set": {"Break": ""}})
+        k3_ = {k["key"]: k for k in json.loads(r_.stdout)["keys"]} if r_.returncode == 0 else {}
+        check("2.9.1 overrides editor: \"\" removes a key set in .claude/CLAUDE.md while CLAUDE.md holds the block; CLAUDE.md is untouched",
+              r_.returncode == 0 and (p3 / ".claude" / "CLAUDE.md").read_text() == "## abofles overrides\n- Pace = normal\n" and (p3 / "CLAUDE.md").read_text() == "## abofles overrides\n- Pace = fast\n" and k3_["Break"]["source"] == "default")
+        r_ = ov(p3, ["set", "--scope", "project"], {"set": {"Pace": ""}})
+        check("2.9.1 overrides editor: ... and a key in both project files goes from both",
+              r_.returncode == 0 and "Pace" not in (p3 / "CLAUDE.md").read_text() + (p3 / ".claude" / "CLAUDE.md").read_text())
+        # 4, 5. Sub sessions = 0 is its own value (no sub session); every off word is written `off`; Context marks takes off / 0
+        def cv(k, v):  # the written value, or None when refused
+            try:
+                return OE.clean_value(k, OE.H.OVERRIDE_KEYS[k], v)
+            except OE.Bad:
+                return None
+        refused = lambda k, v: cv(k, v) is None
+        check("2.9.1 overrides editor: Sub sessions = 0 is kept as 0 (no sub session allowed); off and none are written off",
+              [cv("Sub sessions", v) for v in ("0", "none", "off", "OFF", "2")] == ["0", "off", "off", "off", "2"])
+        check("2.9.1 overrides editor: Break, Loop guard and Context stop write none and 0 as off, as the hooks read them",
+              [cv(k, v) for k in ("Break", "Loop guard", "Context stop") for v in ("none", "0", "Off")] == ["off"] * 9)
+        check("2.9.1 overrides editor: Context marks takes off and 0 (no marks) and is written off; a list of numbers still works; letters are refused",
+              [cv("Context marks", v) for v in ("off", "0", "none", "500, 600")] == ["off", "off", "off", "500, 600"] and refused("Context marks", "a, b"))
+        # 6. Context stop: N and NK are K tokens, NM and decimals with K / M are kept, a bare number of 10000 or more is tokens
+        check("2.9.1 overrides editor: Context stop 650 / 650k / 1m / 1.5M / 1.50m / 600000 / 650500 / 1000000 are written 650K / 650K / 1M / 1.5M / 1.5M / 600K / 650.5K / 1000K",
+              [cv("Context stop", v) for v in ("650", "650k", "1m", "1.5M", "1.50m", "600000", "650500", "1000000", "9999", "1.5 K")] == ["650K", "650K", "1M", "1.5M", "1.5M", "600K", "650.5K", "1000K", "9999K", "1.5K"])
+        check("2.9.1 overrides editor: Context stop refuses a bare decimal and a word", refused("Context stop", "1.5") and refused("Context stop", "lots") and refused("Context stop", "1.5.2M"))
+
+
+# --- 2.9.1 sub sessions / gates / loop guard ---
+def fixes_291_tests(check, root=None):
+    """2.9.1: the routed pick inside a sub session, the start_session gate and row (cloud, routing off, subagents, exact model ids, the
+    caller's setting from its app record, a Capped child, a card brief after a blank line, junk state entries, Sub sessions = 0), rule 4
+    for headerless agents and the gate agents, the loop guard for every non-reader agent and under abofles:skip, the question gate's loop
+    path, topic.py's Git/Scrum cell order, Windows working-tree paths and the Data Residency reviewers. `root`: the plugin folder to test."""
+    root = Path(root) if root else Path(__file__).resolve().parent.parent
+    spec = _ilu.spec_from_file_location("abofles_hook_291", str(root / "hooks" / "abofles_hook.py")); S = _ilu.module_from_spec(spec); spec.loader.exec_module(S)
+    with tempfile.TemporaryDirectory() as hh:
+        S.STATE_DIR = Path(hh, "st"); S.LEDGER_DIR = Path(hh, "led"); S.USER_CLAUDE_MD = Path(hh, "no-user.md")
+        apps = Path(hh, "apps"); recdir = apps / "a" / "b"; recdir.mkdir(parents=True); S.APP_SESSION_DIRS = [apps]
+        proj = Path(hh, "proj"); proj.mkdir()
+        def block(*lines): (proj / "CLAUDE.md").write_text("## abofles overrides\n\n" + "".join(f"- {l}\n" for l in lines)) if lines else (proj / "CLAUDE.md").unlink(missing_ok=True)
+        def rec(local, **kw): (recdir / f"{local}.json").write_text(json.dumps({"sessionId": local, **kw}))
+        def setst(sid, **kw):
+            st = S.load_state(sid); st.update(kw); S.save_state(sid, st)
+        def call(fn, data):
+            buf, old = io.StringIO(), sys.stdout
+            sys.stdout = buf
+            try:
+                fn(data)
+            except SystemExit:
+                pass
+            finally:
+                sys.stdout = old
+            out = buf.getvalue().strip()
+            return json.loads(out) if out else None
+        def safe(fn, *a):
+            try:
+                return True, fn(*a)
+            except Exception as e:
+                return False, e
+        denied = lambda o: (o or {}).get("hookSpecificOutput", {}).get("permissionDecision") == "deny"
+        why = lambda o: (o or {}).get("hookSpecificOutput", {}).get("permissionDecisionReason", "")
+        note = lambda o: (o or {}).get("hookSpecificOutput", {}).get("additionalContext", "")
+        def start(sid, prompt="abofles: Unit Test / Session · T2\nfix the thing", extra=None, **ti):
+            ti = {"initiation": "user_asked", "title": "Fix the thing", "context": "fresh", "prompt": prompt, **ti}
+            return call(S.session_pre, {"session_id": sid, "cwd": str(proj), "tool_name": S.SESSION_TOOL, "tool_input": {k: v for k, v in ti.items() if v is not None}, **(extra or {})})
+        def started(sid, new_id, prompt="abofles: Unit Test / Session · T2\nfix the thing", text=None, extra=None, **ti):
+            ti = {"initiation": "user_asked", "title": "Fix the thing", "context": "fresh", "prompt": prompt, **ti}
+            res = text if text is not None else f'Started session "Fix the thing" (session_id: {new_id}, name: {ti.get("name") or new_id[6:]}). It runs on its own.'
+            return call(S.session_post, {"session_id": sid, "cwd": str(proj), "tool_name": S.SESSION_TOOL, "tool_input": {k: v for k, v in ti.items() if v is not None},
+                                         "tool_response": [{"type": "text", "text": res}], **(extra or {})})
+        row_of = lambda sid, nid: [x for x in S.ledger_rows(sid) if x.get("agent_id") == nid]
+        ok_ = dict(model="claude-sonnet-5-5", effort="medium")
+
+        # 1. inside a sub session the routed pick stands: session_cell already put User: > Topic / Session > Sub session
+        block("Sub session = haiku·low", "Unit Test / Session = opus·high")
+        q = "in291a"
+        call(S.prompt, {"session_id": q, "cwd": str(proj), "prompt": "abofles: Unit Test / Session · T2\nFix the thing"})
+        sq = S.load_state(q)
+        check("2.9.1 inside: Sub session + Topic / Session -> the child's main: line fits the routed Opus 5.5 · High, not the Sub session Haiku",
+              S.main_line({**sq, "main_model": "opus", "effort": "high"}, None, str(proj), q) == "main: Opus 5.5 · High fits this 🟡 Normal sub-session task")
+        q = "in291b"
+        call(S.prompt, {"session_id": q, "cwd": str(proj), "prompt": "abofles: Other Topic / Session · T2 · User: Sonnet 5.5 · High\nFix the thing"})
+        sq = S.load_state(q)
+        check("2.9.1 inside: a User: pick on the header beats the Sub session key in the child's main: line",
+              S.main_line({**sq, "main_model": "sonnet", "effort": "high"}, None, str(proj), q) == "main: Sonnet 5.5 · High fits this 🟡 Normal sub-session task")
+        block()
+
+        # 3. a cloud start gets no set_session_model line
+        p = "post291a"; setst(p, main_model="opus", effort="xhigh")
+        o = started(p, "local_cl1", target="cloud")
+        check("2.9.1 post: a cloud start writes its row and gets no `Call set_session_model … now` line", o is None and len(row_of(p, "local_cl1")) == 1)
+        # 4. Session routing = off still writes the row
+        block("Session routing = off")
+        o = started(p, "local_off1", context="fork")
+        check("2.9.1 post: Session routing = off writes the Session row, with no line", o is None and len(row_of(p, "local_off1")) == 1 and row_of(p, "local_off1")[0]["side"] == "Session")
+        block()
+
+        # 5. a start from a subagent: the cap, the refusal and the row stay; the notes are the main session's
+        sa = "sub291a"; setst(sa, main_model="opus", effort="xhigh")
+        rec("local_me291", cliSessionId=sa)
+        for n in ("k1", "k2", "k3"):
+            rec(f"local_{n}", cliSessionId=f"c-{n}", isArchived=False, spawnedFrom={"sessionId": "local_me291", "name": n, "sideSession": True})
+        sub_ = {"agent_id": "ag291", "agent_type": "general-purpose"}
+        o = start(sa, extra=sub_, **ok_)
+        check("2.9.1 subagent: a start_session from a subagent is refused at the cap", denied(o) and "the cap is 3 (Sub sessions)" in why(o))
+        sb = "sub291b"; setst(sb, main_model="opus", effort="xhigh")
+        o = start(sb, extra=sub_)
+        check("2.9.1 subagent: ... and refused by the routing gate when the model and effort are missing", denied(o) and "model claude-sonnet-5-5 and effort medium" in why(o))
+        check("2.9.1 subagent: ... and the notes meant for the main session are not sent (no header, abofles:skip, warn)",
+              start(sb, prompt="no header here", extra=sub_) is None and start(sb, prompt="abofles:skip x", extra=sub_) is None)
+        o = started(sb, "local_sg1", context="fork", extra=sub_)
+        check("2.9.1 subagent: its start writes the Session row (no line)", o is None and len(row_of(sb, "local_sg1")) == 1)
+
+        # 6. the gate takes exact model ids or bare aliases only
+        g = "gate291a"; setst(g, main_model="opus", effort="xhigh")
+        T4 = "abofles: Unit Test / Session · T4\nx"
+        check("2.9.1 gate: `claude-opus-4-1` is no opus: refused", denied(start(g, prompt=T4, model="claude-opus-4-1", effort="high")))
+        check("2.9.1 gate: ... the exact id and the bare alias pass", start(g, prompt=T4, model="claude-opus-5-5", effort="high") is None and start(g, prompt=T4, model="opus", effort="high") is None)
+
+        # 7. the caller's setting unknown in the state: its own app record is the ceiling
+        u = "unk291a"; setst(u, main_model=None, effort=None)
+        rec("local_unk291", cliSessionId=u, model="claude-sonnet-5-5", effort="medium")
+        o = start(u, prompt="abofles: Unit Test / Session · T3\nx")
+        check("2.9.1 ceiling: main model unknown -> the gate asks the own app record's Sonnet 5.5 · Medium (Capped), not the Opus cell",
+              denied(o) and "model claude-sonnet-5-5 and effort medium" in why(o) and "Capped: main is Sonnet 5.5 · Medium" in why(o))
+
+        # 8. a Capped child keeps the capped setting
+        rec("local_par291", cliSessionId="c-par291", model="claude-sonnet-5-5", effort="medium")
+        ch = "child291"
+        rec("local_ch291", cliSessionId=ch, model="claude-sonnet-5-5", effort="medium", spawnedFrom={"sessionId": "local_par291", "sideSession": True})
+        call(S.prompt, {"session_id": ch, "cwd": str(proj), "prompt": "abofles: Unit Test / Session · T3\nFix the thing"})
+        sq = S.load_state(ch)
+        ml = S.main_line({**sq, "main_model": "sonnet", "effort": "medium"}, None, str(proj), ch) or ""
+        check("2.9.1 inside: a Capped child (parent on Sonnet 5.5 · Medium) keeps the capped setting: its main: line fits, no suggest … Switch",
+              (sq.get("sub_route") or {}).get("capped") is True and ml.startswith("main: Sonnet 5.5 · Medium fits") and "Switch" not in ml)
+
+        # 9. a card brief that starts with a blank line still routes its proposal_id start
+        c = "card291a"; setst(c, main_model="opus", effort="xhigh")
+        started(c, None, prompt="\nabofles: Unit Test / Session · T2\nfix the thing", initiation="own_initiative",
+                text='Proposed "Fix the thing" (task_id: task_bl291). The user sees a card and nothing runs until they start it.')
+        started(c, "local_bl291", prompt=None, context=None, proposal_id="task_bl291")
+        r = row_of(c, "local_bl291")
+        check("2.9.1 post: a card brief opening with a blank line keeps its header; the proposal_id start is routed", r and r[0]["topic"] == "Unit Test")
+
+        # 10. a non-dict entry in the state's sub_sessions
+        j = "junk291a"; setst(j, main_model="opus", effort="xhigh", sub_sessions=["junk", 7, {"id": "local_j0", "name": "j0", "ts": int(time.time())}])
+        fine, _ = safe(lambda: started(j, "local_j1"))
+        check("2.9.1 post: a non-dict sub_sessions entry in the state does not break the after-start step", fine and len(row_of(j, "local_j1")) == 1)
+
+        # 11. Sub sessions = 0 allows none
+        block("Sub sessions = 0")
+        z = "zero291a"; setst(z, main_model="opus", effort="xhigh")
+        o = start(z, **ok_)
+        check("2.9.1 cap: Sub sessions = 0 refuses every start and says how to allow them", denied(o) and "`Sub sessions = 0` allows none" in why(o) and "off" in why(o)
+              and denied(start(z, prompt="abofles:skip x")) and start(z, prompt=None, initiation="offer") is None)
+        block()
+
+        # 13. rule 4: a non-abofles type with no header names no Fable side
+        ag = lambda stype, prompt, model="fable", effort="medium", sid="r4291": {"session_id": sid, "cwd": str(proj), "tool_name": "Agent",
+                                                                             "tool_input": {"subagent_type": stype, "prompt": prompt, "model": model, "effort": effort, "description": "t"}}
+        o = call(S.pre, ag("general-purpose", "look into the flaky test"))
+        check("2.9.1 rule 4: a general-purpose agent on fable with no header is refused (name the header or use abofles:skip)",
+              denied(o) and "fable is only for the Analyse and Plan sides" in why(o) and "abofles:skip" in why(o) and "no abofles header" in why(o))
+        # 14. the gate agents never run on Fable
+        check("2.9.1 rule 4: abofles-judge and abofles-explainer on fable are refused",
+              all(denied(call(S.pre, ag(t, f"abofles: X / {sd} · T4\nq\nLine cap: 40"))) for t, sd in (("abofles:abofles-judge", "Judge"), ("abofles:abofles-explainer", "Explain"))))
+
+        # 15. N Judges / Explainers with no question stop every agent but a reader
+        lp = {"loop": {"judge": 3}}
+        check("2.9.1 loop guard: 3 Judges with no question stop a worker too, not only the next Judge; a reader still runs",
+              (S.loop_tripped(lp, 3, "worker", None) or "").startswith("3 Judges ran") and (S.loop_tripped({"loop": {"explain": 3}}, 3, "verifier", None) or "").startswith("3 Explainers ran")
+              and S.loop_tripped(lp, 3, "reader", None) is None and S.loop_tripped(lp, 0, "worker", None) is None)
+        # 16. a direct question after 3 FAILs goes to the user (no loop_stop yet)
+        lq = "loopq291"; setst(lq, started=1, gate="off", root=str(proj), loop={"fails": {"Verify on X": 3}})
+        o = call(S.qgate, {"session_id": lq, "cwd": str(proj), "tool_name": "AskUserQuestion", "tool_input": {"questions": [{"question": "Which lock order?", "options": [{"label": "A"}, {"label": "B"}]}]}})
+        check("2.9.1 question gate: after 3 FAILs a direct AskUserQuestion passes with no Judge (no denied agent needed) and the counts start over",
+              not denied(o) and not S.load_state(lq).get("loop"))
+        # 17. abofles:skip does not slip past a stopped loop
+        ls = "loops291"; setst(ls, started=1, gate="off", root=str(proj), loop_stop={"why": "Verify on X FAILed 3 times", "ts": int(time.time())})
+        o = call(S.pre, ag("general-purpose", "abofles:skip try the other lock order", model="opus", effort="high", sid=ls))
+        check("2.9.1 loop guard: an abofles:skip agent waits for the user too once the loop is stopped", denied(o) and "loop guard" in why(o) and "FAILed 3 times" in why(o))
+        check("2.9.1 loop guard: ... an abofles:skip reader still runs", call(S.pre, ag("abofles:abofles-reader", "abofles:skip read x", model="haiku", effort="low", sid=ls)) is None)
+
+        # 19. Windows working-tree paths: `//server/share/...` and `(x86)`
+        base = Path(hh, "w291"); deep = base / "Program Files (x86)" / "a"; deep.mkdir(parents=True)
+        pd = S.prompt_dirs(f"Working tree: {deep}\nq")
+        check("2.9.1 paths: a working tree through `Program Files (x86)` is found whole", str(deep) in pd)
+        deep2 = base / "u" / "v"; deep2.mkdir(parents=True)
+        unc = "//" + str(deep2).lstrip("/")
+        pd = S.prompt_dirs(f"Working tree: {unc}\nq")
+        check("2.9.1 paths: a `//server/share/...` start is a UNC start, kept whole", unc in pd)
+
+    # 18. topic.py: the Git/Scrum cell reads `X / Git`, `X / Scrum`, `X / Work` (the hook's order)
+    with tempfile.TemporaryDirectory() as tp_:
+        tpc = lambda *lines: (Path(tp_, "CLAUDE.md").write_text("## abofles overrides\n" + "".join(f"- {l}\n" for l in lines)),
+                              subprocess.run([sys.executable, str(root / "scripts" / "topic.py"), "find", "refund chargeback", "--limit", "1", "--cwd", tp_],
+                                             capture_output=True, text=True).stdout)[1]
+        check("2.9.1 topic.py: Git/Scrum takes `Topic / Scrum`, then `Topic / Work`, as the hook does",
+              "Git/Scrum haiku·low" in tpc("Refunds, Chargebacks & Reversals / Scrum = haiku·low")
+              and "Git/Scrum sonnet·medium" in tpc("Refunds, Chargebacks & Reversals / Work = sonnet·medium")
+              and "Git/Scrum haiku·medium" in tpc("Refunds, Chargebacks & Reversals / Git = haiku·medium", "Refunds, Chargebacks & Reversals / Scrum = haiku·low"))
+    # 20. T4 Data Residency: Security and Compliance
+    gm = subprocess.run([sys.executable, "-c", "import sys; sys.path.insert(0, sys.argv[1]); import gen_matrix as G; "
+                         "print(G.reviewers_of('ARCH', 'Multi-region, Active-active & Data Residency', 4))", str(root / "scripts")], capture_output=True, text=True).stdout.strip()
+    check("2.9.1 topics: T4 Multi-region, Active-active & Data Residency gets Security and Compliance", gm == "['security', 'compliance']")
+
+
+# --- 2.9.1 receipts / review gate / context ---
+def receipt_gate_context_tests(check):
+    """2.9.1: a receipt is journaled once (only the one that closes its task), the review gate's refusal is not undone by the context watch
+    or a mid-turn receipt, the gate's tier and skips, the receipt forms models print, `none …;` open items, the unread fallback, Context marks/stop."""
+    saved = {k: os.environ.get(k) for k in ("ABOFLES_STATE_DIR", "ABOFLES_CONFIG", "ABOFLES_SESSION")}
+    with tempfile.TemporaryDirectory() as gh:
+        os.environ["ABOFLES_STATE_DIR"] = str(Path(gh, "st")); os.environ["ABOFLES_CONFIG"] = str(Path(gh, "config.json"))
+        os.environ.pop("ABOFLES_SESSION", None)
+        spec = _ilu.spec_from_file_location("abofles_hook_291", str(HOOK)); M = _ilu.module_from_spec(spec); spec.loader.exec_module(M)
+        led = str(Path(gh, "led")); Path(led).mkdir()
+        P = Path(gh, "P"); P.mkdir(); Path(P, "src").mkdir(); Path(P, "src/a.cs").write_text("x\n")
+        tr = Path(gh, "tr.jsonl"); tr.write_text(json.dumps({"type": "assistant", "message": {"id": "m0", "role": "assistant", "model": "claude-opus-5-5", "content": [{"type": "text", "text": "hi"}], "usage": {"input_tokens": 1, "output_tokens": 1}}}) + "\n")
+        gst = lambda sid: json.loads(Path(gh, "st", f"{sid}.json").read_text())
+        jtxt = lambda sid: M.session_memo_path(str(P), sid).read_text() if M.session_memo_path(str(P), sid).exists() else ""
+        WOK = "STATUS: done\nCONFIDENCE: high\nCHANGED:\n- src/a.cs — x\nRAN: none\nLEFT: none"
+        VOK = "STATUS: done\nCONFIDENCE: high\nVERDICT: PASS\nEVIDENCE:\n- authz — PASS — src/a.cs:1\nISSUES:\nNOTE: none"
+        VFAIL = "STATUS: done\nCONFIDENCE: high\nVERDICT: FAIL\nEVIDENCE:\n- authz — FAIL — src/a.cs:1\nISSUES:\n- src/a.cs:1 — broken — fix\nNOTE: none"
+        PAY = "Payments & Gateway Integration"
+
+        def begin(sid):
+            run("start", {"session_id": sid, "cwd": str(P), "transcript_path": str(tr)}, led)
+            Path(gh, "st", f"{sid}.json").write_text(json.dumps(dict(gst(sid), gate="auto")))
+
+        def sp(sid, side, stype, resp=WOK, topic=PAY, tier=" · T4"):
+            d = dict(agent("opus", "high", stype, prompt=f"abofles: {topic} / {side}{tier}\nq\nLine cap: 40", resp=resp, cwd=str(P)), session_id=sid, transcript_path=str(tr))
+            run("pre", d, led); return run("post", d, led)
+
+        def stop(sid, msg, active=False):  # the receipt is in the transcript before the Stop, as in a real turn
+            with open(tr, "a") as fh:
+                fh.write(json.dumps({"type": "assistant", "message": {"id": f"m{time.time_ns()}", "role": "assistant", "content": [{"type": "text", "text": msg}]}}) + "\n")
+            return run("receipt", {"session_id": sid, "cwd": str(P), "transcript_path": str(tr), "stop_hook_active": active, "last_assistant_message": msg}, led)
+        rcpt = lambda done, extra="": f"🧾 **1 Agent · 1 u · Saved 1%** vs Opus 5.5\n- `done` → {done}\n- `check` → ok{extra}"
+        blocked = lambda out: (out or {}).get("decision") == "block" and "review gate" in (out or {}).get("reason", "")
+
+        # A. journal once
+        begin("j291a"); sp("j291a", "Work", "abofles:abofles-worker")
+        o1 = stop("j291a", rcpt("journal-once-alpha"))
+        j1 = jtxt("j291a").count("done: journal-once-alpha")
+        stop("j291a", rcpt("journal-once-alpha"), active=True)
+        check("journal once: a receipt the review gate refused is not journaled; the one that closes the task after it is, once",
+              blocked(o1) and j1 == 0 and jtxt("j291a").count("done: journal-once-alpha") == 1)
+        begin("j291b")
+        stop("j291b", rcpt("journal-no-task-beta"))
+        check("journal once: a receipt with no open task (no agent) closes nothing and is not journaled", "journal-no-task-beta" not in jtxt("j291b"))
+        begin("j291c"); sp("j291c", "Work", "abofles:abofles-worker", topic="Unit Test", tier=" · T2")
+        rc_c = rcpt("journal-recorded-gamma")
+        mr = subprocess.run([sys.executable, str(HOOK.parent.parent / "scripts" / "memo.py"), "receipt", "--session", "j291c"], input=rc_c, capture_output=True, text=True,
+                            env=dict(os.environ, ABOFLES_LEDGER_DIR=led), cwd=str(P))
+        stop("j291c", rc_c)  # Receipt place = pane: recorded by memo.py, and printed too
+        check("journal once: a receipt memo.py recorded (and closed) and also printed gets one Journal line", mr.returncode == 0 and jtxt("j291c").count("done: journal-recorded-gamma") == 1)
+
+        # B. the review gate's refusal stands: the context watch and a mid-turn receipt do not close the refused task
+        begin("b291"); sp("b291", "Work", "abofles:abofles-worker")
+        o1 = stop("b291", rcpt("gate-held"))
+        n1 = gst("b291").get("spawns_since_receipt")
+        sp("b291", "Finance", "abofles:abofles-finance", resp=VOK)  # its pre sees the refused receipt in the transcript
+        n2 = gst("b291").get("spawns_since_receipt")
+        o2 = stop("b291", rcpt("gate-held"), active=True)
+        check("review gate held: the refused 🔴 receipt in the transcript leaves the task open (context watch), the reviewer's pre does not close it, the 2nd Stop raises review_missing",
+              blocked(o1) and n1 == 1 and n2 == 2 and o2 is None and gst("b291").get("spawns_since_receipt") == 0 and (gst("b291").get("review_missing") or {}).get("names") == ["security", "tester"])
+
+        # C. the gate's tier: a T# anywhere after the side, else the topic's tier (with the project's Topic: override)
+        check("review gate tier: parse_header reads `(T4)` and a T# before modifiers; no T# -> None",
+              M.parse_header(f"abofles: {PAY} / Work · Critical (T4)")[2] == 4 and M.parse_header("abofles: X / Work · T3 · Scope y")[2] == 3 and M.parse_header(f"abofles: {PAY} / Work")[2] is None)
+        begin("c291a"); sp("c291a", "Work", "abofles:abofles-worker", tier="")
+        check("review gate tier: a header with no T# takes the topic's tier from the index (🔴 Payments -> refused)", blocked(stop("c291a", rcpt("no-tier"))))
+        stop("c291a", rcpt("no-tier"), active=True)
+        Path(P, "CLAUDE.md").write_text("## abofles overrides\n- Topic: Business Logic (domain rules) = T4\n")
+        begin("c291b"); sp("c291b", "Work", "abofles:abofles-worker", topic="Business Logic (domain rules)", tier="")
+        check("review gate tier: ... the project's `Topic: Name = T4` applies (a 🟠 topic moved to 🔴 is refused)",
+              M.topic_tier(str(P), "Business Logic (domain rules)") == 4 and blocked(stop("c291b", rcpt("moved-tier"))))
+        stop("c291b", rcpt("moved-tier"), active=True)
+        Path(P, "CLAUDE.md").unlink()
+
+        # D. skips come from the workflow line only; a reviewer counts as done only when its newest row is PASS
+        DVQ = "Data Validation QA (reports, numbers, totals)"
+        begin("d291a"); sp("d291a", "Work", "abofles:abofles-worker", topic=DVQ, tier=" · T3")
+        stop("d291a", "🧾 **1 Agent · 1 u · Saved 1%** vs Opus 5.5\n- `done` → data backfill skipped: later\n- `check` → ok\n- `workflow` → Work ✓ · QA skipped: no UI")
+        check("review gate skips: `skipped` in the done line skips nothing; the workflow line's QA skip counts",
+              (gst("d291a").get("review_missing") or {}).get("names") == ["data"] and M.receipt_workflow("🧾 x\n- `done` → Data skipped: y\n- `check` → z") == "")
+        begin("d291b"); sp("d291b", "Work", "abofles:abofles-worker")
+        for side_, st_ in (("Finance", "finance"), ("Security", "security"), ("Tester", "tester")):
+            sp("d291b", side_, f"abofles:abofles-{st_}", resp=VFAIL)
+        o_ = stop("d291b", rcpt("three-fails"))
+        check("review gate done: three reviewer FAILs are not three passes -> refused, naming them", blocked(o_) and "Finance, Security, Tester" in o_["reason"])
+        stop("d291b", rcpt("three-fails"), active=True)
+
+        # E. receipt forms models really print
+        RE_ = ("Prose first.\n**🧾 3 Agents · 1 u · Saved 1%** vs Opus 5.5\n* **Done** -> fixed the cap\n- `Check` → 13 passed\n- `open` →\n  1. owner decision: ship Friday?\n"
+               "  2) ATTENTION: flaky test\n  - 🧭 run the suite\n- `next` → go\n- a stray bullet\nmore prose")
+        pe = M.parse_receipt(RE_) or {}
+        check("receipt forms: `->`, `*` bullets, bold names, any case, numbered sub-bullets; a 🧭 sub-bullet is next; a stray bullet ends the receipt",
+              pe.get("done") == "fixed the cap" and pe.get("check") == "13 passed" and pe.get("items", {}).get("open") == ["owner decision: ship Friday?", "ATTENTION: flaky test"]
+              and pe.get("next") == "🧭 run the suite" and "stray" not in json.dumps(pe.get("items", {})) and M.has_receipt(RE_) and M.has_receipt("🧾 2 Agents · 1 u"))
+        pn_ = M.parse_receipt("🧾 **2 Agents · 1 u** · Open: none")
+        pb_ = M.parse_receipt("🧾 **1 Agent · 1 u**\n- `done` → a\n- `check` → b\n- `next` → go\n- not part of next")
+        check("receipt forms: ` · Open:` in any case; a non-indented bullet after `next` does not join it", (pn_ or {}).get("open") == "none" and (pb_ or {}).get("next") == "go")
+
+        # F. `none …;` is skipped only up to the first `;`
+        check("needs: `none blocking; owner decision: …?` reaches Needs you, `none (no owner decision open)` does not",
+              M.needs_items("none blocking; owner decision: ship Friday?") == ["owner decision: ship Friday?"] and M.needs_items("none (no owner decision open)") == []
+              and M.needs_items("none blocking; owner decision: ship Friday?", ["none blocking", "owner decision: ship Friday?"]) == ["owner decision: ship Friday?"])
+
+        # G. an unread receipt kept as written still brings its must-see lines to Needs you
+        fb = M.receipt_fallback("🧾 Receipt\ndone: moved the cap\nATTENTION: flaky payment test\nopen → FAIL: criterion 5")
+        M.memo_journal(str(P), "g291", fb)
+        nyou = M.memo_read(str(P))["Needs you"]
+        check("receipt fallback: ATTENTION and FAIL lines of an unread receipt reach Needs you", "flaky payment test" in nyou and "FAIL: criterion 5" in nyou)
+
+        # H. Context marks off / 0; Context stop decimals and bare token counts
+        def ctx_md(lines):
+            Path(P, "CLAUDE.md").write_text("## abofles overrides\n" + "".join(f"- {l}\n" for l in lines)); return str(P)
+        check("context: `Context marks = off` or `0` gives no warning mark (only the stop)", M.context_marks(ctx_md(["Context marks = off"])) == (500,) and M.context_marks(ctx_md(["Context marks = 0"])) == (500,)
+              and M.context_marks(ctx_md(["Context marks = off", "Context stop = off"])) == () and M.override_known("Context marks", "off"))
+        check("context: `Context stop` reads 1.5M = 1500K, 600000 tokens = 600K, 650 and 650K = 650K",
+              [M.context_stop(ctx_md([f"Context stop = {v}"])) for v in ("1.5M", "600000", "650", "650K")] == [1500, 600, 650, 650] and M.override_known("Context stop", "1.5M"))
+        Path(P, "CLAUDE.md").unlink()
+    for k, v in saved.items():
+        if v is None:
+            os.environ.pop(k, None)
+        else:
+            os.environ[k] = v
+
+
+# --- 2.9.1 git guard / header gate ---
+def git_header_291_tests(check):
+    """2.9.1: the backstop leaves a quoted string alone unless the command runs it, a `$VAR` command set on the same line to a non-git
+    value is not git, and the header gate lets an agent stop while its own background work still runs."""
+    rg = _H.risky_git
+    loop_ = ("cd ~/.claude/projects && S=/tmp/x; for pat in 'abofles: new task ' 'risky git \\(reset --hard\\)'; do echo \"== $pat\"; "
+             "cat $S/files.txt | xargs awk -v p=\"$pat\" '$0 ~ p { n++ } END{print n}' 2>/dev/null | sort -rn | head -4; done")
+    check("2.9.1 git guard: a `for` list / awk program quoting `risky git (reset --hard)` runs no git: silent", rg(loop_) is None)
+    check("2.9.1 git guard: ... and a quoted string of a data command is text (a script's print, a `for` list)",
+          all(rg(c) is None for c in ("python3 -c 'print(\"git reset --hard\")'", "for p in 'git reset --hard' x; do echo $p; done")))
+    check("2.9.1 git guard: ... while any other command's quoted string is read, since it may run it (bash.exe, busybox, doas, an unknown tool)",
+          all(rg(c) for c in ("bash.exe -c 'git reset --hard'", "busybox sh -c 'git reset --hard'", "doas sh -c 'git reset --hard'", "mytool --msg 'git push --force'")))
+    check("2.9.1 git guard: ... while a runner's quoted string, a string that runs a command and an unquoted git word stay flagged",
+          all("not fully parsed" in (rg(c) or "") for c in ("su me -c 'git reset --hard'", "ssh host 'git reset --hard'", "script -q /dev/null git reset --hard",
+                                                             "python3 -c \"import subprocess;subprocess.run(['git','reset','--hard'])\"", "perl -e 'system(\"git reset --hard\")'",
+                                                             "node -e \"require('child_process').execSync('git reset --hard')\"", "foo git reset \"--hard\"")))
+    check("2.9.1 git guard: Windows shells, WSL and remote runners run their quoted string: still flagged (as in 2.9.0)",
+          all(rg(c) for c in ("powershell -Command \"git reset --hard\"", "pwsh -c 'git reset --hard'", "cmd /c \"git reset --hard\"",
+                                "cmd.exe /c \"git push --force\"", "wsl \"git reset --hard\"", "ansible all -a \"git reset --hard\"")))
+    check("2.9.1 context: a bare decimal `1.5` names no unit and is unreadable; `1.5M` and `650` still read", _H.context_k("1.5") is None and _H.context_k("1.5M") == 1500 and _H.context_k("650") == 650)
+    dn_ = "git log --oneline -1 && D=/usr/local/share/dotnet/dotnet; $D restore DRP.Backend.sln >/dev/null 2>&1; $D format DRP.Backend.sln --verify-no-changes"
+    check("2.9.1 git guard: `D=/…/dotnet; $D restore` (the variable set on the line to a non-git value) is not git: silent",
+          rg(dn_) is None and rg("git status; D='/opt/my tools/dotnet'; ${D} restore x") is None)
+    check("2.9.1 git guard: ... while a variable set to git, from a substitution, unset, set after use, set only as a prefix or re-read stays flagged",
+          all("variable or substitution" in (rg(c) or "") for c in ("G=git; $G push -f", "D=/usr/bin/git; $D reset --hard", "D=$(which git); $D reset --hard",
+                                                                     "git status; $D reset --hard", "git status; $D reset --hard; D=/x/dotnet;", "git status; D=/x/dotnet $D reset --hard",
+                                                                     "git status; D=/x/dotnet; read D; $D reset --hard", "git=/x/dotnet; $\"git\" reset --hard")))
+    with tempfile.TemporaryDirectory() as hh:
+        tp_ = Path(hh, "agent-bg.jsonl")
+        line = lambda **r: json.dumps(r) + "\n"
+        use_ = lambda i, name="Bash", inp=None: line(type="assistant", message={"role": "assistant", "content": [{"type": "tool_use", "id": i, "name": name, "input": inp or {"command": "dotnet test", "run_in_background": True}}]})
+        res_ = lambda i, text: line(type="user", message={"role": "user", "content": [{"type": "tool_result", "tool_use_id": i, "content": text}]})
+        say_ = lambda text: line(type="assistant", message={"role": "assistant", "content": [{"type": "text", "text": text}], "stop_reason": "end_turn"})
+        note_ = lambda tid: line(type="attachment", attachment={"type": "queued_command", "prompt": f"<task-notification>\n<task-id>{tid}</task-id>\n<status>completed</status>\n</task-notification>"})
+        base_ = (use_("t1") + res_("t1", "Command running in background with ID: bsfhnf5uk. Output is being written to: /tmp/x.output. You will be notified when it completes")
+                 + use_("t2") + res_("t2", [{"type": "text", "text": "Command did not complete within its 170s timeout and was moved to the background (ID: bymw4wx9f). Output is being written to: /tmp/y"}])
+                 + use_("t3", "Agent", {"prompt": "x", "run_in_background": True}) + res_("t3", [{"type": "text", "text": "Async agent launched successfully.\nagentId: a1b2c3 (internal ID)\nThe agent is working in the background."}]))
+        tp_.write_text(base_ + say_("Still waiting on the full run (bsfhnf5uk)."))
+        def gate_(msg):
+            buf, old = io.StringIO(), sys.stdout
+            sys.stdout = buf
+            try:
+                r = _H.header_gate({"session_id": "bg291", "agent_id": "abg", "agent_type": "abofles:abofles-worker", "agent_transcript_path": str(tp_), "last_assistant_message": msg})
+            finally:
+                sys.stdout = old
+            return r, buf.getvalue().strip()
+        check("2.9.1 header gate: background_open lists the Bash runs (started / moved to the background) and the async agent with no notification yet",
+              _H.background_open(tp_) == ["bsfhnf5uk", "bymw4wx9f", "a1b2c3"])
+        r1_ = gate_("Waiting for the completion notification.")
+        check("2.9.1 header gate: a stop while its own background work runs is not sent back (no block printed) and stop() does not grade it",
+              r1_ == (True, ""))
+        tp_.write_text(base_ + note_("bsfhnf5uk") + note_("bymw4wx9f") + use_("t4", "TaskStop", {"task_id": "a1b2c3"}) + res_("t4", "stopped") + say_("Items 1-9 are done."))
+        r2_ = gate_("Items 1-9 are done.")
+        check("2.9.1 header gate: ... once every task has its notification (or a TaskStop), the next headerless stop is sent back as usual",
+              _H.background_open(tp_) == [] and r2_[0] is True and json.loads(r2_[1]).get("decision") == "block")
+        tp_.write_text(say_("I ran it with run_in_background; result was 'Command running in background with ID: zz9'.") + res_("t5", "ok: quoted Command running in background with ID: qq1"))
+        check("2.9.1 header gate: text that only quotes a background result is no background work (the gate still sends the reply back)",
+              _H.background_open(tp_) == [] and json.loads(gate_("done, no header")[1]).get("decision") == "block")
+        check("2.9.1 header gate: an unreadable transcript is no background work", _H.background_open(Path(hh, "missing.jsonl")) == [])
 
 
 def main():
@@ -2214,7 +2645,8 @@ def main():
         Path(cwd, "CLAUDE.md").write_text("## abofles overrides\n- Questions = off\n")
         check("qgate: Questions = off -> allowed", run("qgate", aq, led) is None)
         Path(cwd, "CLAUDE.md").unlink()
-        check("qgate: header side Judge/Explain parse", run("pre", dict(agent("fable", "medium", "abofles:abofles-explainer", prompt="abofles: X / Explain · T4\nq\nLine cap: 40", cwd=cwd), session_id="qg"), led) is None)
+        check("qgate: header side Judge/Explain parse", run("pre", dict(agent("opus", "medium", "abofles:abofles-explainer", prompt="abofles: X / Explain · T4\nq\nLine cap: 40", cwd=cwd), session_id="qg"), led) is None)
+        check("qgate: ... an explainer on fable is refused (fable: Analyse and Plan only)", "fable is only for" in ((run("pre", dict(agent("fable", "medium", "abofles:abofles-explainer", prompt="abofles: X / Explain · T4\nq\nLine cap: 40", cwd=cwd), session_id="qg"), led) or {}).get("hookSpecificOutput") or {}).get("permissionDecisionReason", ""))
         # field-test fixes (2026-10-13)
         # 1. memo and overrides follow the project root, not the per-event cwd (a `cd` into a nested repo)
         nested = Path(cwd, "DCMP.BE"); nested.mkdir(exist_ok=True)
@@ -2232,6 +2664,7 @@ def main():
         import subprocess as _sp3
         _sp3.run(["git", "init", "-q", cwd], capture_output=True)
         mf.unlink()
+        run("post", dict(agent("haiku", "low", resp=good, cwd=cwd), session_id="rt"), led)  # 2.9.1: only a receipt that closes its task is journaled
         run("receipt", {"session_id": "rt", "cwd": cwd, "stop_hook_active": False, "last_assistant_message": rtxt}, led)
         check("root: a new memo is added to .git/info/exclude", ".claude/abofles-memo.*" in Path(cwd, ".git", "info", "exclude").read_text())
         # 2. dismissed answers are not decisions; Decisions keeps the question sentence, not the story
@@ -2241,6 +2674,7 @@ def main():
         run("decision", {"session_id": "rt", "cwd": cwd, "tool_name": "AskUserQuestion", "tool_input": {"questions": [{"question": story, "header": "Rows", "options": []}]}, "tool_response": {"answers": {story: "The last one"}}}, led)
         check("decision: the question sentence is kept, with the header", "[Rows] Which row counts as the deduction? → The last one" in sf("rt").read_text() and "A long story" not in sf("rt").read_text().split("## Decisions")[1])
         # 3. an answered question ticks the Needs-you item that raised it
+        open_task("rt", cwd, led)
         run("receipt", {"session_id": "rt", "cwd": cwd, "stop_hook_active": False, "last_assistant_message": "🧾 **1 Agent · 1 u · Saved 1%** vs Opus 5.5\n- `done` → x\n- `check` → y\n- `open` → owner decision: should the surcharge round up or down?"}, led)
         check("needs: item added", "surcharge round up or down" in mf.read_text().split("## Needs you")[1].split("## Decisions")[0])
         import importlib.util as _iup
@@ -2259,6 +2693,7 @@ def main():
         check("needs: answered with an offered option label -> item ticked", "[x]" in line and "answered" in line)
         check("needs: picked_option — equal or starts with a label (multi-select), case and spacing ignored; free text is not one",
               H_pick("Round  DOWN", sopts_) and H_pick("Round up, Round down", sopts_) and not H_pick("down", sopts_) and not H_pick("No", sopts_) and not H_pick("Yes", []))
+        open_task("rt", cwd, led)
         run("receipt", {"session_id": "rt", "cwd": cwd, "stop_hook_active": False, "last_assistant_message": "🧾 **1 Agent · 1 u · Saved 1%** vs Opus 5.5\n- `done` → x\n- `check` → y\n- `open` → owner decision: should the surcharge round up, or down?"}, led)
         check("needs: near-duplicate not added again", mf.read_text().split("## Needs you")[1].split("## Decisions")[0].count("surcharge round up") == 1)
         # 4. resume block: every Left line, Now age, receipts after the Now section
@@ -2268,6 +2703,7 @@ def main():
         memo("now", inp="Task      t\nLeft      one thing (a; b) · second thing; third\nNext      n\n")
         check("resume: one long Left line split on ` · ` and `; ` outside parentheses", "- `left` →\n  - one thing (a; b)\n  - second thing\n  - third" in memo("show"))
         # receipt with sub-bullets parses and journals
+        open_task("rt", cwd, led)
         run("receipt", {"session_id": "rt", "cwd": cwd, "stop_hook_active": False, "last_assistant_message": "🧾 **1 Agent · 1 u · Saved 1%** vs Opus 5.5\n- `done` →\n  - a.cs: cap\n  - b.cs: tests\n- `why` → rule\n- `check` → `dotnet test` → 13 passed\n- `open` →\n  - ATTENTION: subbullet alpha\n  - owner decision: subbullet beta?"}, led)
         nb = mf.read_text().split("## Needs you")[1].split("## Decisions")[0]
         check("receipt: sub-bullet items parsed into journal and Needs you", "done: a.cs: cap; b.cs: tests" in sf("rt").read_text() and "subbullet alpha" in nb and "subbullet beta?" in nb)
@@ -2681,6 +3117,7 @@ def main():
         pa = tempfile.mkdtemp(); sA = "autosess1"
         run("start", {"session_id": sA, "cwd": pa}, led)
         H.memo_now(pa, "Task      old task\nDone      old done\nLeft      old left\nDecisions keep: tables are printed above the box\nNext      old next\nVerify    old verify\nTree      M old.cs", sA)
+        open_task(sA, pa, led)
         run("receipt", {"session_id": sA, "cwd": pa, "stop_hook_active": False, "last_assistant_message": RC1}, led)
         nowA = H.sess_read(pa, sA)["Now"]
         check("now auto: a receipt rewrites this session's Now (between tasks, Done, Left lines, Next = the receipt's own next, Verify)",
@@ -2692,6 +3129,7 @@ def main():
         check("now auto: the band's next item shows the new Next in the same Stop", "next from the memo: wire the FE badge" in nx_.get("text", "") and gstate(sA)["guide"]["items"][0]["p"] == "✅")
         blkA = H.resume_block(pa, session_id=sA)
         check("now auto: resume block reads the receipt-stamped Now (no 'since' stale line, left and next shown)", "now written " in blkA and "from receipt" in blkA and "- `since`" not in blkA and "- `next` → wire the FE badge" in blkA)
+        open_task(sA, pa, led)
         run("receipt", {"session_id": sA, "cwd": pa, "stop_hook_active": False, "last_assistant_message": "🧾 **1 Agent · 1 u · Saved 1%** vs Opus 5.5 · open: none"}, led)
         nowA2 = H.sess_read(pa, sA)["Now"]
         check("now auto: short receipt with open none -> no Left, Next ready, Done/Verify/Decisions kept",
@@ -2702,6 +3140,7 @@ def main():
         RCH = "🧾 **1 Agent · 1 u · Saved 1%** vs Opus 5.5\n- `done` → x\n- `check` → ok\n- `open` →\n  - QA did not test X, Y one by one; the full suite covers them\n  - update the docs page"
         pn = tempfile.mkdtemp(); sN = "nextsess1"
         run("start", {"session_id": sN, "cwd": pn}, led)
+        open_task(sN, pn, led)
         run("receipt", {"session_id": sN, "cwd": pn, "stop_hook_active": False, "last_assistant_message": RCH + "\n- `next` → 🧭 🟠 1 owner decision open — ask (judge first): docs page"}, led)
         nowN = H.sess_read(pn, sN)["Now"]; blkN = H.resume_block(pn, session_id=sN)
         check("now auto: next = a 🧭 guide line -> no Next line, both open items kept as Left", "Next" not in nowN and "Left      QA did not test X, Y one by one; the full suite covers them\nLeft      update the docs page" in nowN)
@@ -2714,27 +3153,34 @@ def main():
         # a one-line guide `next` is split at " · " only after the guide-line check: the pieces after the 🧭 head are guide items, not Next
         pn2 = tempfile.mkdtemp(); sN2 = "nextsess2"
         run("start", {"session_id": sN2, "cwd": pn2}, led)
+        open_task(sN2, pn2, led)
         run("receipt", {"session_id": sN2, "cwd": pn2, "stop_hook_active": False, "last_assistant_message": RCH + "\n- `next` → 🧭 🟠 1 owner decision open — ask (judge first): docs page · 🟡 escalate · Work agent partial · 💰 agent budget 2 left"}, led)
         nowN2 = H.sess_read(pn2, sN2)["Now"]
         check("now auto: a one-line next that starts with 🧭 and has ` · ` pieces (🟡 escalate, 💰 budget) -> no Next line at all", "Next" not in nowN2 and "escalate" not in nowN2 and "agent budget" not in nowN2)
+        open_task(sN2, pn2, led)
         run("receipt", {"session_id": sN2, "cwd": pn2, "stop_hook_active": False, "last_assistant_message": RCH + "\n- `next` → run the full suite · then docs"}, led)
         nowN3 = H.sess_read(pn2, sN2)["Now"]
         check("now auto: a one-line next without 🧭 is still split into Next items", "Next      run the full suite" in nowN3 and "Next      then docs" in nowN3)
+        open_task(sN, pn, led)
         run("receipt", {"session_id": sN, "cwd": pn, "stop_hook_active": False, "last_assistant_message": RCH + "\n- `next` → none — wait for QA"}, led)
         check("now auto: next = none... -> no Next line while items are left", "Next" not in H.sess_read(pn, sN)["Now"])
+        open_task(sN, pn, led)
         run("receipt", {"session_id": sN, "cwd": pn, "stop_hook_active": False, "last_assistant_message": RCH + "\n- `next` → <next step>"}, led)
         check("now auto: next = a <placeholder> -> no Next line", "Next" not in H.sess_read(pn, sN)["Now"])
+        open_task(sN, pn, led)
         run("receipt", {"session_id": sN, "cwd": pn, "stop_hook_active": False, "last_assistant_message": RCH + "\n- `next` → wire the FE badge"}, led)
         blkN = H.resume_block(pn, session_id=sN)
         nx_ = next((i for i in gitems(sN) if i.get("id") == "next"), {})
         check("now auto: next = real text -> Next, resume `next` line, and nothing is copied from the first open item",
               "Next      wire the FE badge" in H.sess_read(pn, sN)["Now"] and "- `next` → wire the FE badge" in blkN)
+        open_task(sN, pn, led)
         run("receipt", {"session_id": sN, "cwd": pn, "stop_hook_active": False, "last_assistant_message": "🧾 **1 Agent · 1 u · Saved 1%** vs Opus 5.5\n- `done` → x\n- `check` → ok\n- `open` → a; b"}, led)
         check("now auto: a one-line open `a; b` (no sub-bullets) is still two Left items", "Left      a\nLeft      b" in H.sess_read(pn, sN)["Now"])
         # a sub-bullet of `open` is one Needs-you item; a one-line open is still split; several `next` sub-bullets are several Next lines
         RCO = "🧾 **1 Agent · 1 u · Saved 1%** vs Opus 5.5\n- `done` → x\n- `check` → ok\n- `open` →\n  - ATTENTION: bad thing; owner decision: pick?"
         pq = tempfile.mkdtemp(); sQ = "needsub1"
         run("start", {"session_id": sQ, "cwd": pq}, led)
+        open_task(sQ, pq, led)
         run("receipt", {"session_id": sQ, "cwd": pq, "stop_hook_active": False, "last_assistant_message": RCO}, led)
         nq = [l for l in H.memo_read(pq)["Needs you"].splitlines() if l.strip()]
         check("needs: one `open` sub-bullet with `; ` is one Needs-you item holding both halves", len(nq) == 1 and "ATTENTION: bad thing; owner decision: pick?" in nq[0])
@@ -2749,30 +3195,36 @@ def main():
               all(bool(H.NEEDS_RE.search(k)) == v for k, v in _nr.items()))
         pq2 = tempfile.mkdtemp(); sQ2 = "needsub2"
         run("start", {"session_id": sQ2, "cwd": pq2}, led)
+        open_task(sQ2, pq2, led)
         run("receipt", {"session_id": sQ2, "cwd": pq2, "stop_hook_active": False, "last_assistant_message": "🧾 **1 Agent · 1 u · Saved 1%** vs Opus 5.5\n- `done` → x\n- `check` → ok\n- `open` → ATTENTION: x; ATTENTION: y"}, led)
         nq2 = [l for l in H.memo_read(pq2)["Needs you"].splitlines() if l.strip()]
         check("needs: a one-line open `ATTENTION: x; ATTENTION: y` is still two Needs-you items", len(nq2) == 2 and "ATTENTION: x" in nq2[0] and "ATTENTION: y" in nq2[1])
         pq3 = tempfile.mkdtemp(); sQ3 = "nextsub1"
         run("start", {"session_id": sQ3, "cwd": pq3}, led)
+        open_task(sQ3, pq3, led)
         run("receipt", {"session_id": sQ3, "cwd": pq3, "stop_hook_active": False, "last_assistant_message": "🧾 **1 Agent · 1 u · Saved 1%** vs Opus 5.5\n- `done` → x\n- `check` → ok\n- `open` → none\n- `next` →\n  - wire the FE badge\n  - update the docs page"}, led)
         nowQ = H.sess_read(pq3, sQ3)["Now"]; blkQ = H.resume_block(pq3, session_id=sQ3)
         nx_ = next((i for i in gitems(sQ3) if i.get("id") == "next"), {})
         check("next: two `next` sub-bullets -> two Next lines in Now", "Next      wire the FE badge\nNext      update the docs page" in nowQ and "wire the FE badge; update" not in nowQ)
         check("next: resume shows `next` with 2 sub-bullets; the guide ✅ item uses the first", "- `next` →\n  - wire the FE badge\n  - update the docs page" in blkQ and "next from the memo: wire the FE badge" in nx_.get("text", "") and "docs page" not in nx_.get("text", ""))
+        open_task(sN, pn, led)
         run("receipt", {"session_id": sN, "cwd": pn, "stop_hook_active": False, "last_assistant_message": "🧾 **1 Agent · 1 u · Saved 1%** vs Opus 5.5\n- `done` → x\n- `check` → ok\n- `open` → none\n- `next` → 🧭 something"}, led)
         check("now auto: open none + a guide-line next -> ready for the next task", "Next      none — ready for the next task" in H.sess_read(pn, sN)["Now"] and "Left" not in H.sess_read(pn, sN)["Now"])
         pg = tempfile.mkdtemp()
         if subprocess.run(["git", "init", "-q"], cwd=pg, capture_output=True).returncode == 0:
             Path(pg, "a.txt").write_text("x")
             run("start", {"session_id": "autogit1", "cwd": pg}, led)
+            open_task("autogit1", pg, led)
             run("receipt", {"session_id": "autogit1", "cwd": pg, "stop_hook_active": False, "last_assistant_message": RC1}, led)
             check("now auto: Tree = git status --short of the project root", "Tree      ?? a.txt" in H.sess_read(pg, "autogit1")["Now"])
             Path(pg, "a.txt").unlink()
+            open_task("autogit1", pg, led)
             run("receipt", {"session_id": "autogit1", "cwd": pg, "stop_hook_active": False, "last_assistant_message": RC1}, led)
             check("now auto: Tree = clean when git status is empty", "Tree      clean" in H.sess_read(pg, "autogit1")["Now"])
         # the 'memo Now is old' item goes away right after a receipt
         pb = tempfile.mkdtemp(); sB = "agesess01"
         run("start", {"session_id": sB, "cwd": pb}, led)
+        open_task(sB, pb, led)
         run("receipt", {"session_id": sB, "cwd": pb, "stop_hook_active": False, "last_assistant_message": RC1}, led)
         stb = H.session_memo_path(pb, sB); stb.write_text(re.sub(r"Written   \d{4}-\d\d-\d\d \d\d:\d\d", "Written   2020-01-01 00:00", stb.read_text()))
         run("prompt", {"session_id": sB, "cwd": pb}, led)
@@ -2780,6 +3232,7 @@ def main():
         Path(pb, "CLAUDE.md").write_text("## abofles overrides\n- Memo on compact = off\n")
         run("prompt", {"session_id": sB, "cwd": pb}, led)
         check("now auto: Memo on compact = off -> an old Now with receipts since still raises the memo-age item", "memo-age" in [i.get("id") for i in gitems(sB)])
+        open_task(sB, pb, led)
         run("receipt", {"session_id": sB, "cwd": pb, "stop_hook_active": False, "last_assistant_message": RC1}, led)
         check("now auto: ... and the next receipt makes it disappear", "memo-age" not in [i.get("id") for i in gitems(sB)])
         # 2. explanation gate
@@ -3603,7 +4056,9 @@ def main():
         def sp(sid_, side, stype, model="opus", effort="high", resp=WOK, topic="Payments & Gateway Integration", tier=4):
             d = dict(agent(model, effort, stype, prompt=f"abofles: {topic} / {side} · T{tier}\nq\nLine cap: 40", resp=resp, cwd=str(P)), session_id=sid_, transcript_path=str(trr))
             run("pre", d, led3); return run("post", d, led3)
-        def stop_(sid_, msg, active=False):
+        def stop_(sid_, msg, active=False):  # 2.9.1: the receipt is in the transcript before the Stop, as in a real turn (the context watch reads it there)
+            with open(trr, "a") as fh:
+                fh.write(json.dumps({"type": "assistant", "message": {"id": f"m{time.time_ns()}", "role": "assistant", "content": [{"type": "text", "text": msg}]}}) + "\n")
             return run("receipt", {"session_id": sid_, "cwd": str(P), "transcript_path": str(trr), "stop_hook_active": active, "last_assistant_message": msg}, led3)
         RCPT = "🧾 **2 Agents · 1 u · Saved 1%** vs Opus 5.5\n- `done` → x\n- `check` → y"
         check("review: parse_header reads the reviewer tags", R.parse_header("abofles: Payments & Gateway Integration / Security · T4")[1] == "Security" and R.parse_header("abofles: X / qa · T3")[1] == "QA"
@@ -3764,6 +4219,7 @@ def main():
         ed = lambda sid_, path, tool="Edit": run("edit", {"session_id": sid_, "cwd": str(A), "tool_name": tool, "tool_input": {"file_path": str(path)}}, led2)
         RCM = "🧾 **1 Agent · 1 u · Saved 1%** vs Opus 5.5\n- `done` → moved thing\n- `check` → ok\n- `open` → owner decision: keep the banner wide or narrow"
         run("start", {"session_id": "mv1", "cwd": str(A)}, led2)
+        open_task("mv1", str(A), led2)
         run("receipt", {"session_id": "mv1", "cwd": str(A), "stop_hook_active": False, "last_assistant_message": RCM}, led2)
         memA, memB = W.memo_path(str(A)), W.memo_path(str(B))
         check("work: a receipt lands in the launch folder before any edit", memA.exists() and "(s:mv1 p:A)" in memA.read_text() and W.session_memo_path(str(A), "mv1").exists())
@@ -3782,6 +4238,7 @@ def main():
         check("work: its Needs-you item moved and was renumbered, keeping its p:A tag (never retagged); A's index line is gone", "1. [ ]" in W.memo_read(str(B))["Needs you"] and "(s:mv1 p:A)" in memB.read_text()
               and "(s:mv1)" not in memA.read_text() and not any(k == "mv1" for k, _ in W.index_entries(W.memo_read(str(A)))) and any(k == "mv1" for k, _ in W.index_entries(W.memo_read(str(B)))))
         check("work: a trace line is not a receipt", W.index_field([l for k, l in W.index_entries(W.memo_read(str(B))) if k == "mv1"][0], "receipts") == "1")
+        open_task("mv1", str(A), led2)
         run("receipt", {"session_id": "mv1", "cwd": str(A), "stop_hook_active": False, "last_assistant_message": RCM.replace("moved thing", "second thing").replace("keep the banner wide or narrow", "pick the footer colour")}, led2)
         check("work: a later receipt (hook cwd still A) journals into B", "second thing" in sB.read_text() and "second thing" not in memA.read_text())
         check("work: its new item is tagged with the repository the edits land in (B), not the folder the hook ran in", "pick the footer colour #" in memB.read_text() and "(s:mv1 p:B)" in memB.read_text() and "pick the footer colour" not in memA.read_text())
@@ -3834,6 +4291,7 @@ def main():
         check("work: a Write of a new file in a new folder of C counts for C's repository root", wst("bw2").get("work", {}).get(os.path.realpath(C)) == 1)
         # scopes: session / project (default) / all; a session with nothing of its own sees a hint line
         run("start", {"session_id": "oth1", "cwd": str(B)}, led2)
+        open_task("oth1", str(B), led2)
         run("receipt", {"session_id": "oth1", "cwd": str(B), "stop_hook_active": False, "last_assistant_message": RCM.replace("moved thing", "other thing").replace("keep the banner wide or narrow", "ship the footer today or next week")}, led2)
         Path(B, "CLAUDE.md").write_text("## abofles overrides\n- Other items = show\n")  # these scope checks list other sessions' items (the default now hides them)
         rb_p = W.resume_block(str(B), session_id="mv1")
@@ -4318,7 +4776,14 @@ def main():
         lr1_ = HG.pane_resume(lr_, "longrcpt")["last"][0]
         check("pane: a receipt's line reaches the pane whole, past the 600 characters a text gets", len(lr1_) > 1000 and "w" * 290 in lr1_ and "c" * 390 in lr1_ and "open: none" in lr1_)
         check("pane: cmd.overrides is the script_cmd argv prefix for overrides.py with the session", pn_["cmd"]["overrides"][:2] == ["bash", HG.posix(HG.SCRIPTS_DIR / "py")] and pn_["cmd"]["overrides"][2].endswith("/scripts/overrides.py") and pn_["cmd"]["overrides"][-2:] == ["--session", ps])
-        check("pane: agents empty at start", pn_["spawns"] == {"live": [], "rows": [], "totals": {"spawns": 0, "tokens": 0, "usd": 0.0, "base_usd": 0.0, "saved_pct": 0, "open_fail": 0, "base_label": "Opus 5.5", "by_model": []}})
+        sx_ = HG.history_totals([{"side": "Session", "status": "open"}, {"side": "Work", "model": "opus", "effort": "low", "status": "done"}])
+        check("2.9.1 pane: totals count Session rows apart (sessions 1), never as agents (spawns 1)", sx_["sessions"] == 1 and sx_["spawns"] == 1)
+        rp_ = tempfile.mkdtemp(); (Path(rp_) / ".claude").mkdir()
+        Path(rp_, "CLAUDE.md").write_text("## abofles overrides\n- Topic: Foo = T2\n"); Path(rp_, ".claude", "CLAUDE.md").write_text("## abofles overrides\n- Bogus line = 1\n")
+        rw_ = HG.pane_overrides(rp_, "rawpath")
+        check("2.9.1 pane: each raw line names its file; CLAUDE.md's matches files.project, .claude/CLAUDE.md's does not",
+              [(r["line"], r["path"] == rw_["files"]["project"]) for r in rw_["raw"]] == [("Topic: Foo = T2", True), ("Bogus line = 1", False)] and rw_["raw"][1]["path"].endswith(".claude/CLAUDE.md"))
+        check("pane: agents empty at start", pn_["spawns"] == {"live": [], "rows": [], "totals": {"spawns": 0, "tokens": 0, "usd": 0.0, "base_usd": 0.0, "saved_pct": 0, "open_fail": 0, "base_label": "Opus 5.5", "by_model": [], "sessions": 0}})
         # post: a sync spawn, a background spawn; stop closes the background one
         okrep = "STATUS: done\nCONFIDENCE: high\nFACTS:\n- src/a.cs:1 — x\nGAPS: none"
         pa_ = lambda **kw: dict(agent("haiku", "low", cwd=pd, **kw), session_id=ps)
@@ -4330,7 +4795,7 @@ def main():
         bgd = dict(agent("sonnet", "medium", "abofles:abofles-worker", prompt="abofles: Unit Test / W · T2\nwrite the cap test\nLine cap: 30", cwd=pd), session_id=ps, tool_response={"status": "async_launched", "agentId": "bgagent1"})
         run("post", bgd, led)
         pn_ = gstate(ps)["pane"]
-        check("pane: a background agent is in live (side, model, effort, description, ts) and in rows as pending", len(pn_["spawns"]["live"]) == 1 and set(pn_["spawns"]["live"][0]) == {"side", "model", "effort", "description", "ts"}
+        check("pane: a background agent is in live (side, model, effort, description, ts) and in rows as pending", len(pn_["spawns"]["live"]) == 1 and set(pn_["spawns"]["live"][0]) == {"side", "model", "effort", "description", "ts", "agent_id"} and pn_["spawns"]["live"][0]["agent_id"] == "bgagent1"
               and pn_["spawns"]["live"][0]["model"] == "sonnet" and pn_["spawns"]["rows"][-1]["status"] == "pending")
         run("stop", {"session_id": ps, "cwd": pd, "agent_id": "bgagent1", "last_assistant_message": "STATUS: done\nCONFIDENCE: medium\nCHANGED:\n- a.cs — cap\nRAN: ok\nLEFT: none"}, led)
         pn_ = gstate(ps)["pane"]
@@ -4365,7 +4830,7 @@ def main():
         px = stx["pane"]["spawns"]
         check("pane: rows are the last 30 ledger rows, oldest first", len(px["rows"]) == 30 and px["rows"][0]["ts"] == 1010 and px["rows"][-1]["ts"] == 1039)
         check("pane: topic, description and task are clipped to PANE_TEXT characters", all(len(r[k]) <= HG.PANE_TEXT for r in px["rows"] for k in ("topic", "description", "task")))
-        check("pane: totals are the sums over all 40 rows (as bill.py), saved_pct from the real dollars", {k: v for k, v in px["totals"].items() if k not in ("by_model", "base_label")} == {"spawns": 40, "tokens": 40000, "usd": 0.4, "base_usd": 1.6, "saved_pct": 75, "open_fail": 0})
+        check("pane: totals are the sums over all 40 rows (as bill.py), saved_pct from the real dollars", {k: v for k, v in px["totals"].items() if k not in ("by_model", "base_label")} == {"sessions": 0, "spawns": 40, "tokens": 40000, "usd": 0.4, "base_usd": 1.6, "saved_pct": 75, "open_fail": 0})
         check("pane: totals carry the spend per model (label, agents, tokens, usd, % of the spend) and the baseline's label", px["totals"]["by_model"] == [{"model": "haiku", "label": "Haiku 5.5", "spawns": 40, "tokens": 40000, "usd": 0.4, "pct": 100}] and px["totals"]["base_label"] == "Opus 5.5")
         mixed_ = [{"ts": 1, "model": "haiku", "usd": 0.1, "base_usd": 0.4, "tokens": 10, "topic": "A", "verdict": "FAIL", "resolved": True},
                   {"ts": 2, "model": "sonnet", "usd": 0.3, "base_usd": 0.6, "tokens": 10, "topic": "B", "verdict": "FAIL"},
@@ -4420,7 +4885,7 @@ def main():
               len(hl) == 2 and "1K tok" in hl[0] and "$0.01" in hl[0] and "saved 75%" in hl[0] and "partial" in hl[1] and "low" in hl[1] and "saved 50%" in hl[1])
         check("bill --history: the totals line carries the same sums as the pane payload",
               any("Total: " in l and "· 3K tokens · $0.04 (same tokens on Opus 5.5 · High: $0.10) · saved 60% · 1 open FAIL" in l for l in bh)
-              and {k: v for k, v in HG.history_totals([json.loads(l) for l in Path(led, "histsess.jsonl").read_text().splitlines()]).items() if k not in ("by_model", "base_label")} == {"spawns": 2, "tokens": 3000, "usd": 0.04, "base_usd": 0.1, "saved_pct": 60, "open_fail": 1})
+              and {k: v for k, v in HG.history_totals([json.loads(l) for l in Path(led, "histsess.jsonl").read_text().splitlines()]).items() if k not in ("by_model", "base_label")} == {"spawns": 2, "tokens": 3000, "usd": 0.04, "base_usd": 0.1, "saved_pct": 60, "open_fail": 1, "sessions": 0})
         check("commands: /abofles:history runs bill.py --history; /abofles:pane names the mod and falls back to memo.py show + bill.py --history",
               "bill.py\" --history" in (HOOK.parent.parent / "commands" / "history.md").read_text() and (lambda t: "abofles-guide" in t and "memo.py\" show" in t and "bill.py\" --history" in t)((HOOK.parent.parent / "commands" / "pane.md").read_text()))
         check("commands: /abofles:pane tells the user to type /abofles-pane and prints the text only when the mod is not enabled",
@@ -4473,10 +4938,10 @@ def main():
             check("state and ledger folders are owner-only: an older 755 folder is tightened, a new one is made 700", pdir_.stat().st_mode & 0o777 == 0o700 and nd_.stat().st_mode & 0o777 == 0o700)
         before_ = f1.read_bytes(); r_ = ovrun(["set", "--scope", "project", "--cwd", str(d1)], {"set": {"Pace": ""}})
         check("overrides set: removing a key that is not there changes nothing", r_.returncode == 0 and f1.read_bytes() == before_)
-        r_ = ovrun(["set", "--scope", "project", "--cwd", str(d1)], {"set": {}, "raw": ["Topic: Billing = T3", "- Reviewers: FIN = tester"]})
+        r_ = ovrun(["set", "--scope", "project", "--cwd", str(d1)], {"set": {}, "raw": ["Bogus = 1", "Topic: Billing = T3", "- Reviewers: FIN = tester"]})  # 2.9.1: raw is every line the pane lists; one left out is removed
         t3_ = f1.read_text()
-        check("overrides set: raw lines replace only the complex-form lines (the old cell form goes), unknown key and simple keys stay", r_.returncode == 0 and "Unit Test / Work" not in t3_ and "- Topic: Billing = T3\n" in t3_ and "- Reviewers: FIN = tester\n" in t3_ and "- Bogus = 1" in t3_ and "- Receipt = short" in t3_ and "A note about the block." in t3_)
-        r_ = ovrun(["set", "--scope", "project", "--cwd", str(d1)], {"set": {}, "raw": ["Topic: Billing = T3", "Reviewers: FIN = tester"]})
+        check("overrides set: raw lines replace the block's raw lines (the old cell form goes), the unknown key sent along and simple keys stay", r_.returncode == 0 and "Unit Test / Work" not in t3_ and "- Topic: Billing = T3\n" in t3_ and "- Reviewers: FIN = tester\n" in t3_ and "- Bogus = 1" in t3_ and "- Receipt = short" in t3_ and "A note about the block." in t3_)
+        r_ = ovrun(["set", "--scope", "project", "--cwd", str(d1)], {"set": {}, "raw": ["Topic: Billing = T3", "Bogus = 1", "Reviewers: FIN = tester"]})
         r_ = ovrun(["set", "--scope", "project", "--cwd", str(d1)], {"set": {}, "raw": ["Bogus = 1", "Topic: Billing = T3", "Reviewers: FIN = tester"]})
         check("overrides set: an unknown line the pane lists with the forms may stay in raw (kept once, in place)", r_.returncode == 0 and f1.read_text() == t3_ and f1.read_text().count("- Bogus = 1") == 1)
         check("overrides set: the same raw lines again change nothing", r_.returncode == 0 and f1.read_text() == t3_)
@@ -5142,6 +5607,7 @@ def main():
         check("isolation: the first repository edited claims the memo of a non-git launch root", ist("isoDDDDD-4").get("project") == rB and not Path(NG, ".claude").exists())
         run("edit", {"session_id": "isoDDDDD-4", "cwd": str(NG), "tool_name": "Edit", "tool_input": {"file_path": str(RA / "k.py")}}, ledi)
         check("isolation: ... a later edit elsewhere does not take it away (no lead)", ist("isoDDDDD-4").get("project") == rB)
+        open_task("isoDDDDD-4", str(NG), ledi)
         run("receipt", {"session_id": "isoDDDDD-4", "cwd": str(NG), "stop_hook_active": False, "last_assistant_message": "🧾 **1 Agent · 1 u · Saved 1%** vs Opus 5.5\n- `done` → jamkhana work\n- `check` → ok\n- `open` → owner decision: keep the jamkhana rule?"}, ledi)
         nbd_ = "\n".join(needs(RB))
         check("isolation: the DRP case — a receipt of a session launched in a non-git folder lands in the repository it worked in, tagged p:RB (not the launch folder)",
@@ -5172,6 +5638,28 @@ def main():
         o3_ = M.other_projects(str(RA), st=sc_st)
         check("isolation: other_projects is cached in the session state for 10 minutes (no re-read), then read again",
               o1_[0] and o1_ == o2_ and o3_[0][0][3] == o1_[0][0][3] + 1 and json.loads(json.dumps(sc_st))["other_projects"]["me"] == rA)
+        # 2.9.1: need_open picks the projects with an open item before the limit; a newer same-minute crowd with nothing open never pushes them out
+        po_ = Path(tempfile.mkdtemp(prefix="aaopen"))
+        M.memo_needs(str(po_), "crowdopen", "owner decision: x?")
+        crowd_ = {os.path.realpath(str(po_)): {"name": "aa_open", "memo": str(M.memo_path(str(po_))), "updated": "2026-11-18 12:17"}}
+        time.sleep(0.01)
+        for i_ in range(6):
+            d_ = Path(tempfile.mkdtemp(prefix="zzcrowd"))
+            M.memo_journal(str(d_), f"crowd{i_}", {"header": "1 Agent", "done": "d", "items": {}})
+            crowd_[os.path.realpath(str(d_))] = {"name": "zz%d" % i_, "memo": str(M.memo_path(str(d_))), "updated": "2026-11-18 12:17"}
+        old_reg_, old_sd_ = M.registry_read, M.STATE_DIR
+        try:
+            M.registry_read = lambda: crowd_
+            M.STATE_DIR = Path(tempfile.mkdtemp())
+            top_ = M._other_projects(os.path.realpath(str(RA)), 5)[0]
+            need_ = M._other_projects(os.path.realpath(str(RA)), 5, need_open=True)[0]
+        finally:
+            M.registry_read, M.STATE_DIR = old_reg_, old_sd_
+        check("2.9.1 other_projects: need_open keeps a project with an open item that 6 newer same-minute projects with none push past the limit",
+              len(top_) == 5 and "aa_open" not in [t[0] for t in top_] and [t[0] for t in need_] == ["aa_open"] and need_[0][3] == 1)
+        st_h = {"task_started": 5, "task_seq": 2, "spawns_since_receipt": 3, "receipt_unread": {"task": [5, 2], "spawns": 3}}
+        check("2.9.1 receipt held: the one refusal of an unread receipt holds the task against the context watch until an agent starts or the task changes",
+              M.receipt_held(st_h) and not M.receipt_held(dict(st_h, spawns_since_receipt=4)) and not M.receipt_held(dict(st_h, task_seq=3)) and not M.receipt_held({}))
         os.environ["ABOFLES_STATE_DIR"] = state; os.environ["ABOFLES_CONFIG"] = str(Path(state, "config.json"))
 
         # ── memo health, memo on compact (PreCompact / PostCompact), Other items ──
@@ -5182,6 +5670,10 @@ def main():
         memo_repair_tests(check)
         os.environ["ABOFLES_STATE_DIR"] = state; os.environ["ABOFLES_CONFIG"] = str(Path(state, "config.json"))
         sub_session_tests(check)
+        receipt_gate_context_tests(check)
+        fixes_291_tests(check)
+        overrides_editor_tests(check)
+        git_header_291_tests(check)
 
     print(f"\n{'ALL PASS' if not fails else f'{fails} FAILED'}")
     sys.exit(1 if fails else 0)

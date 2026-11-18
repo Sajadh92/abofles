@@ -2,10 +2,11 @@
 """Abo Fles overrides: read and write the `## abofles overrides` block (the Abo Fles pane's editor runs this).
 
     overrides.py get --json [--session S] [--cwd D]
-        prints the pane's overrides payload: {files, keys: [{key, kind, options, value, source, default}], raw: [{line, source}]}
+        prints the pane's overrides payload: {files, keys: [{key, kind, options, value, source, default}], raw: [{line, source, path}]}
     overrides.py set --scope project|user [--session S] [--cwd D]      stdin: {"set": {"Key": "value" | ""}, "raw": ["Topic: X = T3", …]}
-        edits the block in place (a new key is appended, "" removes the key), `raw` replaces only the complex-form lines of the block;
-        everything outside the block, unknown keys and prose stay byte for byte. Prints the new `get` JSON.
+        edits the block in place (a new key is appended, "" removes the key, in every project file for project scope), `raw` replaces the
+        block's lines that are no simple key (the complex forms; a typo or note left out of it is removed); everything outside the block and
+        the simple keys not in `set` stay byte for byte. Prints the new `get` JSON.
 
 Project scope = the project's CLAUDE.md or .claude/CLAUDE.md, whichever already holds the block (else CLAUDE.md); user scope =
 ~/.claude/CLAUDE.md. Bad input: one line on stderr, exit 2. Acts on the session you type in (see agents.py).
@@ -25,7 +26,7 @@ def _KEY_LINE(key):
     """`- Key = value` (also `*` / `+` bullets and the key's old name): groups bullet, name, ` = `, value, trailing space."""
     names = "|".join(re.escape(n) for n in (key, H.OLD_KEY_NAMES.get(key)) if n)
     return re.compile(r"^(\s*(?:-\s*|[*+]\s+))(" + names + r")(\s*=\s*)(.+?)(\s*)$", re.I)
-_EXTRA = {"Break": ("off",), "Loop guard": ("off",), "Context stop": ("off",), "Sub sessions": ("off",)}  # a number key that also takes a word (the hooks also read none and 0 as off)
+_OFF_KEYS = ("Break", "Loop guard", "Context stop", "Sub sessions", "Context marks")  # keys that also take off: every OFF_WORDS word is written `off` (Sub sessions = 0 is its own value: no sub session)
 MAX_VALUE = 500  # characters per value or line: an override is one short line
 BOM = b"\xef\xbb\xbf"
 
@@ -35,7 +36,8 @@ class Bad(Exception):
 
 
 def clean_value(key, spec, value):
-    """The value as it is written, or Bad. Select: an option (Agents also a number, Receipt also `savings N`); number: an integer; list: integers (comma-separated)."""
+    """The value as it is written, or Bad. Select: an option (Agents also a number, Receipt also `savings N`); number: an integer (Context stop:
+    context_stop_value); list: integers (comma-separated). A key of _OFF_KEYS writes every OFF_WORDS word as `off`, as the hooks read it."""
     v = " ".join(str(value).split())
     if "\n" in str(value).strip() or "\r" in str(value).strip():
         raise Bad(f"{key}: one line only")
@@ -51,24 +53,44 @@ def clean_value(key, spec, value):
         if key == "Receipt" and re.fullmatch(r"savings\s+\d+", low):
             return "savings " + str(int(low.split()[1]))
         raise Bad(f"{key}: '{v}' is not one of {', '.join(opts)}" + (" or a number N" if key == "Agents" else " or 'savings N'" if key == "Receipt" else ""))
+    zero = re.fullmatch(r"0+", v) is not None
+    if key in _OFF_KEYS and (v.lower() in H.OFF_WORDS or zero) and not (key == "Sub sessions" and zero):
+        return "off"
+    if key == "Context stop":
+        return context_stop_value(v)
     if kind == "number":
         if re.fullmatch(r"\d+", v):
             return str(int(v))
-        if key == "Context stop" and re.fullmatch(r"\d+\s*[kKmM]", v):  # K tokens: `650K`, `1M` read too
-            return str(int(v[:-1])) + v[-1].upper()
-        if v.lower() in _EXTRA.get(key, ()):
-            return v.lower()
-        raise Bad(f"{key}: '{v}' is not a whole number" + (" or off" if key in _EXTRA else ""))
+        raise Bad(f"{key}: '{v}' is not a whole number" + (" or off" if key in _OFF_KEYS else ""))
     if kind == "list":
         parts = [p.strip() for p in v.split(",")]
         if not all(re.fullmatch(r"\d+", p) for p in parts) or (key == "Agent budgets" and len(parts) != 4):
-            raise Bad(f"{key}: '{v}' is not " + ("four whole numbers a, b, c, d" if key == "Agent budgets" else "whole numbers, comma-separated"))
+            raise Bad(f"{key}: '{v}' is not " + ("four whole numbers a, b, c, d" if key == "Agent budgets" else "whole numbers, comma-separated" + (" or off" if key in _OFF_KEYS else "")))
         return ", ".join(str(int(p)) for p in parts)
     if not v:
         raise Bad(f"{key}: empty value (use \"\" to remove the key)")
     if key in ("Main session", "Sub session") and not H.pick_of(v):
         raise Bad(f"{key}: '{v}' is not a model and effort, e.g. opus.medium")
     return v
+
+
+def _num(x):
+    """1.50 -> `1.5`, 650.0 -> `650`: no exponent, no trailing zeros."""
+    return f"{x:.6f}".rstrip("0").rstrip(".")
+
+
+def context_stop_value(v):
+    """Context stop as written: `N` / `NK` are K tokens (`650` -> `650K`), `NM` and decimals with K or M are kept (`1.5m` -> `1.5M`), a bare
+    whole number of 10000 or more is tokens (`600000` -> `600K`); else Bad."""
+    m = re.fullmatch(r"(\d+(?:\.\d+)?)\s*([kKmM]?)", v)
+    if not m or (not m.group(2) and "." in m.group(1)):
+        raise Bad(f"Context stop: '{v}' is not N, NK, NM (e.g. 650K, 1.5M) or off")
+    n, unit = float(m.group(1)), m.group(2).upper()
+    if n == 0:
+        return "off"
+    if not unit:
+        return f"{_num(n / 1000)}K" if n >= 10000 else f"{int(n)}K"
+    return f"{_num(n)}{unit}"
 
 
 def bullet(line):
@@ -80,9 +102,15 @@ def is_complex(content):
     return any(r.match(content) for r in H.COMPLEX_FORMS)
 
 
+def same(a, b):
+    """Two raw lines are one line whatever their spacing: the pane sends them with the spaces folded."""
+    return " ".join(a.split()) == " ".join(b.split())
+
+
 def edit_text(txt, sets, raw):
     """The new file text: `sets` {key: value | ""} edited in place, appended (first block) or removed; `raw` (None: untouched) replaces the
-    complex-form lines of the blocks — a line already there and still wanted stays where it is. No block yet and something to add: a new one."""
+    lines of the blocks the pane lists as raw (every bullet that is no simple key: the complex forms, typos, notes) — a line already there and
+    still wanted stays where it is, one missing from `raw` is removed. No block yet and something to add: a new one."""
     nl = "\r\n" if "\r\n" in txt else "\n"
     lines = txt.splitlines(True)
     spans = lambda: H.override_spans([l.rstrip("\r\n") for l in lines])
@@ -101,11 +129,12 @@ def edit_text(txt, sets, raw):
         else:
             adds.append(f"- {key} = {val}")
     if raw is not None:
-        old = [(i, bullet(lines[i])) for i in inside() if bullet(lines[i]) is not None and is_complex(bullet(lines[i]))]
+        old = [(i, bullet(lines[i])) for i in inside() if bullet(lines[i]) is not None and H.simple_key(bullet(lines[i])) is None]
         want, drop = list(raw), []
         for i, c in old:
-            if c in want:
-                want.remove(c)
+            hit = next((w for w in want if same(w, c)), None)
+            if hit is not None:
+                want.remove(hit)
             else:
                 drop.append(i)
         if old and want:  # next to the complex lines already there
@@ -224,8 +253,34 @@ def session_of(args):
     return cwd, sid, st, H.project_root({"cwd": cwd}, st)
 
 
+def raw_lines(root):
+    """[(line, source, path)] of the lines the pane lists as raw (as pane_overrides does), each with the file it is in."""
+    return [(m.group(1), src, str(path)) for src, path, txt in H.override_blocks(root) for l in txt.splitlines()
+            for m in [H._OVERRIDE_LINE.match(l)] if m and H.simple_key(m.group(1)) is None]
+
+
 def payload(root, sid):
-    return H.pane_overrides(root, sid)
+    """pane_overrides, each raw line with its file (`path`): the editor sends a file only its own lines."""
+    p = H.pane_overrides(root, sid)
+    p["raw"] = [{"line": l, "source": s, "path": f} for l, s, f in raw_lines(root)]
+    return p
+
+
+def project_files(root):
+    """The project files override_blocks reads, in its order: a reset must reach the key in each, or the next one still sets it."""
+    return [Path(path) for src, path, _ in H.override_blocks(root) if src == "project"]
+
+
+def read_text(path):
+    """(the bytes, None when missing; the text, a BOM left out) or Bad."""
+    try:
+        b = path.read_bytes()
+    except FileNotFoundError:
+        b = None
+    try:
+        return b, (b or b"").decode("utf-8-sig")  # a BOM is kept on the write
+    except UnicodeDecodeError:
+        raise Bad(f"{path.name} is not UTF-8 text — edit it by hand")
 
 
 def main():
@@ -241,26 +296,29 @@ def main():
             raise Bad("usage: overrides.py get --json | set --scope project|user  (stdin JSON {set, raw})")
         sets, raw = read_request()
         path = H.override_target(scope, root)
-        try:
-            old_b = path.read_bytes()
-        except FileNotFoundError:
-            old_b = None
-        try:
-            old = (old_b or b"").decode("utf-8-sig")  # a BOM is kept on the write
-        except UnicodeDecodeError:
-            raise Bad(f"{path.name} is not UTF-8 text — edit it by hand")
+        old_b, old = read_text(path)
         if raw is not None:  # a line that is no complex form must already be in the block (an unknown key the pane lists): it stays where it is
             lines = old.splitlines()
-            unknown = {bullet(lines[i]) for i in H.override_indexes(lines) if bullet(lines[i]) is not None and H.simple_key(bullet(lines[i])) is None and not is_complex(bullet(lines[i]))}
+            mine = [bullet(lines[i]) for i in H.override_indexes(lines) if bullet(lines[i]) is not None and H.simple_key(bullet(lines[i])) is None]
+            elsewhere = [l for l, s, f in raw_lines(root) if s == scope and Path(f) != path]  # the other project file's lines: an older pane sends them too
+            raw = [c for c in raw if any(same(c, m) for m in mine) or not any(same(c, e) for e in elsewhere)]
             for c in raw:
                 if len(c) > MAX_VALUE:
                     raise Bad(f"'{c[:40]}…' is longer than {MAX_VALUE} characters")
-                if not is_complex(c) and c not in unknown:
+                if not is_complex(c) and not any(same(c, m) for m in mine):
                     raise Bad(f"'{c[:40]}' is not an override form")
-            raw = [c for c in raw if is_complex(c)]
-        new = edit_text(old, sets, raw)
-        if new != old:
-            write_atomic(path, (BOM if (old_b or b"").startswith(BOM) else b"") + new.encode("utf-8"), old_b, inside=root if scope == "project" else None)
+        writes = [(path, sets, raw)]
+        if scope == "project":  # a reset takes the key out of every project file the hooks read
+            resets = {k: "" for k, v in sets.items() if v == ""}
+            writes += [(f, resets, None) for f in project_files(root) if f != path and resets]
+        edits = []  # every file read and edited before the first write: a file that cannot be read stops the save before anything is written
+        for f, sets_f, raw_f in writes:
+            b, t = (old_b, old) if f == path else read_text(f)
+            new = edit_text(t, sets_f, raw_f)
+            if new != t:
+                edits.append((f, (BOM if (b or b"").startswith(BOM) else b"") + new.encode("utf-8"), b))
+        for f, data, b in edits:
+            write_atomic(f, data, b, inside=root if scope == "project" else None)
         if sid:
             with H.state_lock(sid):
                 st = H.load_state(sid)
@@ -268,6 +326,8 @@ def main():
                     H.refresh_guide(root, st, sid)  # the guide (Guide = off) and the pane follow
                 except Exception:
                     H.refresh_pane(root, st, sid)
+                if isinstance(st.get("pane"), dict) and "overrides" in st["pane"]:
+                    st["pane"]["overrides"] = payload(root, sid)  # the raw lines with their files, as printed below
                 H.save_state(sid, st)
         print(json.dumps(payload(root, sid)))
         return 0

@@ -1,8 +1,9 @@
 import { expect, mock, test } from 'claude-code/testing'
 
 import { fmtWhen, headParts, receiptOf } from './pane'
-import { fmtElapsed, toolLabel } from './running'
-import { COLOR_PAIRS, CONTINUE_PROMPT, shortHash } from './shared'
+import { rawBase } from './editor'
+import { canStop, fmtElapsed, liveOf, toolLabel } from './running'
+import { cleanPane, COLOR_PAIRS, CONTINUE_PROMPT, shortHash } from './shared'
 
 const SURFACES = ['terminal', 'desktop'] as const
 const NOW = 1_700_000_000 // epoch seconds the mocked clock stands at
@@ -607,7 +608,7 @@ for (const surface of SURFACES) {
     expect(opts.map(o => o.label ?? o.value)).toEqual(['default (full)', 'full', 'short', 'custom value']) // the default named; Receipt also takes `savings N`
     expect(await has(ui, 'sel:Parallel')).toBe(false) // a number is an Input
     expect(await propOf(ui, 'in:Parallel', 'placeholder')).toBe('default 3')
-    expect(await said(ui, /^Overrides$/)).toBe(true)
+    expect(await labelOf(ui, 'back')).toBe('‹ Overrides') // one label: the desktop drops styled Text inside a Button
     await ui.select({ key: 'sel:Receipt', value: 'full' })
     expect(await valueOf(ui, 'sel:Receipt')).toBe('full')
     expect(await said(ui, /^1 unsaved$/)).toBe(true)
@@ -939,6 +940,14 @@ for (const surface of SURFACES) {
     expect(await labelOf(ui, 'more:history')).toBe('Show all 8')
     await ui.press({ key: 'more:history' })
     expect(await said(ui, /^step 0$/)).toBe(true)
+    await ui.unmount()
+  })
+
+  test(`${surface}: History's Show all counts the Session rows too (totals.sessions), not only the agents`, async ($, on) => {
+    const rows = Array.from({ length: 8 }, (_, i) => ({ ...ROWS[1], ts: NOW - 1000 + i, description: `step ${i}`, task: 'Ship it' }))
+    await harness($, on, { guide: guideOf([item()]), pane: panePayload({ spawns: { live: [], rows, totals: { spawns: 6, sessions: 4, tokens: 1, usd: 0, base_usd: 0, saved_pct: 0, open_fail: 0 } } }) })
+    const ui = await mountPane($, surface, { bodyColumns: 160 })
+    expect(await labelOf(ui, 'more:history')).toBe('Show all 10') // 6 agents + 4 sub sessions; before, max(6, 8 rows) = 8
     await ui.unmount()
   })
 
@@ -1371,7 +1380,7 @@ for (const surface of SURFACES) {
     await harness($, on, ovState(ovKeys([cap, routing])))
     const ui = await mountEditor($, surface)
     expect(await said(ui, /^Sub sessions$/)).toBe(true)
-    expect(await said(ui, /^Open sub sessions one session may start; off = no cap$/)).toBe(true)
+    expect(await said(ui, /^Open sub sessions one session may start; 0 = none allowed; off = no cap$/)).toBe(true)
     expect(await said(ui, /^Session routing$/)).toBe(true)
     expect(await said(ui, /^on: a sub session must carry the routed model and effort; warn: note only; off$/)).toBe(true)
     expect(await propOf(ui, 'in:Sub sessions', 'placeholder')).toBe('default 3')
@@ -1762,7 +1771,7 @@ test('a running agent: its side, ask, last tool, model, tool count, tokens and e
   expect(await said(home, /^1$/)).toBe(true) // the title says Running: the pill holds the count
   expect(await said(home, /^Read html\.ts$/)).toBe(true)
   expect(await has(home, 'open:a1')).toBe(true)
-  expect(await has(home, 'stop:a1')).toBe(true)
+  expect(await has(home, 'stop:a1')).toBe(false) // a foreground agent: TaskStop takes background work and named agents only
   expect(calls.map(c => c.tool)).toEqual(['Read']) // nothing but the agent's own tool ran
   // the agent ends: its row and its notes go
   list.value = []
@@ -2347,4 +2356,86 @@ test('Needs you lists its items with a bullet: the memo\'s item number is not sh
     expect(await said(ui, /^4$/)).toBe(false)
     await ui.unmount()
   }
+})
+
+// ---- 2.9.1: the overrides editor's files, Running's agent rows and Stop
+
+test('two project files: Other overrides edits (and Save sends) only the lines of the file Save writes to; lines with no file keep the old reading', () => {
+  const ov = (raw: object[]) => ({ files: { project: '/proj/CLAUDE.md', user: '/home/.claude/CLAUDE.md' }, keys: [], raw }) as any
+  const two = [{ line: 'Topic: A = T2', source: 'project', path: '/proj/CLAUDE.md' }, { line: 'Topic: B = T3', source: 'project', path: '/proj/.claude/CLAUDE.md' }, { line: 'Topic: U = T1', source: 'user', path: '/home/.claude/CLAUDE.md' }]
+  expect(rawBase(ov(two), 'project')).toEqual(['Topic: A = T2'])
+  expect(rawBase(ov(two), 'user')).toEqual(['Topic: U = T1'])
+  expect(rawBase(ov([{ line: 'Topic: A = T2', source: 'project' }, { line: 'Topic: B = T3', source: 'project' }]), 'project')).toEqual(['Topic: A = T2', 'Topic: B = T3'])
+})
+
+test('two agents with the same ask each get their own ledger row by agent id; a row with no id is matched by its ask, once', () => {
+  const agents = [{ id: 'a1', description: 'build the card' }, { id: 'a2', description: 'build the card' }, { id: 'a3', description: 'check it' }, { id: 'a4', description: 'check it' }, { id: 'a5', description: 'build the card' }]
+  const live = [
+    { side: 'Work', model: 'sonnet', effort: 'high', description: 'build the card', ts: NOW, agent_id: 'a2' },
+    { side: 'Verify', model: 'opus', effort: 'high', description: 'build the card', ts: NOW, agent_id: 'a1' },
+    { side: 'Read', model: 'haiku', effort: 'low', description: 'check it', ts: NOW },
+    { side: 'Plan', model: 'opus', effort: 'high', description: 'check it', ts: NOW, agent_id: null },
+  ]
+  const m = liveOf(agents, live)
+  expect(['a1', 'a2', 'a3', 'a4', 'a5'].map(id => m.get(id)?.side)).toEqual(['Verify', 'Work', 'Read', 'Plan', undefined]) // a5: both rows of its ask name other agents
+})
+
+test('Stop shows only for an agent TaskStop can stop: a named, teammate, plugin-started or background one, not a foreground agent', async ($, on) => {
+  const list = { value: [
+    { id: 'f1', description: 'in the foreground', type: 'general-purpose', status: 'running' },
+    { id: 'n1', description: 'named one', type: 'general-purpose', status: 'running', name: 'scout' },
+    { id: 't1', description: 'a teammate', type: 'teammate', status: 'running', teammateId: 'tm@team' },
+    { id: 'p1', description: 'plugin started', type: 'general-purpose', status: 'running', spawnedBy: 'other' },
+    { id: 'b1', description: 'in the background', type: 'general-purpose', status: 'running' },
+  ] }
+  workOn(on, list)
+  await harness($, on, { guide: guideOf([item()]), pane: panePayload() })
+  await $.classic.Stop({ stop_hook_active: false, background_tasks: [{ id: 'b1', type: 'subagent', status: 'running', description: 'in the background', agent_type: 'general-purpose' }] } as never)
+  for (const surface of SURFACES) {
+    const ui = surface === 'desktop' ? await mountDesk($, 'running') : await mountRaw($, 'terminal')
+    if (surface === 'terminal' && (await labelOf(ui, 'fold-caret:running')) === '▸') await ui.press({ key: 'fold:running' })
+    expect([surface, await has(ui, 'stop:f1')]).toEqual([surface, false])
+    for (const id of ['n1', 't1', 'p1', 'b1']) expect([surface, id, await has(ui, `stop:${id}`)]).toEqual([surface, id, true])
+    expect([surface, await has(ui, 'open:f1')]).toEqual([surface, true]) // its transcript still opens
+    await ui.unmount()
+  }
+  // a pending ledger row with the agent's id is a background agent's; a row matched by its ask alone says nothing
+  const row = { side: 'Work', model: 'sonnet', effort: 'high', description: 'x', ts: NOW }
+  expect([canStop({ id: 'l1' }, [], { ...row, agent_id: 'l1' }), canStop({ id: 'l2' }, [], row), canStop({ id: 'l3' }, [], undefined)]).toEqual([true, false, false])
+})
+
+test('a command put in the background while a Stop reads the agent list stays: the Stop\'s task list is older than it', async ($, on) => {
+  let gate: Promise<void> | null = null
+  let reached = false
+  on('agent.list', async () => {
+    if (gate) {
+      const g = gate
+      gate = null
+      reached = true
+      await g
+    }
+    return { value: [] }
+  })
+  on('tool.call', () => ({ result: { backgroundTaskId: 'n1' }, text: 'started' }))
+  on('classic.Stop', () => ({}))
+  const { clock } = await harness($, on, { guide: guideOf([item()]), pane: panePayload() })
+  let release = () => undefined as void
+  gate = new Promise<void>(r => (release = r))
+  const stop = $.classic.Stop({ stop_hook_active: false, background_tasks: [] } as never)
+  for (let i = 0; i < 200 && !reached; i++) await Promise.resolve()
+  expect(reached).toBe(true)
+  await clock.advance(1000)
+  await $.tool.call({ tool: 'Bash', command: 'sleep 60', description: 'started meanwhile', run_in_background: true } as never)
+  release()
+  await stop
+  const ui = await mountDesk($, 'running')
+  expect(await said(ui, /^started meanwhile$/)).toBe(true)
+  await ui.unmount()
+})
+
+test("the payload keeps a live row's agent_id and the Session count from newer hooks; an empty agent_id is dropped", () => {
+  const base = panePayload()
+  const p = cleanPane({ ...base, spawns: { ...base.spawns, live: [{ side: 'Work', model: 'opus', effort: 'high', description: 'x', ts: 1, agent_id: 'abc' }, { side: 'Read', model: 'haiku', effort: 'low', description: 'y', ts: 2, agent_id: '' }], totals: { ...base.spawns.totals, sessions: 3 } } })
+  expect(p?.spawns.live.map(l => l.agent_id ?? null)).toEqual(['abc', null])
+  expect(p?.spawns.totals.sessions).toBe(3)
 })

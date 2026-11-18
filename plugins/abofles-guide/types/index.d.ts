@@ -50,7 +50,7 @@ export type PaneDecision = { ts: string; q: string; a: string; sid: string; othe
 
 export type PaneDecisions = { you: PaneDecision[]; judge: PaneDecision[]; n_you: number; n_judge: number; others?: { sessions: number; projects: number } | null; others_rows?: PaneDecision[] } // newest first, at most 50 per group; others: left out (Other items = hide), others_rows: drawn only after Show others
 
-export type PaneLive = { side: string; model: string; effort: string; description: string; ts: number | null } // ts: epoch seconds
+export type PaneLive = { side: string; model: string; effort: string; description: string; ts: number | null; agent_id?: string } // ts: epoch seconds; agent_id: newer hooks
 
 export type PaneRow = {
   ts: number | null
@@ -72,7 +72,7 @@ export type PaneRow = {
 
 export type PaneModel = { model: string; label: string; spawns: number; tokens: number; usd: number; pct: number } // pct: share of the spend
 
-export type PaneTotals = { spawns: number; tokens: number; usd: number; base_usd: number; saved_pct: number; open_fail: number; base_label: string; by_model: PaneModel[] }
+export type PaneTotals = { spawns: number; tokens: number; usd: number; base_usd: number; saved_pct: number; open_fail: number; base_label: string; by_model: PaneModel[]; sessions?: number } // sessions: Session rows (no agents), counted apart
 
 export type PaneSpawns = { live: PaneLive[]; rows: PaneRow[]; totals: PaneTotals } // rows: the last 30, oldest first
 
@@ -81,7 +81,7 @@ export type PaneOverrideKey = { key: string; kind: string; options: string[]; va
 export type PaneOverrides = {
   files: { project: string; user: string }
   keys: PaneOverrideKey[]
-  raw: { line: string; source: string }[] // override lines the table cannot show
+  raw: { line: string; source: string; path?: string }[] // override lines the table cannot show; path: the file it is in (newer hooks)
 }
 
 export type Pane = {

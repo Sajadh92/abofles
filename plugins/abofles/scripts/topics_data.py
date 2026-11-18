@@ -1093,7 +1093,7 @@ DOMAINS = [
             "Serverless & Function-based Architecture | T3 | serverless architecture, FaaS, event triggers, step functions, durable functions, cold start design",
             "Service Mesh, Sidecars & Service Communication | T3 | service mesh, Istio, Linkerd, sidecar, mTLS mesh, service to service, retries mesh",
             "API Gateway & Backend-for-Frontend | T3 | API gateway, BFF, aggregation layer, gateway routing, edge API, Kong, YARP, Ocelot",
-            "Multi-region, Active-active & Data Residency | T4 | multi region, active active, data residency, region failover, geo routing, latency based routing",
+            "Multi-region, Active-active & Data Residency | T4 | multi region, active active, data residency, region failover, geo routing, latency based routing | +compliance",
             "Resilience Patterns (bulkhead, circuit breaker, retry budgets) | T3 | bulkhead, circuit breaker, retry budget, timeout policy, graceful degradation, load shedding, resilience",
             "Consistency Models & Distributed Transactions | T4 | consistency, CAP, distributed transaction, two phase commit, saga vs 2PC, eventual consistency, strong consistency",
             "Scalability & Capacity Planning | T3 | scale, horizontal, bottleneck, capacity, sharding, load, scalability, stateless",

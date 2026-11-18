@@ -730,7 +730,7 @@ function spawnsHtml($: EngineInterface, ui: Ui, s: PaneSpawns, folds: Folds, loo
   b.history.forEach((c, i) => body.push(pic(ui, look, c, i === 0 ? ['History', 'newest first', ...alt, updated] : [])))
   body.push(
     buttonRow(ui, [
-      moreButton($, ui, folds, 'history', Math.max(t.spawns, s.rows.length), HISTORY_ROWS, look),
+      moreButton($, ui, folds, 'history', Math.max(t.spawns + (t.sessions ?? 0), s.rows.length), HISTORY_ROWS, look),
       <Button key="detail:spawns" label={glyph(look, GLYPH.detail, 'Full details')} variant="secondary" onPress={() => openDetail($, 'spawns')} />,
     ]),
   )
@@ -769,7 +769,7 @@ function spawnsCard($: EngineInterface, ui: Ui, s: PaneSpawns, folds: Folds, loo
         )}
       </Box>
     ))
-    parts.push(rule(ui, look, 'row divider', true), group(ui, heading(ui, 'History', 'newest first', undefined, { look, name: 'clock' }), [...daysOut, moreButton($, ui, folds, 'history', Math.max(t.spawns, s.rows.length), HISTORY_ROWS)]))
+    parts.push(rule(ui, look, 'row divider', true), group(ui, heading(ui, 'History', 'newest first', undefined, { look, name: 'clock' }), [...daysOut, moreButton($, ui, folds, 'history', Math.max(t.spawns + (t.sessions ?? 0), s.rows.length), HISTORY_ROWS)]))
   }
   if (ts > 0) parts.push(<Text size="caption" dimColor>{`Updated ${fmtStart(ts)} · refreshes when a turn ends`}</Text>)
   return card($, ui, { id: 'spawns', title: 'Agents', def: false, summary: spawnsSummary(s), tone: t.open_fail > 0 ? 'error' : undefined, folds, icon: 'fork', look }, <Box flexDirection="column" rowGap={1}>{parts}</Box>)
