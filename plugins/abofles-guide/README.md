@@ -86,7 +86,8 @@ first rows and `Show all N` (`Show fewer` to fold it back).
 - **Agents**: the saving first (`32% saved`, `$14.36 of $21.26 on Opus 5.5`), a meter split by model and a table with five titled
   columns (Model, Tokens, Agents, Cost, %; a pane too narrow for them puts the numbers under each model, each with its word), total Tokens, and Open FAIL in red when a FAIL is still open (one resolved by
   hand with evidence is not). History (newest first, five rows, then `Show all`) holds activity rows: the status dot
-  (green done/pass, red fail, amber partial/blocked, blue running), the side in semibold and the ask (two rows, then Read more), the
+  (green done/pass, red fail, amber partial/blocked, blue running; a status it does not know is grey with its word, never red), the side in
+  semibold (a sub session the main session started reads `🪟 Session`, its title as the ask) and the ask (two rows, then Read more), the
   cost at the right, and a muted line under them (`14:24 · Sonnet 5.5 · Medium · 810K tokens · PASS`; the status word only when it
   means something). History is grouped by day under a small `Today` / `Yesterday` / `Nov 3` caption. What `/abofles:history` prints
   (`Agents place = pane`, the default).
@@ -116,7 +117,7 @@ draft is kept). It edits the simple keys of the `## abofles overrides` block (th
 - Each setting has its own target, so a project value and an all-projects value can sit side by side. The project file wins
   over the user file when both set a key.
 - The keys in folding groups: **Session** (Main session, Sub session, Session cap, Context marks, Context stop, Continue after compact, Break, Pace), **Agents** (Agents,
-  Parallel, Agent budgets, Review gate, Review memory, Questions, Budget raise, Git guard), **Memo** (Judge notes, Memo agent, Memo agent every, Memo on compact, Archive items, Archive sessions, Other items, Memo repair), **Output** (Receipt, Guide, Resume, Language), **Where it shows**
+  Parallel, Agent budgets, Review gate, Review memory, Questions, Budget raise, Git guard, Sub sessions, Session routing), **Memo** (Judge notes, Memo agent, Memo agent every, Memo on compact, Archive items, Archive sessions, Other items, Memo repair), **Output** (Receipt, Guide, Resume, Language), **Where it shows**
   (Guide place, Resume place, Agents place, Running place, Receipt place); a key the table adds later goes to **More**. Each group's summary says
   `default`, how many keys a file sets, or how many are edited.
 - The groups and their settings have a line between them. Each key reads one thing per line: its name (`· edited` beside it

@@ -2,6 +2,12 @@
 
 All notable changes to the plugins in this marketplace.
 
+## abofles 2.9.0 · abofles-guide 0.11.0 — 2026-11-18
+
+- abofles: **sub sessions are routed like agents.** A sub session is a session the main session starts with the desktop app's `start_session`. Until now it took the main session's model and effort, the same waste the plugin stops for agents. Now a new matrix column, **Session**, picks them by the task's tier: Sonnet 5.5 · Medium at 🟢 and 🟡, Opus 5.5 · Medium at 🟠, Opus 5.5 · High at 🔴. The hook refuses a fresh start without that model and effort, and the reason gives the right ones. The brief opens with `abofles: <Topic> / Session · T<tier>`, and the session prints a `🪟 Session` route line first. A fork or a proposal-card start takes no model or effort, so after the start the hook asks the session to lower it with `set_session_model` and `set_session_effort`. The app cannot start a sub session above the main session's setting: the route line then says `Capped`, and the user can raise it. New key `Sub sessions = N | off` (default 3) caps the open sub sessions per session; an archived one does not count, and an unread app record never causes a refusal. New key `Session routing = on | warn | off` (default on). New form `Topic / Session = model·effort`. The user in chat wins, then `Topic / Session`, then `Sub session`, then the cell. Each start is a ledger row with the side `Session`.
+- abofles: the overrides editor now also saves `off` for `Loop guard` and `Context stop`, and `650K` or `1M` for `Context stop`. Before, it refused these values.
+- abofles-guide: **sub sessions in the pane.** The overrides editor has `Sub sessions` and `Session routing` in the Agents group. The Agents card and History show each sub session with the 🪟 `Session` side, next to the agents.
+
 ## abofles 2.8.0 · abofles-guide 0.10.0 — 2026-11-17
 
 - abofles: **the context watch warns without stopping the work.** Until now every mark stopped the session: it printed the block and started no new work. This was a problem with small marks (200, 250, 300) or a session left running while away. Now every mark only warns: the session prints the block and carries on. The work stops once, at the new key `Context stop`:

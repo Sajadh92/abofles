@@ -41,6 +41,15 @@
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/py\" --hook \"${CLAUDE_PLUGIN_ROOT}/hooks/run.py\" pre"
           }
         ]
+      },
+      {
+        "matcher": "mcp__ccd_session__start_session",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/py\" --hook \"${CLAUDE_PLUGIN_ROOT}/hooks/run.py\" session_pre"
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [
@@ -111,6 +120,15 @@
           {
             "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/py\" --hook \"${CLAUDE_PLUGIN_ROOT}/hooks/run.py\" post"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__ccd_session__start_session",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/py\" --hook \"${CLAUDE_PLUGIN_ROOT}/hooks/run.py\" session_post"
           }
         ]
       },

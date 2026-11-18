@@ -25,7 +25,7 @@ def _KEY_LINE(key):
     """`- Key = value` (also `*` / `+` bullets and the key's old name): groups bullet, name, ` = `, value, trailing space."""
     names = "|".join(re.escape(n) for n in (key, H.OLD_KEY_NAMES.get(key)) if n)
     return re.compile(r"^(\s*(?:-\s*|[*+]\s+))(" + names + r")(\s*=\s*)(.+?)(\s*)$", re.I)
-_EXTRA = {"Break": ("off",)}  # a number key that also takes a word
+_EXTRA = {"Break": ("off",), "Loop guard": ("off",), "Context stop": ("off",), "Sub sessions": ("off",)}  # a number key that also takes a word (the hooks also read none and 0 as off)
 MAX_VALUE = 500  # characters per value or line: an override is one short line
 BOM = b"\xef\xbb\xbf"
 
@@ -54,6 +54,8 @@ def clean_value(key, spec, value):
     if kind == "number":
         if re.fullmatch(r"\d+", v):
             return str(int(v))
+        if key == "Context stop" and re.fullmatch(r"\d+\s*[kKmM]", v):  # K tokens: `650K`, `1M` read too
+            return str(int(v[:-1])) + v[-1].upper()
         if v.lower() in _EXTRA.get(key, ()):
             return v.lower()
         raise Bad(f"{key}: '{v}' is not a whole number" + (" or off" if key in _EXTRA else ""))

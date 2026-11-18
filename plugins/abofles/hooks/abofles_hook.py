@@ -12,6 +12,8 @@
     abofles_hook.py qgate    -- PreToolUse(AskUserQuestion): deny a question no Judge/Explainer has seen (a re-ask of the same round passes)
     abofles_hook.py sendmsg  -- PostToolUse(SendMessage): a message to a Judge/Explainer unlocks one question
     abofles_hook.py edit     -- PostToolUse(Edit|Write|MultiEdit|NotebookEdit): count where edits land; move the memo to the repository most edits go to
+    abofles_hook.py session_pre  -- PreToolUse(start_session): the Sub sessions cap, then the Session cell's model and effort on a fresh start
+    abofles_hook.py session_post -- PostToolUse(start_session): one `Session` ledger row (status open until archived, then done; no agent); the set_session_model line
     abofles_hook.py tokens   -- CLI: print the context size of the newest session transcript (no stdin)
 
 The context watch runs only in `receipt` (Stop): a passed mark refuses the stop once so the block is the last thing
@@ -487,6 +489,8 @@ OVERRIDE_KEYS = {
     "Agents": {"kind": "select", "options": ["ask", "auto", "off"], "default": "ask"},  # or a fixed number N
     "Matrix": {"kind": "select", "options": ["quality", "economy"], "default": "quality"},  # quality: Opus writes, plans and analyses, Haiku/Sonnet read and verify; economy: the cells before 2.6 (Sonnet writes most code)
     "Parallel": {"kind": "number", "options": [], "default": "3"},
+    "Sub sessions": {"kind": "number", "options": [], "default": "3"},  # open (not archived) sub sessions one session may have started; at the cap start_session is refused; off = no cap
+    "Session routing": {"kind": "select", "options": ["on", "warn", "off"], "default": "on"},  # the start_session gate: on refuses a fresh start off its Session cell, warn only notes it, off says nothing
     "Budget raise": {"kind": "select", "options": ["auto", "ask"], "default": "auto"},  # auto: an over-budget spawn under an auto budget raises it (twice a task); ask: it is denied
     "Loop guard": {"kind": "number", "options": [], "default": "3"},  # rounds with no word from the user: the Nth FAIL of one check on one topic, or N Judges/Explainers with no question asked, stops the loop and opens the question gate; off = never
     "Git guard": {"kind": "select", "options": ["warn", "deny", "off"], "default": "warn"},  # a risky git command outside abofles-git: warn is a note, deny blocks it
@@ -518,6 +522,7 @@ _SIDES = r"(?:Read|Analy[sz]e|Plan|Work|Git|Scrum|Verify|Judge|Explain)"
 COMPLEX_FORMS = [re.compile(p, re.I) for p in (
     r"^.+?\s/\s" + _SIDES + r"\s+cap\s*=\s*\d+",  # Topic / Side cap = N
     r"^.+?\s/\s" + _SIDES + r"\s*=\s*\S",  # Topic / Side = model·effort
+    r"^.+?\s/\sSession\s*=\s*\S",  # Topic / Session = model·effort (a sub session's cell for this topic)
     r"^Topic:\s*.+?=\s*T[1-4]\b",  # Topic: Name = T#
     r"^Reviewers:\s*.+?=\s*\S",  # Reviewers: <Domain | Topic> = security, tester | none
     r"^Workflow:\s*.+?=\s*\S",  # Workflow: <Domain | Topic> = Read, Work, Verify
@@ -568,7 +573,7 @@ def override_known(key, v):
     if spec["kind"] == "number":
         if key == "Context stop":
             return bool(re.fullmatch(r"\d+[km]?", w)) or w in OFF_WORDS
-        return bool(re.match(r"\d+", w)) or (key in ("Break", "Loop guard") and w in OFF_WORDS)
+        return bool(re.match(r"\d+", w)) or (key in ("Break", "Loop guard", "Sub sessions") and w in OFF_WORDS)
     if spec["kind"] == "list":
         return len(re.findall(r"\d+", v or "")) >= (4 if key == "Agent budgets" else 1)
     if key in ("Main session", "Sub session"):
@@ -1093,20 +1098,30 @@ def session_pick(cwd, st, sid):
     if not cwd:
         return None
     sub_v = override_value(cwd, "Sub session")
-    v = sub_v if sub_v and is_sub_session(st, sid) else override_value(cwd, "Main session")
+    v = sub_v if sub_v and (st.get("sub_route") or is_sub_session(st, sid)) else override_value(cwd, "Main session")
     return pick_of(v)
+
+
+def sub_route_pick(cwd, st):
+    """(model, effort, tier) a sub session was routed to by its brief's header (kept at its first prompt), or None: no header, or a
+    `Sub session` key set (the owner's setting wins, session_pick answers)."""
+    r = st.get("sub_route")
+    if not isinstance(r, dict) or not r.get("model") or (cwd and pick_of(override_value(cwd, "Sub session"))):
+        return None
+    return r["model"], r.get("effort"), r.get("tier") or 2
 
 
 def main_hint_short(st, root=None, sid=""):
     """`suggest Opus 5.5 · Medium (now Fable 5.1 · Medium)` for the band's meter, from the session's current model and
     effort — None when they fit the owner's setting (Main session, Sub session), else the open task's tier, or the model is unknown."""
-    pick = session_pick(root, st, sid)
+    sub = sub_route_pick(root, st)
+    pick = sub[:2] if sub else session_pick(root, st, sid)
     t = st.get("main_tier") or st.get("task_tier_max") or 2
     sm, se = pick or MAIN_SUGGEST.get(t, ("opus", "medium"))
     cm, ce = st.get("main_model"), st.get("effort")
     if not cm or (cm == sm and (not ce or ce == se)):
         return None
-    return f"suggest {label(sm, se)}{', your setting' if pick else ''} (now {label(cm, ce) if ce else label(cm)})"
+    return f"suggest {label(sm, se)}{', your setting' if pick and not sub else ''} (now {label(cm, ce) if ce else label(cm)})"
 
 
 def guide_line_of(items):
@@ -1158,6 +1173,7 @@ PANE_RECEIPT = 3000  # a receipt line: every field of it, for its Full details p
 def history_totals(rows, base_model="opus", base_effort="high"):
     """The sums `bill.py` prints, for the pane and `bill.py --history`: agents, tokens, usd, base_usd (rows that carry them), saved_pct (real dollars
     when the transcripts gave usage, else the unit estimate against base_model·base_effort) and open_fail (FAIL verdicts no later PASS on the topic closed)."""
+    rows = [r for r in rows if r.get("side") != "Session"]  # a sub session's row is no agent: no spawn, no unit estimate (its cost is phase 2)
     real = [r for r in rows if r.get("tokens")]
     cost, base = sum(r.get("usd") or 0 for r in real), sum(r.get("base_usd") or 0 for r in real)
     u = sum(units(r.get("model"), r.get("effort")) for r in rows)
@@ -4533,7 +4549,7 @@ def reopen_row(sid, keys):
     keys = {k for k in keys if k}
     path = ledger_path(sid)
     rows = ledger_rows(sid)
-    idx = next((i for i in range(len(rows) - 1, -1, -1) if rows[i].get("agent_id") in keys or (rows[i].get("name") and rows[i].get("name") in keys)), None)
+    idx = next((i for i in range(len(rows) - 1, -1, -1) if rows[i].get("side") != "Session" and (rows[i].get("agent_id") in keys or (rows[i].get("name") and rows[i].get("name") in keys))), None)
     if idx is None or rows[idx].get("status") == "pending":
         return False
     row = rows[idx]
@@ -5085,6 +5101,12 @@ def main_line(st, tier, cwd=None, sid=""):
     cm, ce = st.get("main_model"), st.get("effort")
     if not cm:
         return None
+    sub = sub_route_pick(cwd, st)
+    if sub:
+        pm, pe, rt = sub
+        if cm == pm and (not ce or ce == pe):
+            return f"main: {label(cm, ce) if ce else label(cm)} fits this {tier_name(rt)} sub-session task" + ("" if ce else f" (routed effort {EFFORT_LABEL.get(pe, pe)}, yours unknown)")
+        return f"main: suggest {label(pm, pe)} for this {tier_name(rt)} sub-session task (now {label(cm, ce) if ce else label(cm) + ' · effort unknown'}). Switch in the model picker, or say \"keep\"."
     pick = session_pick(cwd, st, sid)
     if pick:
         pm, pe = pick
@@ -5269,6 +5291,388 @@ def topic_note(ti, cwd, sid):
         return None  # a re-run of the same side: escalation, not a leak
     return (f"abofles: {topic} / {side} at T{t} is {cell}; this agent runs {model}·{effort} ({PRICE[model] * EFFORT.get(effort, 1) / (PRICE[cm] * EFFORT.get(ce, 1)):.0f}× the cell). "
             f"Fine with a modifier on the route line (`User:`, `Scope`, `Project Override`); otherwise restart at the cell.")
+
+
+# ── Sub-session routing (docs/sub-session-routing.md): the desktop app's start_session gets a Session cell, a gate and a cap ──
+SESSION_TOOL = "mcp__ccd_session__start_session"
+SESSION_CELL = {1: ("sonnet", "medium"), 2: ("sonnet", "medium"), 3: ("opus", "medium"), 4: ("opus", "high")}  # a sub session orchestrates its own agents: routed by its task's tier, the same column under both matrices; never Fable
+MODEL_ID = {"haiku": "claude-haiku-5-5", "sonnet": "claude-sonnet-5-5", "opus": "claude-opus-5-5", "fable": "claude-fable-5-1"}  # the ids start_session and set_session_model take
+MODEL_RANK = {"haiku": 1, "sonnet": 2, "opus": 3, "fable": 4}
+EFFORT_RANK = {"low": 1, "medium": 2, "high": 3, "xhigh": 4, "max": 5}
+SESSION_ROW = "open"  # a Session ledger row's status while the sub session is not archived (it may be idle): no reader of `pending` (background_running, pending_count, Parallel, the Stop hook, the guide) sees it; `done` once archived
+SESSION_ROW_OLD = ("open", "running")  # `running`: the word rows written before 2.9.0's release carry
+SUB_SESSIONS_KEPT = 50  # starts kept in the state: the cap's fallback count when the app's records cannot be read
+SUB_SESSION_TTL = 24 * 3600  # a recorded start with no readable app record leaves the fallback count after this
+
+
+def parse_session_header(prompt):
+    """(topic, tier, rest of the line) of a start_session brief's first line `abofles: <Topic> / Session · T<tier>[ · modifiers]`, else None."""
+    first = (prompt or "").lstrip().splitlines()[0] if (prompt or "").strip() else ""
+    m = re.match(r"\s*abofles:\s*(.+?)\s*/\s*Session\b(.*)$", first, re.I)
+    if not m:
+        return None
+    t = re.search(r"\bT([1-4])\b", m.group(2))
+    return m.group(1).strip(), (int(t.group(1)) if t else None), m.group(2)
+
+
+def session_effort_word(e):
+    e = str(e or "").strip().lower()
+    return "xhigh" if e == "extra" else e
+
+
+def session_cell(cwd, topic, tier, header=""):
+    """(model, effort, source) a sub session of this topic and tier runs on: `User: <Model> · <Effort>` on the brief's header line >
+    `<Topic> / Session = model·effort` > `Sub session = model·effort` > the Session cell of the tier (5.1)."""
+    um = re.search(r"\bUser:\s*(.+)$", header or "", re.I)
+    if um:
+        parts = [x.strip() for x in um.group(1).split("·")]
+        pk = pick_of(" · ".join(parts[:2])) or pick_of(parts[0])
+        if pk:
+            return pk[0], pk[1], "User"
+    if cwd and topic:
+        pk = pick_of(override_value(cwd, f"{topic} / Session"))
+        if pk:
+            return pk[0], pk[1], f"{topic} / Session"
+    pk = pick_of(override_value(cwd, "Sub session")) if cwd else None
+    if pk:
+        return pk[0], pk[1], "Sub session"
+    m, e = SESSION_CELL.get(tier or 2, SESSION_CELL[2])
+    return m, e, "Session cell"
+
+
+def session_ceiling(cell, st):
+    """(model, effort, capped) a start can get: the app ignores a model or effort above the caller's, so a cell above the main session's
+    own setting is held at it (per part). The main's setting unknown: the cell as it is."""
+    m, e = cell
+    mm, me = st.get("main_model"), st.get("effort")
+    capped = False
+    if mm in MODEL_RANK and MODEL_RANK.get(m, 0) > MODEL_RANK[mm]:
+        m, capped = mm, True
+    if me in EFFORT_RANK and EFFORT_RANK.get(e, 0) > EFFORT_RANK[me]:
+        e, capped = me, True
+    return m, e, capped
+
+
+def session_route(cwd, st, ti):
+    """Everything the gate and the after-start step need from a start_session call: header, topic, tier, cell, the setting it may run on."""
+    prompt = str(ti.get("prompt") or "")
+    h = parse_session_header(prompt)
+    if not h:
+        return None
+    topic, tier, rest = h
+    if not tier:
+        info = (workflow_table().get("topics") or {}).get(topic) or {}
+        tier = info.get("tier") or 2
+    cm, ce, src = session_cell(cwd, topic, tier, rest)
+    rm, re_, capped = session_ceiling((cm, ce), st)
+    return {"topic": topic, "tier": tier, "cell": (cm, ce), "src": src, "need": (rm, re_), "capped": capped}
+
+
+def sub_session_cap(cwd):
+    """`- Sub sessions = N | off` (default 3): open sub sessions one session may have; None = no cap (off, none, 0)."""
+    w = first_word(override_value(cwd, "Sub sessions") if cwd else None)
+    if w in OFF_WORDS:
+        return None
+    m = re.match(r"\d+", w)
+    return int(m.group(0)) if m else int(OVERRIDE_KEYS["Sub sessions"]["default"])
+
+
+def session_routing(cwd):
+    return select_override(cwd, "Session routing") if cwd else "on"
+
+
+def app_records(needle=None):
+    """[record] of every app session record (all APP_SESSION_DIRS) whose bytes hold `needle`, or None when no records folder can be read."""
+    out, seen = [], False
+    nb = needle.encode() if needle else None
+    for base in APP_SESSION_DIRS:
+        try:
+            if not Path(base).is_dir():
+                continue
+            files = list(Path(base).glob("*/*/local_*.json"))
+        except OSError:
+            continue
+        seen = True
+        for f in files:
+            try:
+                raw = f.read_bytes()
+                if nb and nb not in raw:
+                    continue
+                d = json.loads(raw)
+            except (OSError, ValueError):
+                continue
+            if isinstance(d, dict):
+                out.append(d)
+    return out if seen else None
+
+
+def app_record_of(local_id):
+    """The app record named `<local_id>.json` (a session another one started), or None."""
+    if not re.fullmatch(r"local_[A-Za-z0-9_-]+", local_id or ""):
+        return None
+    for base in APP_SESSION_DIRS:
+        try:
+            for f in Path(base).glob(f"*/*/{local_id}.json"):
+                d = json.loads(f.read_bytes())
+                if isinstance(d, dict):
+                    return d
+        except (OSError, ValueError):
+            continue
+    return None
+
+
+def own_app_record(sid):
+    """This session's app record searched in every record (no APP_RECORDS_READ limit): the limited newest-first search missed it. None when not found."""
+    for d in app_records(sid) or ():
+        if d.get("cliSessionId") == sid or sid in (d.get("priorCliSessionIds") or []):
+            return d
+    return None
+
+
+def live_sub_starts(st, now=None):
+    """[name] of the starts this session recorded that may still be open: the cap's fallback count when the records cannot be read. Each start
+    with a readable app record leaves once that record says archived; one with no readable record leaves after SUB_SESSION_TTL (fail open).
+    The state's list shrinks with it."""
+    now = int(now or time.time())
+    keep = []
+    for x in st.get("sub_sessions") or []:
+        if not isinstance(x, dict) or x.get("closed"):
+            continue
+        rec = app_record_of(x.get("id"))
+        if rec is not None:
+            if rec.get("isArchived"):
+                continue
+        elif now - int(x.get("ts") or 0) > SUB_SESSION_TTL:
+            continue
+        keep.append(x)
+    st["sub_sessions"] = keep
+    return [x.get("name") or x.get("id") for x in keep]
+
+
+def open_sub_sessions(sid, st):
+    """([name], [archived local id]) of the sub sessions this session started, from the app's records: `spawnedFrom.sessionId` = this
+    session's own `local_…` id (its record: cliSessionId = sid). None when the records cannot be read or this session has none."""
+    me = st.get("local_id")
+    if not me:
+        rec = app_session_record(sid) or own_app_record(sid)
+        me = (rec or {}).get("sessionId") if isinstance((rec or {}).get("sessionId"), str) else None
+        if not me:
+            return None
+        st["local_id"] = me
+    recs = app_records(me)
+    if recs is None:
+        return None
+    names, gone = [], []
+    for d in recs:
+        sf = d.get("spawnedFrom")
+        if not isinstance(sf, dict) or sf.get("sessionId") != me:
+            continue
+        if d.get("isArchived"):
+            gone.append(d.get("sessionId"))
+        else:
+            names.append(str(sf.get("name") or d.get("title") or sf.get("title") or d.get("sessionId") or "?"))
+    return names, gone
+
+
+def close_session_rows(sid, done_ids):
+    """Session ledger rows of archived sub sessions go `done` (closed_by archived). Best effort; caller holds the state lock."""
+    done_ids = {x for x in done_ids or () if x}
+    if not done_ids:
+        return False
+    rows = ledger_rows(sid)
+    hit = False
+    for r in rows:
+        if r.get("side") == "Session" and r.get("status") in SESSION_ROW_OLD and r.get("agent_id") in done_ids:
+            r["status"], r["closed_by"], r["completed_ts"] = "done", "archived", int(time.time())
+            hit = True
+    if hit:
+        write_rows(ledger_path(sid), rows)
+    return hit
+
+
+def close_archived_sessions(sid, st, every=60):
+    """At a prompt: the open Session rows whose app record now says archived are closed (at most once a minute)."""
+    now = int(time.time())
+    if now - (st.get("sub_check_at") or 0) < every:
+        return
+    st["sub_check_at"] = now
+    ids = [r.get("agent_id") for r in ledger_rows(sid) if r.get("side") == "Session" and r.get("status") in SESSION_ROW_OLD]
+    if ids:
+        close_session_rows(sid, [i for i in ids if (app_record_of(i) or {}).get("isArchived")])
+
+
+def session_note(text):
+    print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": text}}, ensure_ascii=False))
+    sys.exit(0)
+
+
+def session_pre(data):
+    """PreToolUse on start_session: the cap (`Sub sessions`, open = not archived, also under abofles:skip), then the routing gate
+    (`Session routing`): a fresh local start must carry the Session cell's model and effort, held at the main session's own setting
+    (the app's ceiling). No header or abofles:skip: one note. A card (offer, own_initiative) starts nothing: no count, header only.
+    Fork, proposal_id and cloud take no model: allowed (cloud: a note). Any failure allows the start and says nothing."""
+    if data.get("tool_name") != SESSION_TOOL or in_subagent(data):
+        return
+    ti = data.get("tool_input") or {}
+    sid = data.get("session_id", "")
+    prompt = str(ti.get("prompt") or "")
+    card = str(ti.get("initiation") or "").lower() in ("offer", "own_initiative") and not ti.get("proposal_id")
+    skip = prompt.lstrip().startswith("abofles:skip")
+    with state_lock(sid):
+        st = load_state(sid)
+        cwd = project_root(data, st)
+        remember_transcript(data, st)
+        refresh_main_model(data, st)
+        mode = session_routing(cwd)
+        route = None if skip else session_route(cwd, st, ti)
+        cap = None if card else sub_session_cap(cwd)
+        live = None
+        if cap:
+            try:
+                found = open_sub_sessions(sid, st)
+            except Exception:
+                found = None
+            if found is not None:
+                live = found[0]
+                close_session_rows(sid, found[1])
+                gone = set(found[1])
+                st["sub_sessions"] = [x for x in st.get("sub_sessions") or [] if isinstance(x, dict) and x.get("id") not in gone]
+            else:
+                try:
+                    live = live_sub_starts(st)  # unreadable records: the starts this session recorded, shrinking
+                except Exception:
+                    live = None
+        save_state(sid, st)
+    if cap and live is not None and len(live) >= cap:
+        deny(f"abofles: {len(live)} sub session{'s' if len(live) != 1 else ''} open ({', '.join(live)}) — the cap is {cap} (Sub sessions). "
+             "Archive one that is done (only on the user's yes), or raise the cap (`- Sub sessions = N | off`).")
+    if mode == "off":
+        return
+    if (card or ti.get("proposal_id")) and not prompt.strip():
+        return  # a card starts nothing; a card's proposal_id start carries no brief (its header was kept with the card)
+    if skip or not route:
+        if skip:
+            return session_note("abofles: abofles:skip start_session — no routing and no ledger row; the Sub sessions cap still applies.")
+        return session_note("abofles: this start_session brief has no `abofles: <Topic> / Session · T<n>` first line — the sub session is not routed "
+                            "(it inherits this session's model and effort) and gets no ledger row. For coding, design or marketing work, put the header first; "
+                            "for this one, the after-start step cannot route it either, so name the task's topic and tier to the user, or ask to restart it with the header.")
+    need_m, need_e = route["need"]
+    tn = f"{route['src']}, {tier_name(route['tier'])}"
+    cap_txt = f" · Capped: main is {label(st.get('main_model'), st.get('effort'))}" if route["capped"] else ""
+    line = f"🪟 `Session` → **{route['topic']}** · {label(need_m, need_e)} · {tier_name(route['tier'])}{cap_txt}"
+    if card:
+        return
+    if str(ti.get("target") or "").lower() == "cloud":
+        return session_note("abofles: a cloud sub session takes no model or effort — the routing cannot apply to it (its Session cell would be "
+                            f"{label(*route['cell'])}). Route line: `{line}`")
+    if ti.get("proposal_id") or str(ti.get("context") or "fresh").lower() == "fork":
+        return  # no model on these: the after-start step brings the session down to its cell
+    got_m, got_e = alias_of(str(ti.get("model") or "")), session_effort_word(ti.get("effort"))
+    if got_m == need_m and got_e == need_e:
+        return session_note(f"abofles: print this route line now, exactly: `{line}`") if route["capped"] else None
+    reason = (f"abofles: start_session needs model {MODEL_ID.get(need_m, need_m)} and effort {need_e} ({tn}){cap_txt}; "
+              f"this call has model={ti.get('model') or 'missing'}, effort={ti.get('effort') or 'missing'}. "
+              f"Print the route line `{line}` and start it again with both. To leave a start unrouted, begin the prompt with `abofles:skip`.")
+    if mode == "warn":
+        return session_note(reason.replace("abofles: start_session needs", "abofles: (Session routing = warn) start_session should carry", 1))
+    deny(reason)
+
+
+def session_setting(ti, new_id, st):
+    """(model, effort, source) the started sub session runs on: the call's model and effort, else its app record's, else the main session's own."""
+    m, e = alias_of(str(ti.get("model") or "")), session_effort_word(ti.get("effort"))
+    if m and e in EFFORT_RANK:
+        return m, e, "call"
+    rec = app_record_of(new_id) or {}
+    rm, rx = alias_of(str(rec.get("model") or "")), session_effort_word(rec.get("effort"))
+    m, e = m or rm, e if e in EFFORT_RANK else rx if rx in EFFORT_RANK else ""
+    if m and e:
+        return m, e, "record"
+    return m or st.get("main_model"), e or st.get("effort"), "inherited"
+
+
+def session_post(data):
+    """PostToolUse on start_session: a started session (`session_id: local_…` in the result) gets one ledger row, side `Session`, status
+    `open` until it is archived, then `done` (no agent: no budget, slot, Parallel or receipt), and is kept in the state for the cap's fallback count. A setting above its
+    cell: hand the model the set_session_model / set_session_effort line; held below by the app's ceiling: a line for the user. A card's
+    header is kept by its task id, so a later proposal_id start is routed. Fails open, silent."""
+    if data.get("tool_name") != SESSION_TOOL or in_subagent(data):
+        return
+    ti = data.get("tool_input") or {}
+    sid = data.get("session_id", "")
+    resp = data.get("tool_response")
+    text = response_text(resp)
+    new_id = (resp.get("session_id") or resp.get("sessionId")) if isinstance(resp, dict) else None
+    if not new_id:
+        m = re.search(r"session_id[\"']?\s*[:=]\s*[\"']?(local_[A-Za-z0-9_-]+)", text)
+        new_id = m.group(1) if m else None
+    nm = re.search(r"\bname[\"']?\s*[:=]\s*[\"']?([A-Za-z0-9_.-]+)", text)
+    name = str(ti.get("name") or "").strip() or (nm.group(1) if nm else "") or str(ti.get("title") or "")[:40]
+    msg = None
+    with state_lock(sid):
+        st = load_state(sid)
+        cwd = project_root(data, st)
+        refresh_main_model(data, st)
+        mode = session_routing(cwd)
+        route = session_route(cwd, st, ti) if not str(ti.get("prompt") or "").lstrip().startswith("abofles:skip") else None
+        cards = st.get("session_cards") or {}
+        if not new_id:
+            tk = re.search(r"task_id[\"']?\s*[:=]\s*[\"']?(task_[A-Za-z0-9_-]+)", text)
+            if tk and route:  # a proposal card: nothing started; its route waits for the proposal_id start
+                cards[tk.group(1)] = {"prompt": str(ti.get("prompt") or "").splitlines()[0][:300], "title": str(ti.get("title") or "")[:80],
+                                      "name": str(ti.get("name") or ""), "ts": int(time.time())}
+                st["session_cards"] = dict(list(cards.items())[-20:])
+                save_state(sid, st)
+            return
+        card = cards.pop(str(ti.get("proposal_id") or ""), None) if ti.get("proposal_id") else None
+        if card and not route:  # the brief sent with proposal_id has no header: the one kept with the card
+            route = session_route(cwd, st, {"prompt": card.get("prompt") or ""})
+        if card:
+            name = name if ti.get("name") else (card.get("name") or name or card.get("title", "")[:40])
+            st["session_cards"] = cards
+        title = str(ti.get("title") or (card or {}).get("title") or "")
+        subs = [x for x in st.get("sub_sessions") or [] if x.get("id") != new_id]
+        st["sub_sessions"] = (subs + [{"id": new_id, "name": name or new_id, "ts": int(time.time())}])[-SUB_SESSIONS_KEPT:]
+        if route and mode != "off":
+            sm, se, how = session_setting({} if (ti.get("proposal_id") or str(ti.get("context") or "").lower() == "fork") else ti, new_id, st)
+            prompt = str(ti.get("prompt") or "")
+            task_line = next((l.strip() for l in prompt.splitlines()[1:] if l.strip()), "")
+            row = {"ts": int(time.time()), "session": sid, "cwd": data.get("cwd", ""), "agent_id": new_id, "topic": route["topic"], "side": "Session",
+                   "tier": route["tier"], "model": sm, "effort": se, "agent": "session", "description": title[:80], "name": name or None,
+                   "status": SESSION_ROW, "confidence": None, "setting": how}
+            if task_line:
+                row["task"] = clip(task_line, 140)
+            try:
+                private_dir(LEDGER_DIR)
+                with open(ledger_path(sid), "a") as f:
+                    f.write(json.dumps(row, ensure_ascii=False) + "\n")
+            except Exception:
+                pass
+            nm_, ne_ = route["need"]
+            above = sm in MODEL_RANK and se in EFFORT_RANK and (MODEL_RANK[sm] > MODEL_RANK.get(nm_, 9) or EFFORT_RANK[se] > EFFORT_RANK.get(ne_, 9))
+            if above:
+                msg = (f"abofles: the sub session {name or new_id} runs on {label(sm, se)}; its cell is {label(nm_, ne_)}. "
+                       f"Call set_session_model ({MODEL_ID.get(nm_, nm_)}) and set_session_effort ({ne_}) on {new_id} now.")
+            elif route["capped"] and (sm, se) == (nm_, ne_) and route["need"] != route["cell"]:
+                msg = (f"abofles: tell the user in one line: the sub session {name or new_id} runs on {label(sm, se)}; its cell is {label(*route['cell'])} "
+                       f"(this session's own setting is the app's ceiling) — say \"raise it\" to ask the app (set_session_model / set_session_effort ask the user).")
+            if mode == "warn" and msg and above:
+                msg = msg.replace(" now.", " (Session routing = warn: advice).")
+        refresh_pane(cwd, st, sid)
+        save_state(sid, st)
+    if msg:
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": msg}}, ensure_ascii=False))
+
+
+def sub_route_of(prompt, cwd):
+    """Inside a sub session, at its first prompt: {topic, tier, model, effort} from the brief's header, or None."""
+    h = parse_session_header(prompt)
+    if not h:
+        return None
+    topic, tier, rest = h
+    tier = tier or ((workflow_table().get("topics") or {}).get(topic) or {}).get("tier") or 2
+    m, e, src = session_cell(cwd, topic, tier, rest)
+    return {"topic": topic, "tier": tier, "model": m, "effort": e, "src": src}
 
 
 def parse_header(prompt):
@@ -5754,7 +6158,7 @@ def post(data):
     if cap_units:
         try:
             rows = [json.loads(l) for l in ledger_path(entry["session"]).read_text().splitlines() if l.strip()]
-            spent = sum(units(r.get("model"), r.get("effort")) for r in rows)
+            spent = sum(units(r.get("model"), r.get("effort")) for r in rows if r.get("side") != "Session")  # a sub session is no agent
         except Exception:
             spent = 0
         if spent > cap_units:
@@ -6589,6 +6993,12 @@ def prompt(data):
         close_stale_pending(st, sid, cwd)
         mins = break_minutes(cwd)
         ptxt = (data.get("prompt") or "").lstrip()
+        try:
+            if "sub_route" not in st and not (ptxt.startswith("<") or "task-notification" in ptxt[:200]):
+                st["sub_route"] = sub_route_of(ptxt, cwd)  # a sub session's first prompt is its brief: its header holds the tier and the routed setting (None: no header)
+            close_archived_sessions(sid, st)
+        except Exception:
+            pass
         notification = ptxt.startswith("<") or "task-notification" in ptxt[:200] or "hand-back" in ptxt[:200].lower()
         st["turn_ts"] = time.time()  # every turn start (a notification too): the Stop hook drops a last_resolved older than this
         if not notification:
@@ -6682,7 +7092,7 @@ def review_gap(cwd, st, sid, text):
     if not wf:
         return None
     n = st.get("spawns_since_receipt", 0) or 0  # this task's rows are the last n of the ledger (timestamps have one-second grain: two tasks can share one)
-    spawned = [r for r in ledger_rows(sid) if not r.get("memo") and not r.get("skip")]  # a memo-agent or skip row is no spawn of the task
+    spawned = [r for r in ledger_rows(sid) if not r.get("memo") and not r.get("skip") and r.get("side") != "Session"]  # a memo-agent, skip or sub-session row is no spawn of the task
     rows = [r for r in spawned[-n:] if not row_gate(r)] if n else []
     work = [r for r in rows if r.get("side") == "Work"]
     if not work:
@@ -7136,6 +7546,10 @@ def main():
             pre(data)
         elif mode == "post":
             post(data)
+        elif mode == "session_pre":
+            session_pre(data)
+        elif mode == "session_post":
+            session_post(data)
         elif mode == "stop":
             stop(data)
         elif mode == "release":

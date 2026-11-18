@@ -1364,6 +1364,55 @@ test('the editor explains the Budget raise and Git guard keys in the Agents grou
   await ui.unmount()
 })
 
+for (const surface of SURFACES) {
+  test(`${surface}: the editor puts Sub sessions (a number) and Session routing (on/warn/off) in the Agents group, with their help`, async ($, on) => {
+    const cap = { key: 'Sub sessions', kind: 'number', options: [], value: '', source: 'default', default: '3' }
+    const routing = { key: 'Session routing', kind: 'select', options: ['on', 'warn', 'off'], value: 'on', source: 'default', default: 'on' }
+    await harness($, on, ovState(ovKeys([cap, routing])))
+    const ui = await mountEditor($, surface)
+    expect(await said(ui, /^Sub sessions$/)).toBe(true)
+    expect(await said(ui, /^Open sub sessions one session may start; off = no cap$/)).toBe(true)
+    expect(await said(ui, /^Session routing$/)).toBe(true)
+    expect(await said(ui, /^on: a sub session must carry the routed model and effort; warn: note only; off$/)).toBe(true)
+    expect(await propOf(ui, 'in:Sub sessions', 'placeholder')).toBe('default 3')
+    expect((await propOf(ui, 'sel:Session routing', 'options')).map((o: any) => o.value)).toEqual(['@default', 'on', 'warn', 'off'])
+    await ui.press({ key: 'fold:g:Agents' }) // both fold with the Agents group, so neither landed in More
+    expect(await has(ui, 'in:Sub sessions')).toBe(false)
+    expect(await has(ui, 'sel:Session routing')).toBe(false)
+    expect(await said(ui, /^More$/)).toBe(false)
+    await ui.press({ key: 'fold:g:Agents' })
+    await ui.input({ key: 'in:Sub sessions', text: 'off', kind: 'change' })
+    expect(await valueOf(ui, 'in:Sub sessions')).toBe('off')
+    await ui.unmount()
+  })
+
+  test(`${surface}: a sub session row (side Session) shows its 🪟 Session label; an unknown status is grey with its word, never failed`, async ($, on) => {
+    const sub = { ts: NOW - 60, side: 'Session', model: 'sonnet', effort: 'medium', topic: 'Docs', tier: 'T2', status: 'open', confidence: null, tokens: null, usd: null, base_usd: null, description: 'docs sync', verdict: null, task: null, agent_id: 'local_abc', name: 'docs-sync' }
+    const rows = [{ ...ROWS[1], ts: NOW - 120, description: 'patch it' }, sub]
+    await harness($, on, { guide: guideOf([item()]), pane: panePayload({ spawns: { live: [], rows, totals: { spawns: 2, tokens: 1, usd: 0, base_usd: 0, saved_pct: 0, open_fail: 0, by_model: [] } } }) })
+    const ui = await mountPane($, surface)
+    if (surface === 'desktop') {
+      const hist = (await ui.findAll({ type: 'Svg' })).find((x: any) => /^History\n/.test(String(x.props.alt)))
+      const src = String(hist?.props.source)
+      expect(src).toContain('🪟 Session')
+      expect(src).toContain('<span class="dot t-grey"></span>') // neutral, not red
+      expect(src).not.toContain('<span class="dot t-red"></span>')
+      expect(src).toContain('<span class="word">OPEN</span>') // its word, untinted
+      const alt = String(hist?.props.alt).split('\n')
+      expect(alt).toContain('Session') // the alt keeps the plain name
+      expect(alt).toContain('docs sync')
+      expect(alt.some(l => /Sonnet 5\.5 · Medium · OPEN$/.test(l))).toBe(true)
+    } else {
+      expect(await said(ui, /^🪟 Session$/)).toBe(true)
+      expect(await said(ui, /^docs sync$/)).toBe(true)
+      expect(await said(ui, /Sonnet 5\.5 · Medium · OPEN$/)).toBe(true)
+      expect(await said(ui, /FAIL/)).toBe(false)
+      expect(await said(ui, /^Work$/)).toBe(true) // the other sides keep their name alone
+    }
+    await ui.unmount()
+  })
+}
+
 // ---- Read more, header icons, dots
 
 // The desktop draws the Guide as one HTML card (an Svg): its rows cut at the real width by CSS, so these two hold for the terminal's

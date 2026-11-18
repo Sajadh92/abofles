@@ -89,6 +89,10 @@ def main():
 
     if "--history" in args:
         return print_history(rows, bm, be or "high")
+    rows = [r for r in rows if r.get("side") != "Session"]  # a sub session's row is no agent: no count, no cost, no bar (its cost is phase 2)
+    if not rows:
+        print("abofles: no agents logged yet." if all_sessions else "abofles: no agents in this session yet")
+        return
 
     by_model = Counter()
     by_side = Counter()
@@ -164,7 +168,8 @@ def print_history(rows, bm, be):
         t = time.strftime("%m-%d %H:%M", time.localtime(r["ts"])) if r.get("ts") else "--:--"
         real = r.get("tokens") and r.get("base_usd")
         saved = f"saved {100 * (1 - (r.get('usd') or 0) / r['base_usd']):.0f}%" if real else "saved -"
-        print(f"{t}  {(r.get('side') or '?'):<8} {(r.get('status') or '?'):<8} {(r.get('confidence') or '?'):<6} "
+        side = "🪟 Session" if r.get("side") == "Session" else (r.get("side") or "?")  # the pane's label
+        print(f"{t}  {side:<8} {(r.get('status') or '?'):<8} {(r.get('confidence') or '?'):<6} "
               f"{label(r.get('model') or '?', r.get('effort')):<22} {fmt_tokens(r['tokens']) if r.get('tokens') else '-':>6} tok  "
               f"{fmt_usd(r['usd']) if r.get('usd') is not None else '-':>7}  {saved}")
     t = history_totals(rows, bm, be)

@@ -545,7 +545,9 @@ function resumeCard($: EngineInterface, ui: Ui, r: Pane['resume'], folds: Folds,
 // ---- Spawns
 
 // What a history row says of its outcome: the dot's tone and the status word, which only a status with meaning carries
-// (PASS, FAIL, PARTIAL, BLOCKED, PENDING, `FAIL · resolved`); a plain DONE has a green dot and no word.
+// (PASS, FAIL, PARTIAL, BLOCKED, PENDING, `FAIL · resolved`); a plain DONE has a green dot and no word. A status the pane does not
+// know (a sub session's `open`, a newer hook's word) is grey with its word: neutral, never a failure, never a running agent.
+const DONE = new Set(['done', 'completed', 'complete', 'ok', 'success'])
 export function rowStatus(r: PaneRow): { tone: string; alt: string; word: string } {
   const v = (r.verdict ?? '').toUpperCase()
   const st = (r.status ?? 'done').toLowerCase()
@@ -553,8 +555,16 @@ export function rowStatus(r: PaneRow): { tone: string; alt: string; word: string
   if (/PASS/.test(v)) return { tone: 'success', alt: 'pass', word: 'PASS' }
   if (st === 'pending') return { tone: ORANGE, alt: 'pending', word: 'PENDING' }
   if (st === 'partial' || st === 'blocked' || st === 'low') return { tone: 'warning', alt: st, word: st.toUpperCase() }
-  return { tone: 'success', alt: st, word: '' }
+  if (DONE.has(st)) return { tone: 'success', alt: st, word: '' }
+  return { tone: GREY, alt: st, word: st.toUpperCase() }
 }
+
+// A side as a row shows it: a sub session (side `Session`) carries its 🪟, as the route line does; the others their name alone.
+// The alt text keeps the plain name.
+const SIDE_EMOJI: Record<string, string> = { Session: '🪟' }
+export const sideLabel = (side: string): string => (SIDE_EMOJI[side] ? `${SIDE_EMOJI[side]} ${side}` : side)
+// cells a label takes in the terminal: an emoji is two
+const cellsOf = (s: string): number => Array.from(s).reduce((n, c) => n + (/\p{Extended_Pictographic}/u.test(c) ? 2 : 1), 0)
 
 // `Sonnet 5.5 · Medium`, as the app names its models: the label the totals give, else the app's name for the id (else the id
 // capitalised), and `Extra` for xhigh.
@@ -584,7 +594,7 @@ const HISTORY_ROWS = 5
 // under them the muted meta line (time, model, tokens, the status word).
 function spawnRow($: EngineInterface, ui: Ui, look: Look, folds: Folds, id: string, st: { tone: string; alt: string }, side: string, desc: string, cost: string, meta: string) {
   const { Box, Text } = ui
-  const lead = side || '?'
+  const lead = sideLabel(side) || '?'
   return row(
     ui,
     dot(ui, look, st.tone, st.alt),
@@ -594,7 +604,7 @@ function spawnRow($: EngineInterface, ui: Ui, look: Look, folds: Folds, id: stri
           <Text weight="semibold">{lead}</Text>
         </Box>
         <Box flexGrow={1} flexShrink={1} minWidth={0}>
-          {desc ? longText($, ui, look, folds, id, desc, { indent: 3 + Array.from(lead).length + 1 + (cost ? 7 : 0), lines: 2 }) : null}
+          {desc ? longText($, ui, look, folds, id, desc, { indent: 3 + cellsOf(lead) + 1 + (cost ? 7 : 0), lines: 2 }) : null}
         </Box>
       </Box>,
       meta ? <Text size="caption" dimColor>{meta}</Text> : null,
@@ -672,7 +682,7 @@ function spawnRowsOf(s: PaneSpawns, rows: PaneRow[], now: number) {
   const alt: string[] = []
   for (const r of rows) {
     const st = rowStatus(r)
-    const row: SpawnRow = { tone: toneOf(st.tone), side: r.side, desc: plain(r.description), cost: r.usd !== null ? fmtUsd(r.usd) : '', meta: rowMeta({ time: r.ts === null ? '' : fmtStart(r.ts), model: modelName(r.model, r.effort, labels), tokens: r.tokens, word: '' }), word: st.word, wordTone: wordTone(st.tone) }
+    const row: SpawnRow = { tone: toneOf(st.tone), side: sideLabel(r.side), desc: plain(r.description), cost: r.usd !== null ? fmtUsd(r.usd) : '', meta: rowMeta({ time: r.ts === null ? '' : fmtStart(r.ts), model: modelName(r.model, r.effort, labels), tokens: r.tokens, word: '' }), word: st.word, wordTone: wordTone(st.tone) }
     const label = dayLabel(r.ts, now)
     const last = days[days.length - 1]
     if (last && last.label === label) last.rows.push(row)
@@ -680,7 +690,7 @@ function spawnRowsOf(s: PaneSpawns, rows: PaneRow[], now: number) {
       days.push({ label, rows: [row] })
       if (label) alt.push(label)
     }
-    alt.push(row.side, row.desc, row.cost, rowMeta({ time: r.ts === null ? '' : fmtStart(r.ts), model: modelName(r.model, r.effort, labels), tokens: r.tokens, word: st.word }))
+    alt.push(r.side, row.desc, row.cost, rowMeta({ time: r.ts === null ? '' : fmtStart(r.ts), model: modelName(r.model, r.effort, labels), tokens: r.tokens, word: st.word }))
   }
   return { days, alt }
 }

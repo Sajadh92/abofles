@@ -54,6 +54,8 @@ const KEY_INFO: Record<string, { group: (typeof GROUPS)[number]; help: string }>
   'Budget raise': { group: 'Agents', help: 'auto: +half the start budget, twice at most, then asks; ask: always asks' },
   'Git guard': { group: 'Agents', help: 'Warn or deny git writes outside the git agent, or off' },
   'Loop guard': { group: 'Agents', help: 'Rounds with no word from you before a fix or Judge loop stops and asks you; off = never' },
+  'Sub sessions': { group: 'Agents', help: 'Open sub sessions one session may start; off = no cap' },
+  'Session routing': { group: 'Agents', help: 'on: a sub session must carry the routed model and effort; warn: note only; off' },
   'Judge notes': { group: 'Memo', help: 'Judge answers that also go to Needs you' },
   'Memo agent': { group: 'Memo', help: 'auto: tidies after a compact; manual: /abofles:memo only; off: rules only' },
   'Memo agent every': { group: 'Memo', help: 'Hours between auto runs, per project' },

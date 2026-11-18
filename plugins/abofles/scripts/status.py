@@ -236,7 +236,10 @@ def main():
         print("abofles: no agents logged yet." if all_sessions else "abofles: no ledger for this session yet")
         return
 
-    rows = [r for _, rs in load(files) for r in rs]
+    rows = [r for _, rs in load(files) for r in rs if r.get("side") != "Session"]  # a sub session's row is no agent: no count, no cost, no bar
+    if not rows:
+        print("abofles: no agents in this session yet (only sub sessions; `/abofles:history` lists them).")
+        return
     by_model = Counter((r.get("model") or "?") for r in rows)
     by_side = Counter(SIDE_FULL.get(r.get("side") or "?", r.get("side") or "?") for r in rows)
     conf = Counter((r.get("confidence") or "?") for r in rows)
@@ -251,7 +254,7 @@ def main():
         pct = f" ({100 * (rbase - rcost) / rbase:.0f}%)" if rbase else ""
         print(f"Abo Fles (ابو فليس) — status, {scope}: {len(rows)} agent{'' if len(rows) == 1 else 's'} · {fmt_tokens(tokens)} tokens · {fmt_usd(rcost)} · saved {fmt_usd(rbase - rcost)}{pct} vs all {label(bm)}")
     else:
-        print(f"Abo Fles (ابو فليس) — status, {scope}: {len(rows)} agent{'' if len(rows) == 1 else 's'} · {units} u · saved {100 * (1 - total / base):.0f}% vs all {baseline}")
+        print(f"Abo Fles (ابو فليس) — status, {scope}: {len(rows)} agent{'' if len(rows) == 1 else 's'} · {units} u · saved {100 * (1 - total / base) if base else 0:.0f}% vs all {baseline}")
     if context_tokens and not all_sessions:
         tp = newest_transcript()
         tk = context_tokens(str(tp)) if tp else None

@@ -19,6 +19,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from topics_data import DOMAINS, SUGGESTIONS  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
+from abofles_hook import SESSION_CELL  # noqa: E402  the Session column comes from the hook, so the two never drift
+SESSION = {t: f"{m}·{e}" for t, (m, e) in SESSION_CELL.items()}
 
 ROOT = Path(__file__).resolve().parent.parent
 TOPICS_MD = ROOT / "skills/abofles/references/topics.md"
@@ -291,19 +294,19 @@ def build_matrix():
         "Each cell is `model·effort`. A topic's cells are its tier's row of the matrix the project picks (`- Matrix = quality | economy`, default quality) unless its line in `topics_data.py` overrides one "
         "(`scripts/topic.py show <topic>` prints the final cells, with project overrides applied).",
         "",
-        "Sides: " + " · ".join(f"{k} = {v}" for k, v in SIDE_NAMES.items()),
+        "Sides: " + " · ".join(f"{k} = {v}" for k, v in SIDE_NAMES.items()) + " · Session = a sub session (a whole task in its own session, started with `start_session`; routed by the tier of its task, the same in both matrices)",
         "",
         "## Tier base (`Matrix = quality`, the default)",
         "",
         "Opus writes, plans and analyses at every tier; Haiku and Sonnet read and verify. Code written by a weaker model from a good plan comes back from Verify as rework, and each round costs a Work and a Verify agent more.",
         "",
-        "| Tier | A mistake means… | Read | Analyse | Plan | Work | Verify |",
-        "|---|---|---|---|---|---|---|",
+        "| Tier | A mistake means… | Read | Analyse | Plan | Work | Verify | Session |",
+        "|---|---|---|---|---|---|---|---|",
     ]
     means = {1: "cosmetic, local, instantly reversible", 2: "a test catches it; dev-only; reversible with a redeploy",
              3: "wrong production behaviour, business rule, shared infra, SLO", 4: "money, auth, secrets, PII, data loss, prod infra, irreversible"}
     for t, cells in TIERS.items():
-        m.append(f"| {TIER_NAME[t]} (T{t}) | {means[t]} | " + " | ".join(cells[s] for s in SIDES) + " |")
+        m.append(f"| {TIER_NAME[t]} (T{t}) | {means[t]} | " + " | ".join(cells[s] for s in SIDES) + f" | {SESSION[t]} |")
     m += [
         "",
         "Under `quality` a topic override that puts Analyse, Plan or Work below Opus (an economy cell) is skipped; an override up (Fable on Plan or Analyse) stays.",
@@ -312,17 +315,18 @@ def build_matrix():
         "",
         "The cells before 2.6: Sonnet and Haiku write most code. Each agent costs less; more of them come back from Verify as rework. Every topic override applies.",
         "",
-        "| Tier | Read | Analyse | Plan | Work | Verify |",
-        "|---|---|---|---|---|---|",
+        "| Tier | Read | Analyse | Plan | Work | Verify | Session |",
+        "|---|---|---|---|---|---|---|",
     ]
     for t, cells in TIERS_ECONOMY.items():
-        m.append(f"| {TIER_NAME[t]} (T{t}) | " + " | ".join(cells[s] for s in SIDES) + " |")
+        m.append(f"| {TIER_NAME[t]} (T{t}) | " + " | ".join(cells[s] for s in SIDES) + f" | {SESSION[t]} |")
     m += [
         "",
-        "## Review and Git cells (both matrices)",
+        "## Review, Git and Session cells (both matrices)",
         "",
         "- **Review cell** (the specialist reviewers after Verify): " + " · ".join(f"T{t} {c}" for t, c in REVIEW_TIERS.items()) + ". A missed money, auth or data flaw is judgement, so 🔴 stays on Opus. `- Review: <Tag> / T<tier> = model·effort` changes one.",
         "- **Git cell** (`abofles-git`, and `abofles-scrum` for tickets and boards): the topic's economy Work cell — commits, merges and PRs follow the work up, they do not write it. `scripts/topic.py` prints it as `Git/Scrum …`.",
+        "- **Session cell** (a sub session, the Session column above): the same in both matrices. A sub session is an orchestrator: it starts its own agents, and the matrix routes them inside it. Precedence: the user in chat, `Topic / Session = model·effort`, `Sub session = model·effort`, the cell. Fable is never a Session cell.",
     ]
     m += [
         "",

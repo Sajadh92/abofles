@@ -1413,6 +1413,238 @@ def memo_repair_tests(check):
         F.close()
 
 
+def sub_session_tests(check):
+    """Sub-session routing (docs/sub-session-routing.md): the Session cell and its precedence, the start_session gate (warn, off, the app's ceiling,
+    no header, skip, cards, fork, proposal_id, cloud), the Sub sessions cap from the app's records (archived, off, unreadable, fallback), the
+    after-start Session row and its fix line, the row never counting as an agent, and the routed setting inside the sub session. Own temp dirs."""
+    spec = _ilu.spec_from_file_location("abofles_hook_sub", str(HOOK)); S = _ilu.module_from_spec(spec); spec.loader.exec_module(S)
+    with tempfile.TemporaryDirectory() as hh:
+        S.STATE_DIR = Path(hh, "st"); S.LEDGER_DIR = Path(hh, "led"); S.USER_CLAUDE_MD = Path(hh, "no-user.md")
+        apps = Path(hh, "apps"); recdir = apps / "a" / "b"; recdir.mkdir(parents=True); S.APP_SESSION_DIRS = [apps]
+        proj = Path(hh, "proj"); proj.mkdir()
+        def block(*lines): (proj / "CLAUDE.md").write_text("## abofles overrides\n\n" + "".join(f"- {l}\n" for l in lines)) if lines else (proj / "CLAUDE.md").unlink(missing_ok=True)
+        def rec(local, **kw): (recdir / f"{local}.json").write_text(json.dumps({"sessionId": local, **kw}))
+        def setst(sid, **kw):
+            st = S.load_state(sid); st.update(kw); S.save_state(sid, st)
+        def call(fn, data):
+            buf, old = io.StringIO(), sys.stdout
+            sys.stdout = buf
+            try:
+                fn(data)
+            except SystemExit:
+                pass
+            finally:
+                sys.stdout = old
+            out = buf.getvalue().strip()
+            return json.loads(out) if out else None
+        denied = lambda o: (o or {}).get("hookSpecificOutput", {}).get("permissionDecision") == "deny"
+        why = lambda o: (o or {}).get("hookSpecificOutput", {}).get("permissionDecisionReason", "")
+        note = lambda o: (o or {}).get("hookSpecificOutput", {}).get("additionalContext", "")
+        def start(sid, prompt="abofles: Unit Test / Session · T2\nfix the thing", **ti):
+            ti = {"initiation": "user_asked", "title": "Fix the thing", "context": "fresh", "prompt": prompt, **ti}
+            return call(S.session_pre, {"session_id": sid, "cwd": str(proj), "tool_name": S.SESSION_TOOL, "tool_input": {k: v for k, v in ti.items() if v is not None}})
+        def started(sid, new_id, prompt="abofles: Unit Test / Session · T2\nfix the thing", text=None, **ti):
+            ti = {"initiation": "user_asked", "title": "Fix the thing", "context": "fresh", "prompt": prompt, **ti}
+            res = text if text is not None else f'Started session "Fix the thing" (session_id: {new_id}, name: {ti.get("name") or new_id[6:]}). It runs on its own.'
+            return call(S.session_post, {"session_id": sid, "cwd": str(proj), "tool_name": S.SESSION_TOOL, "tool_input": {k: v for k, v in ti.items() if v is not None},
+                                         "tool_response": [{"type": "text", "text": res}]})
+        rows = lambda sid: S.ledger_rows(sid)
+
+        # ── the Session cell and its precedence ──
+        check("session cell: T1/T2 sonnet·medium, T3 opus·medium, T4 opus·high", [S.session_cell(str(proj), "Unit Test", t)[:2] for t in (1, 2, 3, 4)]
+              == [("sonnet", "medium"), ("sonnet", "medium"), ("opus", "medium"), ("opus", "high")])
+        block("Matrix = economy")
+        check("session cell: Matrix = economy uses the same column", S.session_cell(str(proj), "Unit Test", 3)[:2] == ("opus", "medium") and S.session_cell(str(proj), "Unit Test", 4)[:2] == ("opus", "high"))
+        block("Sub session = haiku·low", "Unit Test / Session = opus·xhigh")
+        check("session cell: precedence chat (User: on the header) > Topic / Session > Sub session > cell",
+              S.session_cell(str(proj), "Unit Test", 2, " · T2 · User: Opus 5.5 · High")[:3] == ("opus", "high", "User")
+              and S.session_cell(str(proj), "Unit Test", 2)[:3] == ("opus", "xhigh", "Unit Test / Session")
+              and S.session_cell(str(proj), "Other Topic", 2)[:3] == ("haiku", "low", "Sub session"))
+        block()
+        check("session cell: nothing set -> the cell", S.session_cell(str(proj), "Unit Test", 2)[2] == "Session cell")
+        check("Topic / Session = model·effort is a complex form; Sub sessions and Session routing are keys (number 3, select on)",
+              any(r.match("Unit Test / Session = sonnet·medium") for r in S.COMPLEX_FORMS) and S.OVERRIDE_KEYS["Sub sessions"]["default"] == "3"
+              and S.OVERRIDE_KEYS["Session routing"] == {"kind": "select", "options": ["on", "warn", "off"], "default": "on"}
+              and all(S.override_known("Sub sessions", v) for v in ("3", "off", "none", "0")) and not S.override_known("Sub sessions", "many"))
+        check("parse_session_header: topic, tier and the modifiers; an Agent header is no Session header",
+              S.parse_session_header("abofles: Billing / Session · T3 · User: Opus 5.5 · High\nx")[:2] == ("Billing", 3) and S.parse_session_header("abofles: Billing / Work · T3") is None)
+
+        # ── the gate ──
+        g = "gate0001"; setst(g, main_model="opus", effort="xhigh")
+        o = start(g)
+        check("gate: a fresh start with no model or effort is refused with the cell's values (Session cell, 🟡 T2)",
+              denied(o) and "model claude-sonnet-5-5 and effort medium" in why(o) and "🟡 Normal" in why(o) and "🪟 `Session` → **Unit Test** · Sonnet 5.5 · Medium" in why(o))
+        check("gate: the right values go through (model id or alias)", start(g, model="claude-sonnet-5-5", effort="medium") is None and start(g, model="sonnet", effort="medium") is None)
+        check("gate: values off the cell are refused", denied(start(g, model="claude-opus-5-5", effort="xhigh")))
+        check("gate: T4 needs opus·high", "model claude-opus-5-5 and effort high" in why(start(g, prompt="abofles: Unit Test / Session · T4\nx")))
+        block("Session routing = warn")
+        o = start(g)
+        check("gate: Session routing = warn turns the refusal into a note", not denied(o) and "should carry model claude-sonnet-5-5" in note(o))
+        block("Session routing = off")
+        check("gate: Session routing = off is silent", start(g) is None and start(g, prompt="no header") is None)
+        block()
+        o = start(g, prompt="Fix the thing, no header")
+        check("gate: no header -> allowed with one note (not routed, no ledger row)", not denied(o) and "no `abofles: <Topic> / Session · T<n>` first line" in note(o))
+        o = start(g, prompt="abofles:skip tidy the photos")
+        check("gate: abofles:skip -> allowed with one note", not denied(o) and "abofles:skip" in note(o))
+        check("gate: a card (offer / own_initiative) with no prompt passes silently", start(g, prompt=None, initiation="offer") is None and start(g, prompt=None, initiation="own_initiative") is None)
+        check("gate: fork and proposal_id take no model -> allowed", start(g, context="fork") is None and start(g, prompt=None, context=None, proposal_id="task_x") is None)
+        o = start(g, target="cloud")
+        check("gate: cloud -> allowed with a note that the routing cannot apply", not denied(o) and "cannot apply" in note(o))
+        c = "ceil0001"; setst(c, main_model="sonnet", effort="medium")
+        o = start(c, prompt="abofles: Unit Test / Session · T3\nx", model="claude-sonnet-5-5", effort="medium")
+        check("ceiling: a T3 sub session from a Sonnet main goes through at Sonnet with Capped", not denied(o) and "Capped: main is Sonnet 5.5 · Medium" in note(o))
+        o = start(c, prompt="abofles: Unit Test / Session · T3\nx")
+        check("ceiling: ... the refusal asks for the main's own setting and says Capped", denied(o) and "model claude-sonnet-5-5 and effort medium" in why(o) and "Capped: main is Sonnet 5.5 · Medium" in why(o))
+
+        # ── the cap ──
+        cp = "cap00001"; setst(cp, main_model="opus", effort="xhigh")
+        rec("local_me", cliSessionId=cp)
+        for n in ("drp-489", "docs-sync", "cli-cleanup"):
+            rec(f"local_{n}", cliSessionId=f"c-{n}", isArchived=False, spawnedFrom={"sessionId": "local_me", "name": n, "sideSession": True})
+        rec("local_other", cliSessionId="c-other", isArchived=False, spawnedFrom={"sessionId": "local_someone", "name": "theirs", "sideSession": True})
+        ok_ = dict(model="claude-sonnet-5-5", effort="medium")
+        o = start(cp, **ok_)
+        check("cap: three open records of this session -> the fourth start is refused and names them", denied(o) and "3 sub sessions open (" in why(o)
+              and all(n in why(o) for n in ("drp-489", "docs-sync", "cli-cleanup")) and "the cap is 3 (Sub sessions)" in why(o) and "only on the user's yes" in why(o) and "theirs" not in why(o))
+        check("cap: ... under abofles:skip too, and for a fork or a proposal_id start", denied(start(cp, prompt="abofles:skip x")) and denied(start(cp, context="fork")) and denied(start(cp, prompt=None, proposal_id="task_y")))
+        check("cap: a card does not count and is not refused", start(cp, prompt=None, initiation="own_initiative") is None)
+        block("Sub sessions = off")
+        check("cap: Sub sessions = off never refuses", start(cp, **ok_) is None)
+        block("Sub sessions = 4")
+        check("cap: raised to 4 -> the fourth goes through", start(cp, **ok_) is None)
+        block()
+        rec("local_docs-sync", cliSessionId="c-docs-sync", isArchived=True, spawnedFrom={"sessionId": "local_me", "name": "docs-sync", "sideSession": True})
+        check("cap: an archived one does not count", start(cp, **ok_) is None)
+        S.APP_SESSION_DIRS = [Path(hh, "gone")]
+        cu = "capunk01"; setst(cu, main_model="opus", effort="xhigh")
+        check("cap: unreadable records and no recorded starts -> no refusal", start(cu, **ok_) is None)
+        now_ = int(time.time())
+        setst(cu, sub_sessions=[{"id": f"local_s{i}", "name": f"s{i}", "ts": now_} for i in range(3)])
+        o = start(cu, **ok_)
+        check("cap: unreadable records -> the starts this session recorded count", denied(o) and "s0, s1, s2" in why(o))
+        setst(cu, sub_sessions=[{"id": "local_s0", "name": "s0", "ts": now_ - S.SUB_SESSION_TTL - 60}] + [{"id": f"local_s{i}", "name": f"s{i}", "ts": now_} for i in (1, 2)])
+        check("cap: unreadable records -> a start older than 24 hours leaves the count and the state (fail open)", start(cu, **ok_) is None
+              and [x["id"] for x in S.load_state(cu)["sub_sessions"]] == ["local_s1", "local_s2"])
+        S.APP_SESSION_DIRS = [apps]
+        cv = "capnome1"; setst(cv, main_model="opus", effort="xhigh")  # records readable, but this session has no own record
+        rec("local_a0", cliSessionId="c-a0", isArchived=True, spawnedFrom={"sessionId": "local_y", "sideSession": True})
+        rec("local_a1", cliSessionId="c-a1", isArchived=False, spawnedFrom={"sessionId": "local_y", "sideSession": True})
+        setst(cv, sub_sessions=[{"id": "local_a0", "name": "a0", "ts": now_}, {"id": "local_a1", "name": "a1", "ts": now_ - S.SUB_SESSION_TTL - 60},
+                                {"id": "local_a2", "name": "a2", "ts": now_}, {"id": "local_a3", "name": "a3", "ts": now_ - S.SUB_SESSION_TTL - 60}])
+        check("cap: fallback drops a start its app record says archived and an old one with no record; an old open record stays", start(cv, **ok_) is None
+              and [x["id"] for x in S.load_state(cv)["sub_sessions"]] == ["local_a1", "local_a2"])
+        setst(cv, sub_sessions=S.load_state(cv)["sub_sessions"] + [{"id": "local_a4", "name": "a4", "ts": now_}])
+        check("cap: ... and the fallback still refuses at the cap", denied(o := start(cv, **ok_)) and "a1, a2, a4" in why(o))
+        far = "capfar01"; setst(far, main_model="opus", effort="xhigh")
+        rec("local_far", cliSessionId=far)
+        for n in ("f1", "f2", "f3"):
+            rec(f"local_{n}", cliSessionId=f"c-{n}", isArchived=False, spawnedFrom={"sessionId": "local_far", "name": n, "sideSession": True})
+        S.APP_RECORDS_READ, keep_ = 0, S.APP_RECORDS_READ  # its own record is not among the newest
+        try:
+            o = start(far, **ok_)
+        finally:
+            S.APP_RECORDS_READ = keep_
+        check("cap: this session's own record is found past the newest-40 limit (by cliSessionId)", denied(o) and "f1" in why(o) and S.load_state(far).get("local_id") == "local_far")
+
+        # ── after start: the Session row and the fix line ──
+        p = "post0001"; setst(p, main_model="opus", effort="xhigh", started=1, spawns_since_receipt=0)
+        o = started(p, "local_n1", name="n1", **ok_)
+        r = [x for x in rows(p) if x.get("agent_id") == "local_n1"]
+        check("post: one ledger row per start, side Session, status open, model/effort/topic/tier/title/name", o is None and len(r) == 1 and r[0]["side"] == "Session"
+              and r[0]["status"] == "open" and (r[0]["model"], r[0]["effort"], r[0]["topic"], r[0]["tier"], r[0]["description"], r[0]["name"]) == ("sonnet", "medium", "Unit Test", 2, "Fix the thing", "n1"))
+        o = started(p, "local_f1", context="fork")
+        check("post: a fork (inherits Opus 5.5 · Extra) -> set_session_model and set_session_effort with the cell's values on its id",
+              "Call set_session_model (claude-sonnet-5-5) and set_session_effort (medium) on local_f1 now." in note(o) and "runs on Opus 5.5 · Extra" in note(o))
+        rec("local_r1", cliSessionId="c-r1", model="claude-opus-5-5", effort="high", spawnedFrom={"sessionId": "local_x", "sideSession": True})
+        o = started(p, "local_r1", context="fork")
+        check("post: the setting comes from the new session's app record when the call has none", "runs on Opus 5.5 · High" in note(o) and [x for x in rows(p) if x["agent_id"] == "local_r1"][0]["setting"] == "record")
+        o = started(p, None, initiation="own_initiative", text='Proposed "Fix the thing" (task_id: task_abc1). The user sees a card and nothing runs until they start it.')
+        check("post: a proposal card writes no row and keeps its header by task id", o is None and not [x for x in rows(p) if x.get("agent_id") in (None, "")] and "task_abc1" in S.load_state(p).get("session_cards", {}))
+        o = started(p, "local_c1", prompt=None, context=None, proposal_id="task_abc1")
+        r = [x for x in rows(p) if x.get("agent_id") == "local_c1"]
+        check("post: the card's proposal_id start is routed from the card's header and corrected like a fork", r and r[0]["topic"] == "Unit Test" and "set_session_model (claude-sonnet-5-5)" in note(o)
+              and "task_abc1" not in S.load_state(p).get("session_cards", {}))
+        o = started(p, "local_o9", context=None, proposal_id="task_offer9")  # a title-only offer card kept nothing: the brief sent with proposal_id carries the header
+        r = [x for x in rows(p) if x.get("agent_id") == "local_o9"]
+        check("post: an offer card's proposal_id start is routed from its own brief (no card kept) and corrected like a fork", r and r[0]["topic"] == "Unit Test"
+              and "Call set_session_model (claude-sonnet-5-5) and set_session_effort (medium) on local_o9 now." in note(o))
+        n0 = len(rows(p))
+        check("post: a start the app refused (no session_id) writes no row", started(p, None, text="Error: the user declined") is None and len(rows(p)) == n0)
+        started(p, "local_nh", prompt="no header here", **ok_)
+        check("post: no header -> no row, but the start is recorded for the cap's fallback", len(rows(p)) == n0 and any(x["id"] == "local_nh" for x in S.load_state(p)["sub_sessions"]))
+        pc = "postcap1"; setst(pc, main_model="sonnet", effort="medium")
+        o = started(pc, "local_k1", prompt="abofles: Unit Test / Session · T3\nx", **ok_)
+        check("post: held below the cell by the app's ceiling -> a line for the user to say \"raise it\"", 'say "raise it"' in note(o) and "its cell is Opus 5.5 · Medium" in note(o))
+
+        # ── a Session row is never an agent ──
+        st_ = S.load_state(p)
+        check("session row: not pending, not a background agent, no spawn of the task, no Parallel slot", S.pending_count(p) == 0 and not S.background_running(p)
+              and st_.get("spawns_since_receipt", 0) == 0 and not st_.get("inflight") and not st_.get("inflight_bg") and S.work_spawns(st_) == 0)
+        check("session row: the totals count no agent for it, the pane lists it", S.history_totals(rows(p))["spawns"] == 0
+              and any(x.get("side") == "Session" for x in (S.refresh_pane(str(proj), st_, p) or st_)["pane"]["spawns"]["rows"]) and st_["pane"]["spawns"]["live"] == [])
+        check("session row: the receipt header counts no agent", S.receipt_header(st_).startswith("🧾 **0 Agents"))
+        o = call(S.receipt, {"session_id": p, "cwd": str(proj), "last_assistant_message": "Started the sub session; it reports back.", "stop_hook_active": False})
+        check("session row: the Stop hook does not demand a receipt for it", o is None)
+        with S.state_lock(p):
+            check("session row: a SendMessage to its name never reopens it as pending", not S.reopen_row(p, {"n1", "local_n1"}) and [x for x in rows(p) if x["agent_id"] == "local_n1"][0]["status"] == "open")
+        rec("local_n1", cliSessionId="c-n1", isArchived=True, spawnedFrom={"sessionId": "local_x", "sideSession": True})
+        with S.state_lock(p):
+            stp = S.load_state(p); S.close_archived_sessions(p, stp, every=0)
+        check("session row: closed (done) once the app record says archived", [x for x in rows(p) if x["agent_id"] == "local_n1"][0]["status"] == "done"
+              and [x for x in rows(p) if x["agent_id"] == "local_f1"][0]["status"] == "open")
+        with open(S.ledger_path(p), "a") as f_:
+            f_.write(json.dumps({"ts": 1, "agent_id": "local_old1", "side": "Session", "status": "running", "model": "sonnet", "effort": "medium"}) + "\n")
+        rec("local_old1", cliSessionId="c-old1", isArchived=True, spawnedFrom={"sessionId": "local_x", "sideSession": True})
+        with S.state_lock(p):
+            stp = S.load_state(p); S.close_archived_sessions(p, stp, every=0)
+        check("session row: a row written as `running` before the rename closes too", [x for x in rows(p) if x["agent_id"] == "local_old1"][0]["status"] == "done")
+        lw = Path(hh, "ledbill"); lw.mkdir()
+        (lw / "billsess.jsonl").write_text(json.dumps({"ts": 1, "agent_id": "w1", "side": "W", "topic": "T", "status": "done", "model": "opus", "effort": "high"}) + "\n"
+                                           + json.dumps({"ts": 2, "agent_id": "local_s9", "side": "Session", "topic": "T", "status": "open", "model": "sonnet", "effort": "medium"}) + "\n")
+        benv = dict(os.environ, ABOFLES_LEDGER_DIR=str(lw), ABOFLES_SESSION="billsess", ABOFLES_STATE_DIR=str(Path(hh, "stbill")))
+        sc = lambda name: subprocess.run([sys.executable, "-X", "utf8", str(Path(__file__).resolve().parent / name), "--baseline", "opus·high"], cwd=str(proj), capture_output=True, text=True, env=benv).stdout
+        bo, so = sc("bill.py"), sc("status.py")
+        check("bill: a Session row is no agent: 1 agent, no Sonnet bar, the cost of the Work row only", "bill for this session: 1 agent\n" in bo and "Sonnet" not in bo
+              and "Saved: 0%" in bo and "Session" not in bo)
+        check("status: a Session row is no agent: 1 agent, no Sonnet bar, saved 0%", "this session: 1 agent ·" in so and "saved 0%" in so and "Sonnet" not in so)
+        (lw / "billsess.jsonl").write_text(json.dumps({"ts": 2, "agent_id": "local_s9", "side": "Session", "topic": "T", "status": "open", "model": "sonnet", "effort": "medium"}) + "\n")
+        bo, so = sc("bill.py"), sc("status.py")
+        ho = subprocess.run([sys.executable, "-X", "utf8", str(Path(__file__).resolve().parent / "bill.py"), "--history"], cwd=str(proj), capture_output=True, text=True, env=benv).stdout
+        check("history: a Session row is labelled 🪟 Session, as in the pane", "🪟 Session" in ho and "open" in ho)
+        check("bill/status: only a Session row -> no agents, no crash, no empty bar lines", "no agents in this session yet" in bo and "no agents in this session yet" in so and "Agents per model" not in so and "Traceback" not in bo + so)
+
+        # ── inside the sub session ──
+        q = "inside01"
+        call(S.prompt, {"session_id": q, "cwd": str(proj), "prompt": "abofles: Unit Test / Session · T2\nFix the thing\nreport back"})
+        sq = S.load_state(q)
+        check("inside: the first prompt's header keeps the tier and the routed setting", (sq.get("sub_route") or {}).get("tier") == 2 and (sq["sub_route"]["model"], sq["sub_route"]["effort"]) == ("sonnet", "medium"))
+        check("inside: the main: line fits the routed setting", S.main_line({**sq, "main_model": "sonnet", "effort": "medium"}, None, str(proj), q) == "main: Sonnet 5.5 · Medium fits this 🟡 Normal sub-session task")
+        check("inside: ... or suggests it", S.main_line({**sq, "main_model": "opus", "effort": "xhigh"}, None, str(proj), q).startswith("main: suggest Sonnet 5.5 · Medium for this 🟡 Normal sub-session task (now Opus 5.5 · Extra)"))
+        block("Sub session = opus·high")
+        check("inside: a Sub session key still wins", S.main_line({**sq, "main_model": "opus", "effort": "high"}, None, str(proj), q) == "main: Opus 5.5 · High fits your setting")
+        block()
+        call(S.prompt, {"session_id": q, "cwd": str(proj), "prompt": "abofles: Other / Session · T4\nlater prompt"})
+        check("inside: only the first prompt sets it", S.load_state(q)["sub_route"]["tier"] == 2)
+        q2 = "inside02"
+        call(S.prompt, {"session_id": q2, "cwd": str(proj), "prompt": "just a question"})
+        check("inside: a main session (no header) keeps the tier table", S.load_state(q2).get("sub_route") is None and "sub-session" not in S.main_line({"main_model": "opus", "effort": "xhigh"}, 2, str(proj), q2))
+
+        # ── wiring: hooks.json and the modes ──
+        hj = json.loads((HOOK.parent / "hooks.json").read_text())["hooks"]
+        cmd_of = lambda ev: {e.get("matcher"): e["hooks"][0]["command"] for e in hj[ev]}
+        check("hooks.json: start_session has a PreToolUse session_pre and a PostToolUse session_post", cmd_of("PreToolUse").get(S.SESSION_TOOL, "").endswith(" session_pre")
+              and cmd_of("PostToolUse").get(S.SESSION_TOOL, "").endswith(" session_post"))
+        env = dict(os.environ, ABOFLES_LEDGER_DIR=str(Path(hh, "led2")), ABOFLES_STATE_DIR=str(Path(hh, "st2")), ABOFLES_USER_CLAUDE_MD=str(Path(hh, "none.md")))
+        rr = subprocess.run([sys.executable, str(HOOK), "session_pre"], input=json.dumps({"session_id": "wire0001", "cwd": str(proj), "tool_name": S.SESSION_TOOL,
+                            "tool_input": {"initiation": "user_asked", "context": "fresh", "prompt": "abofles: Unit Test / Session · T2\nx"}}), capture_output=True, text=True, env=env)
+        check("hooks: the session_pre mode refuses an unrouted fresh start end to end", rr.returncode == 0 and denied(json.loads(rr.stdout or "{}")))
+        rr = subprocess.run([sys.executable, str(HOOK), "session_pre"], input="{not json", capture_output=True, text=True, env=env)
+        check("hooks: session_pre fails open on bad input (exit 0, no output)", rr.returncode == 0 and not rr.stdout.strip())
+        tp = subprocess.run([sys.executable, str(HOOK.parent.parent / "scripts" / "topic.py"), "find", "refund chargeback", "--limit", "1", "--cwd", str(proj)], capture_output=True, text=True, env=env)
+        check("topic.py: each match line carries the Session cell after Git/Scrum", re.search(r"Git/Scrum \S+ · Session opus·high", tp.stdout) is not None)
+
+
 def main():
     fails = 0
     def check(name, cond):
@@ -2678,6 +2910,15 @@ def main():
         o3m_ = o3p("- Context marks = 500K, 1M, 0\n- Review memory = 0\n- Archive items = 0\n")
         check("overrides: Context marks reads K and M and drops 0; Review memory = 0 is 0 hours; Archive items = 0 is still the default",
               H.context_marks(o3m_) == (500, 1000) and H.number_override(o3m_, "Review memory", zero=True) == 0 and H.number_override(o3m_, "Archive items") == 7)
+        import overrides as OVW_
+        check("overrides editor writes the words the hooks read: off for Sub sessions, Context stop and Loop guard, `650K` / `1M` for Context stop; a word it cannot read is refused",
+              [OVW_.clean_value(k_, H.OVERRIDE_KEYS[k_], v_) for k_, v_ in (("Sub sessions", "off"), ("Sub sessions", "4"), ("Context stop", "650k"), ("Context stop", "1M"), ("Context stop", "off"), ("Loop guard", "off"))]
+              == ["off", "4", "650K", "1M", "off", "off"] and all(H.override_known(k_, v_) for k_, v_ in (("Sub sessions", "off"), ("Context stop", "650K"), ("Loop guard", "off"))))
+        try:
+            OVW_.clean_value("Sub sessions", H.OVERRIDE_KEYS["Sub sessions"], "lots"); bad_ = False
+        except OVW_.Bad:
+            bad_ = True
+        check("overrides editor: `Sub sessions = lots` is refused", bad_)
         o3s_ = o3p("- Context marks = 500, 600\n- Context stop = 650K\n")
         check("Context stop: N (K, M read) is a mark too and the only one that stops; default 500; off = none; a bad value is flagged and reads as the default",
               H.context_marks(o3s_) == (500, 600, 650) and H.context_stop(o3s_) == 650 and not H.context_stops(o3s_, 600) and H.context_stops(o3s_, 650) and not H.context_stops(o3s_, 500)
@@ -3882,7 +4123,7 @@ def main():
         check("launcher: no Python at all -> one clear stderr line, exit 0 (hook never breaks the session)", r.returncode == 0 and "Python 3.8+ not found" in r.stderr and r.stdout == "")
         hj = json.loads((HOOK.parent / "hooks.json").read_text(encoding="utf-8"))
         cmds = [h["command"] for ev in hj["hooks"].values() for grp in ev for h in grp["hooks"] if "run.py" in h["command"]]
-        check("launcher: every hook command runs bash scripts/py --hook hooks/run.py <mode>, no `||` (no double run)", len(cmds) == 15 and all(c.startswith('bash "${CLAUDE_PLUGIN_ROOT}/scripts/py" --hook "${CLAUDE_PLUGIN_ROOT}/hooks/run.py" ') and "||" not in c for c in cmds))
+        check("launcher: every hook command runs bash scripts/py --hook hooks/run.py <mode>, no `||` (no double run)", len(cmds) == 17 and all(c.startswith('bash "${CLAUDE_PLUGIN_ROOT}/scripts/py" --hook "${CLAUDE_PLUGIN_ROOT}/hooks/run.py" ') and "||" not in c for c in cmds))
         r = subprocess.run(["bash", str(PY), "--hook", str(Path(state, "missing.py"))], capture_output=True, text=True, env=base)
         check("launcher: --hook always exits 0, even when Python fails (exit 2 would block the tool call)", r.returncode == 0)
         r = subprocess.run(["bash", str(PY), str(Path(state, "missing.py"))], capture_output=True, text=True, env=base)
@@ -4049,7 +4290,7 @@ def main():
               and all(v["kind"] in ("select", "number", "text", "list") and "default" in v and (v["kind"] == "select") == bool(v["options"]) for v in HG.OVERRIDE_KEYS.values())
               and all(HG.OVERRIDE_KEYS[k]["default"] == "pane" for k in ("Guide place", "Resume place", "Agents place")))
         forms = ["Unit Test / Work = haiku·medium", "Codebase Exploration & Onboarding / Read cap = 200", "Topic: Notifications & Messaging = T3", "Reviewers: FIN = finance, security, tester",
-                 "Workflow: Code Health = Read, Work, Verify", "Review: Security / T4 = opus·xhigh", "Financial & Amount Calculations / Verify = opus·xhigh"]
+                 "Workflow: Code Health = Read, Work, Verify", "Review: Security / T4 = opus·xhigh", "Financial & Amount Calculations / Verify = opus·xhigh", "Unit Test / Session = sonnet·medium"]
         check("COMPLEX_FORMS: every complex form of overrides.md matches one, no simple key does", all(any(r.match(f) for r in HG.COMPLEX_FORMS) for f in forms)
               and not any(r.match(f"{k} = {v['default'] or 'x'}") for k, v in HG.OVERRIDE_KEYS.items() for r in HG.COMPLEX_FORMS))
 
@@ -4308,11 +4549,11 @@ def main():
         rd_ = (HOOK.parent.parent / "README.md").read_text()
         sec_ = rd_[rd_.index("### Overrides"):]
         check("README: the Overrides table lists every OVERRIDE_KEYS key", all(f"| `{k}` |" in sec_ for k in HG.OVERRIDE_KEYS))
-        form_marks = ["Topic / Side cap", "Topic / Side =", "Topic: Name", "Reviewers:", "Workflow:", "Review: <Tag>"]  # COMPLEX_FORMS order
+        form_marks = ["Topic / Side cap", "Topic / Side =", "Topic / Session =", "Topic: Name", "Reviewers:", "Workflow:", "Review: <Tag>"]  # COMPLEX_FORMS order
         check("README: ... and every COMPLEX_FORMS form (one row each)", len(form_marks) == len(HG.COMPLEX_FORMS) and all(re.search(r"^\| `" + re.escape(m), sec_, re.M) for m in form_marks))
         check("README: ... with defaults from the code, the pane editor, /abofles:pane and /abofles:history", all(f"| `{k}` |" in sec_ and (v["default"] in sec_ if v["default"] else True) for k, v in HG.OVERRIDE_KEYS.items()) and "/abofles:pane" in sec_ and "/abofles:history" in sec_ and "pane" in sec_.split("| `Main session`")[0])
         check("overrides.md: the five place forms are described and the form count matches the code", all(f"`{w} place = " in (HOOK.parent.parent / "skills/abofles/references/overrides.md").read_text() for w in ("Guide", "Resume", "Agents", "Receipt", "Running"))
-              and f"Forty-one forms" in (HOOK.parent.parent / "skills/abofles/references/overrides.md").read_text() and len(HG.OVERRIDE_KEYS) + len(HG.COMPLEX_FORMS) == 41)
+              and f"Forty-four forms" in (HOOK.parent.parent / "skills/abofles/references/overrides.md").read_text() and len(HG.OVERRIDE_KEYS) + len(HG.COMPLEX_FORMS) == 44)
 
         # a receipt's Journal line keeps every field, and reads back
         rc_ = HG.parse_receipt("🧾 **1 Agent · 63K Tokens · $0.03**\n- `done` → the page\n- `why` → asked\n- `workflow` → Read ✓ · Work ✓\n- `check` → 181 pass\n- `open` → none\n- `next` → run /compact")
@@ -4940,6 +5181,7 @@ def main():
         compact_refresh_tests(check)
         memo_repair_tests(check)
         os.environ["ABOFLES_STATE_DIR"] = state; os.environ["ABOFLES_CONFIG"] = str(Path(state, "config.json"))
+        sub_session_tests(check)
 
     print(f"\n{'ALL PASS' if not fails else f'{fails} FAILED'}")
     sys.exit(1 if fails else 0)
