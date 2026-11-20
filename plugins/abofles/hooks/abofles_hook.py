@@ -507,6 +507,9 @@ OVERRIDE_KEYS = {
     "Resume place": {"kind": "select", "options": ["pane", "output"], "default": "pane"},
     "Agents place": {"kind": "select", "options": ["pane", "output"], "default": "pane"},
     "Running place": {"kind": "select", "options": ["pane", "off"], "default": "pane"},  # the Running page and Home's Running card; off: neither
+    "Tasks place": {"kind": "select", "options": ["pane", "off"], "default": "pane"},  # Home's Tasks card: the session's task list, kept after the turn ends; off: none
+    "Tasks nudge": {"kind": "number", "options": [], "default": "12"},  # while a task list is open: a new ask gets a note to add it as a step, and every N tool calls with no list update a note to tick it; off = no notes
+    "Tasks hide": {"kind": "select", "options": ["manual", "auto", "next"], "default": "manual"},  # a finished task list: manual = stays until its Hide button; auto = hidden when the turn that finished it ends; next = hidden when the next message starts a turn
     "Receipt place": {"kind": "select", "options": ["pane", "output"], "default": "pane"},  # pane: the receipt is recorded by a command, not printed
     "Memo agent": {"kind": "select", "options": ["auto", "manual", "off"], "default": "auto"},  # the memo-keeping agent: auto offers it in the background when a by-meaning check is due, manual only /abofles:memo, off never
     "Memo agent every": {"kind": "number", "options": [], "default": "6"},  # hours between two runs of the memo agent per project
@@ -573,7 +576,7 @@ def override_known(key, v):
     if spec["kind"] == "number":
         if key == "Context stop":
             return context_k(w) is not None or w in OFF_WORDS
-        return bool(re.match(r"\d+", w)) or (key in ("Break", "Loop guard", "Sub sessions") and w in OFF_WORDS)
+        return bool(re.match(r"\d+", w)) or (key in ("Break", "Loop guard", "Sub sessions", "Tasks nudge") and w in OFF_WORDS)
     if spec["kind"] == "list":
         return len(re.findall(r"\d+", v or "")) >= (4 if key == "Agent budgets" else 1) or (key == "Context marks" and w in OFF_WORDS)
     if key in ("Main session", "Sub session"):
@@ -615,7 +618,7 @@ def pane_enabled_uncached():
 
 
 PLACE_KEYS = {"spawns": "Agents place"}  # the payload still says `spawns`: state files and the mod's older builds read that name
-PLACE_VALUES = {"guide": ("pane", "band"), "running": ("pane", "off")}
+PLACE_VALUES = {"guide": ("pane", "band"), "running": ("pane", "off"), "tasks": ("pane", "off")}
 
 
 def place(cwd, what):
@@ -623,7 +626,7 @@ def place(cwd, what):
     block; default and any unknown value: pane). Without the abofles-guide mod there is no pane: guide -> band, the rest -> output."""
     v = first_word(override_value(cwd, PLACE_KEYS.get(what) or f"{what.capitalize()} place")) or "pane"
     if not pane_enabled():
-        return "band" if what == "guide" else "off" if what == "running" else "output"
+        return "band" if what == "guide" else "off" if what in ("running", "tasks") else "output"
     return v if v in PLACE_VALUES.get(what, ("pane", "output")) else "pane"
 
 
@@ -1331,6 +1334,12 @@ def pane_overrides(root, sid):
                     if m and simple_key(m.group(1)) is None]}  # never clipped: Save writes them back; path: project scope has two files
 
 
+def tasks_hide(root):
+    """When the pane's finished task list hides itself: manual (its Hide button only), auto (the turn that finished it ends) or next (the next turn starts)."""
+    v = first_word(override_value(root, "Tasks hide")) or "manual"
+    return v if v in OVERRIDE_KEYS["Tasks hide"]["options"] else "manual"
+
+
 def refresh_pane(root, st, sid, rows=None):
     """Compute the Abo Fles pane's payload and keep it in the state (`st["pane"]`, the abofles-guide mod reads it there): the resume
     data, the agents (live, the last PANE_ROWS ledger rows, the session totals) and the override table. Never raises; call under the state lock."""
@@ -1340,13 +1349,14 @@ def refresh_pane(root, st, sid, rows=None):
                  "agent_id": r.get("agent_id")}  # the Running card matches its agents by id
                 for r in rows if r.get("status") == "pending"]
         st["pane"] = {"v": 1, "ts": int(time.time()), "root": root, "sid": sid,
-                      "places": {w: place(root, w) for w in ("guide", "resume", "spawns", "running")},
+                      "places": {w: place(root, w) for w in ("guide", "resume", "spawns", "running", "tasks")},
                       "resume": pane_resume(root, sid),
                       "spawns": {"live": live, "rows": [pane_row(r) for r in rows[-PANE_ROWS:]],
                                  "totals": history_totals(rows, st.get("main_model") or "opus", st.get("effort") or "high")},
                       "overrides": pane_overrides(root, sid),
                       "decisions": pane_decisions(root, sid),
                       "memo_health": health_info(root),
+                      "tasks_hide": tasks_hide(root),
                       "cmd": {"overrides": script_cmd("overrides.py", "--session", sid)}}
     except Exception:
         pass
@@ -1467,6 +1477,82 @@ def work_project(st):
     return cur
 
 
+# ── Task list: keep the session's list (the app's update_plan, TodoWrite, Task*) moving with the work ──────────────────
+PLAN_TOOLS = ("mcp__ccd_turn__update_plan", "mcp__ccd_turn__wrap_up", "TodoWrite", "TaskCreate", "TaskUpdate")
+PLAN_ASK_NOTE = ("abofles: a task list is open. If this message asks for anything new (a change, a fix, a check, a test), add it as its own step "
+                 "now — `update_plan` with the whole list, the new step(s) in order, the one you start `in_progress` — before you work on it, and tick "
+                 "each step the moment it ends. The person follows the work on that list, not in the messages.")
+
+
+def tasks_nudge_every(cwd):
+    """`- Tasks nudge = N | off` (default 12): tool calls with no list update before the tick note; None = no notes at all."""
+    if first_word(override_value(cwd, "Tasks nudge")) in OFF_WORDS:
+        return None
+    return number_override(cwd, "Tasks nudge")
+
+
+def plan_statuses(prev, tool, ti):
+    """The list's step statuses after one call, as far as the hook can tell (`completed` / other). A TaskCreate adds an open step; a
+    TaskUpdate (its id is in the result, not the hook's mirror) keeps the list open unless it was all done."""
+    s = list(prev or [])
+    if tool == "mcp__ccd_turn__wrap_up":
+        return ["completed"] * len(s)
+    if tool == "TodoWrite":
+        return [str(x.get("status") or "pending") for x in ti.get("todos") or [] if isinstance(x, dict)]
+    if tool == "TaskCreate":
+        return s + ["pending"]
+    if tool == "TaskUpdate":
+        return s
+    if isinstance(ti.get("items"), list):
+        s = [str(x.get("status") or "pending") for x in ti["items"] if isinstance(x, dict)]
+    for n in ti.get("done") or []:
+        if isinstance(n, int) and 0 < n <= len(s):
+            s[n - 1] = "completed"
+    if isinstance(ti.get("start"), int) and 0 < ti["start"] <= len(s):
+        s[ti["start"] - 1] = "in_progress"
+    if ti.get("advance") is True:
+        cur = next((i for i, x in enumerate(s) if x == "in_progress"), -1)
+        if cur >= 0:
+            s[cur] = "completed"
+        nxt = next((i for i, x in enumerate(s) if i > cur and x == "pending"), None)
+        nxt = nxt if nxt is not None else next((i for i, x in enumerate(s) if x == "pending"), None)
+        if nxt is not None:
+            s[nxt] = "in_progress"
+    return s
+
+
+def plan(data):
+    """PostToolUse on the task-list tools of the main session: mirror the list's statuses and start the tick count over."""
+    if in_subagent(data) or data.get("tool_name") not in PLAN_TOOLS:
+        return
+    sid = data.get("session_id", "")
+    with state_lock(sid):
+        st = load_state(sid)
+        if "started" not in st:
+            return
+        s = plan_statuses(st.get("plan_steps"), data.get("tool_name"), data.get("tool_input") or {})
+        st["plan_steps"] = s[:200]
+        st["plan_open"] = any(x != "completed" for x in s)
+        st["plan_calls"], st["plan_warned"] = 0, 0
+        save_state(sid, st)
+
+
+def plan_tick(st, cwd):
+    """One more main-session tool call while a list is open (caller holds the lock): the tick note once every `Tasks nudge` calls, else None."""
+    if not st.get("plan_open"):
+        return None
+    every = tasks_nudge_every(cwd)
+    if not every:
+        return None
+    st["plan_calls"] = st.get("plan_calls", 0) + 1
+    n = st["plan_calls"]
+    if n - st.get("plan_warned", 0) < every:
+        return None
+    st["plan_warned"] = n
+    return (f"abofles: {n} tool calls since the task list last moved. If a step finished, or the work turned to something the list does not "
+            "name, update it now: `advance`, or the whole list with the new step in place. The person reads the list to know where the work is.")
+
+
 def edit(data):
     """PostToolUse on Edit/Write/MultiEdit/NotebookEdit: count where the session's edits land (subagent edits included —
     they are this session's work). When another repository holds most of them, the session's memo moves there."""
@@ -1476,6 +1562,17 @@ def edit(data):
     path = ti.get("file_path") or ti.get("notebook_path") or ""
     if path:
         work_count(data, [path])
+    if in_subagent(data):
+        return
+    sid = data.get("session_id", "")
+    with state_lock(sid):
+        st = load_state(sid)
+        if "started" not in st or not st.get("plan_open"):
+            return
+        note = plan_tick(st, project_root(data, st))
+        save_state(sid, st)
+    if note:
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": note}}))
 
 
 GIT_WRITE_VERBS = {"add", "commit", "merge", "rebase", "cherry-pick", "revert", "am", "apply", "pull", "push", "rm", "mv", "reset", "restore",
@@ -7128,6 +7225,7 @@ def guard(data):
             return  # plugin not active in this session (no SessionStart marker)
         remember_transcript(data, st)
         en = effort_note(data, st)
+        pn = plan_tick(st, project_root(data, st))
         threshold = None
         if MCP_FREE.match(tool) and st.get("connector_free", 0) < FREE_FETCHES:
             st["connector_free"] = st.get("connector_free", 0) + 1  # a ticket or page fetched by key: neither counts nor breaks the streak
@@ -7150,6 +7248,8 @@ def guard(data):
         msgs.append(en)
     if threshold:
         msgs.append(guard_text(n))
+    if pn:
+        msgs.append(pn)
     if msgs:  # context only: an `allow` here would skip the user's permission prompt for the read (a file outside the project, a Bash command)
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": "\n\n".join(msgs)}}))
 
@@ -7185,6 +7285,7 @@ def prompt(data):
             if not st.get("spawns_since_receipt"):
                 st["connector_free"] = 0  # a new ask with no open task: its first fetch-by-key reads are free again
         inote = install_note_once(st)
+        pa = PLAN_ASK_NOTE if not notification and st.get("plan_open") and tasks_nudge_every(cwd) else None  # a new ask while a list is open: a step of its own
         g = refresh_guide(cwd, st, sid)  # also a row resolved by a script since the last hook: the ladder drops it now
         if last and mins and not notification and (time.time() - last) >= mins * 60 and not resume_off(cwd):
             away = int((time.time() - last) // 60)
@@ -7205,7 +7306,7 @@ def prompt(data):
                 mn = memo_agent_note(cwd, sid)
                 registry_set(cwd, memo_agent_offered_at=int(time.time()))  # the offer starts the window: ignored or not, the line is not printed again inside it
         save_state(sid, st)
-    msg = "\n\n".join(m for m in (en, rn, inote, gn, bn, mn) if m)
+    msg = "\n\n".join(m for m in (en, rn, inote, gn, bn, mn, pa) if m)
     if msg:
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": msg}}))
 
@@ -7834,6 +7935,8 @@ def main():
             sendmsg(data)
         elif mode == "edit":
             edit(data)
+        elif mode == "plan":
+            plan(data)
         elif mode == "precompact":
             precompact(data)
         elif mode == "postcompact":

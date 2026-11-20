@@ -106,6 +106,10 @@ const CSS = [
   '.lbl.word{width:auto}.lbl{flex:none;width:44px;font-size:10px;line-height:16px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:color-mix(in srgb,var(--c) 50%,currentColor)}',
   '.mt2{display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere;font-size:12px;line-height:16px}.mt2 .q{opacity:.7}',
   '.pad{padding-inline-start:16px}',
+  // the Tasks bar: one segment per step, 3 px apart
+  `.segs{display:flex;gap:3px;height:4px}.segs i{display:block;flex:1 1 0;height:4px;border-radius:2px;background:var(--c)}.segs i.rest{background:${mix('currentColor', 12)}}`,
+  // a task step not started yet: a dashed ring the size of a badge
+  `.ring{flex:none;width:20px;height:20px;border-radius:50%;border:1.5px dashed ${mix('currentColor', 45)}}`,
   '.c0{flex:none;width:52px;text-align:end}.c1{flex:none;width:56px;text-align:end}.c2{flex:none;width:56px;text-align:end}.c3{flex:none;width:40px;text-align:end}',
   `.row.thead{height:${CAP}px}.sw0{flex:none;width:8px}`, // a table's column titles: the empty swatch keeps Model on the labels' edge
   // a page's cards slide in when the person moves to it (a short ease-out, one after another); none for reduced motion
@@ -412,10 +416,10 @@ export function emptyCard(text: string, paneW: number): Block {
 // `max` = WHOLE on a detail page: the text is never cut. There the estimate runs on a room 14% short: on 3,450 real memo texts at six widths, no line was left out.
 const WHOLE_ROOM = 0.86
 export const WHOLE = 99
-function fit(text: string, room: number, max: number, cls = ''): Block {
+function fit(text: string, room: number, max: number, cls = '', loose = false): Block {
   const need = estLines(text, room * (max >= WHOLE ? WHOLE_ROOM : 0.94), 14, /\bb\b/.test(cls))
   if (max >= WHOLE) return { html: `<div class="whole ${cls}" dir="auto">${esc(text)}</div>`, h: need * LINE } // its own height: a spare estimated line falls under the card, not inside a row
-  return clamped(text, Math.min(need, max), cls)
+  return clamped(text, Math.min(need, max), cls, LINE, loose)
 }
 
 // The same at the small size (12 px on a 16 px line, muted); SF Pro Text tracks wider at 12 px than at 14 (+5%).
@@ -425,8 +429,9 @@ function fitSmall(text: string, room: number, max: number): Block {
 }
 
 // A row with a lead on its text's first line: a dot, a number, a bullet, an arrow.
-function leadRow(lead: string, leadW: number, text: string, room: number, max: number, cls = ''): Block {
-  const f = fit(text, room - leadW - GAP, max, cls)
+// `loose`: a row that wraps to fewer lines than estimated takes only its own (the spare room falls under the card), so a list's rows stay evenly spaced.
+function leadRow(lead: string, leadW: number, text: string, room: number, max: number, cls = '', loose = false): Block {
+  const f = fit(text, room - leadW - GAP, max, cls, loose)
   // named here, as `dir=auto` skips a child with its own dir: an Arabic text keeps its lead beside it
   const rtl = /[\u0590-\u08ff]/.test(/[A-Za-z\u0590-\u08ff]/.exec(text)?.[0] ?? '')
   return { html: `<div class="lead" dir="${rtl ? 'rtl' : 'ltr'}">${lead}<div class="grow">${f.html}</div></div>`, h: f.h }
@@ -617,6 +622,56 @@ export function runOutput(lines: string[], note: string | null, paneW: number): 
 export function runningHome(rows: SpawnRow[], n: number, paneW: number): Block {
   const room = textRoom(paneW)
   return cardOf([stack([capRow('Running', String(n), 'blue'), ruledRows(rows.map(x => spawnBlock(x, room)))], GAP)])
+}
+
+// ---- Tasks
+
+// A step of the session's task list: done (a green check, muted text), now (a blue arrow, bold) or still to do (a dashed ring).
+export type TaskRow = { text: string; state: 'done' | 'now' | 'todo' }
+export type TasksIn = {
+  paneW: number
+  rows: TaskRow[] // the steps shown
+  done: number
+  total: number
+  word: string // Working · Waiting on 2 agents · Paused · Done
+  tone: Tone
+  line: string // `Step 4 of 11`, `All 11 steps done`
+  before: number // done steps above the rows shown
+  after: number // steps under them
+  max?: number // lines per step (WHOLE on the detail page)
+  steps?: TaskRow['state'][] // every step's state, in order: the bar gets one segment per step
+}
+export const pctOf = (t: { done: number; total: number }): number => (t.total > 0 ? Math.round((100 * t.done) / t.total) : 0) // share of the steps done
+const SEG_MAX = 40 // past this many steps the segments would be slivers: one continuous bar
+// The progress bar: one segment per step (done in the tone, the current one a tint of it, the rest the empty track), or one
+// continuous fill for a very long list.
+function taskBar(t: TasksIn): string {
+  const steps = t.steps ?? []
+  if (steps.length === 0 || steps.length > SEG_MAX) {
+    const pct = t.total > 0 ? (100 * t.done) / t.total : 0
+    return `<div class="track"><div class="fill t-${t.tone}" style="width:${pct.toFixed(1)}%"></div></div>`
+  }
+  const seg = (s: TaskRow['state']) => `<i class="${s === 'todo' ? 'rest' : `t-${t.tone}`}"${s === 'now' ? ' style="opacity:.45"' : ''}></i>`
+  return `<div class="segs">${steps.map(seg).join('')}</div>`
+}
+const TASK_LEAD = {
+  done: '<span class="badge t-green">✓</span>',
+  now: '<span class="badge t-blue">›</span>',
+  todo: '<span class="ring"></span>',
+}
+export function tasksCard(t: TasksIn): Block {
+  const room = textRoom(t.paneW)
+  const head = stack(
+    [
+      capRow('Tasks', `${t.done} / ${t.total}`, t.tone),
+      { html: taskBar(t), h: 4 },
+      { html: `<div class="row small"><span class="word ink t-${t.tone} fix">${esc(t.word)}</span><span class="dim grow">${esc(t.line)}</span><span class="num b ink t-${t.tone} fix">${pctOf(t)}%</span></div>`, h: LINE },
+    ],
+    GAP,
+  )
+  const note = (n: number, what: string): Block | null => (n > 0 ? { html: `<div class="small dim pad">${esc(`+${n} ${what}`)}</div>`, h: CAP } : null)
+  const rows = t.rows.map(r => leadRow(TASK_LEAD[r.state], 20, r.text, room, t.max ?? 2, r.state === 'done' ? 'dim' : r.state === 'now' ? 'b' : '', true))
+  return cardOf([head, rows.length ? stack([note(t.before, 'done above'), ...rows, note(t.after, 'more')], GAP) : null])
 }
 
 // ---- Decisions

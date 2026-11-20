@@ -1,4 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
+import { applyPlan, planBlock, planState } from './tasks'
+import type { PlanStatus } from '../types'
 
 import { fmtWhen, headParts, receiptOf } from './pane'
 import { rawBase } from './editor'
@@ -2438,4 +2440,124 @@ test("the payload keeps a live row's agent_id and the Session count from newer h
   const p = cleanPane({ ...base, spawns: { ...base.spawns, live: [{ side: 'Work', model: 'opus', effort: 'high', description: 'x', ts: 1, agent_id: 'abc' }, { side: 'Read', model: 'haiku', effort: 'low', description: 'y', ts: 2, agent_id: '' }], totals: { ...base.spawns.totals, sessions: 3 } } })
   expect(p?.spawns.live.map(l => l.agent_id ?? null)).toEqual(['abc', null])
   expect(p?.spawns.totals.sessions).toBe(3)
+})
+
+// ---- Tasks: the session's task list, kept after the turn ends
+
+test('the task list follows update_plan: items, advance, done/start, wrap_up; TodoWrite and TaskCreate/TaskUpdate; other tools and subagents leave it', () => {
+  const UP = 'mcp__ccd_turn__update_plan'
+  let p = applyPlan(null, UP, { items: [{ content: 'Look', status: 'in_progress' }, { content: 'Build', status: 'pending' }, { content: '**Test**', status: 'pending' }] }, {}, 1)
+  expect(p?.items.map(x => x.status)).toEqual(['in_progress', 'pending', 'pending'])
+  expect(p?.items[2].content).toBe('Test')
+  p = applyPlan(p, UP, { advance: true }, {}, 2)
+  expect(p?.items.map(x => x.status)).toEqual(['completed', 'in_progress', 'pending'])
+  p = applyPlan(p, UP, { done: [2], start: 3 }, {}, 3)
+  expect(p?.items.map(x => x.status)).toEqual(['completed', 'completed', 'in_progress'])
+  expect(p?.closed).toBe(false)
+  p = applyPlan(p, 'mcp__ccd_turn__wrap_up', { recap: 'x' }, {}, 4)
+  expect(p?.items.every(x => x.status === 'completed')).toBe(true)
+  expect(p?.closed).toBe(true)
+  expect(applyPlan(null, UP, { advance: true }, {}, 5)).toBeNull()
+  expect(applyPlan(p, 'Read', { file_path: '/a' }, {}, 5)).toBeNull()
+  const t = applyPlan(null, 'TodoWrite', { todos: [{ content: 'a', status: 'completed', activeForm: 'A' }, { content: 'b', status: 'in_progress', activeForm: 'B' }] }, {}, 6)
+  expect(t?.items.map(x => x.status)).toEqual(['completed', 'in_progress'])
+  let c = applyPlan(null, 'TaskCreate', { subject: 'one', description: 'd' }, { result: 'Task #7 created successfully: one' }, 7)
+  c = applyPlan(c, 'TaskCreate', { subject: 'two', description: 'd' }, { result: { task: { id: '8' } } }, 8)
+  expect(c?.items.map(x => x.id)).toEqual(['7', '8'])
+  c = applyPlan(c, 'TaskUpdate', { taskId: '7', status: 'completed' }, {}, 9)
+  c = applyPlan(c, 'TaskUpdate', { taskId: '8', status: 'deleted' }, {}, 10)
+  expect(c?.items).toEqual([{ content: 'one', status: 'completed', id: '7' }])
+  expect(applyPlan(c, 'TaskUpdate', { taskId: '99', status: 'completed' }, {}, 11)).toBeNull()
+})
+
+test('the list state reads Working while the turn runs, Waiting on jobs, Paused once it ends, Done when all are checked', () => {
+  const p = { items: [{ content: 'a', status: 'completed' as const }, { content: 'b', status: 'in_progress' as const }, { content: 'c', status: 'pending' as const }], ts: 1, closed: false }
+  expect(planState(p, true, 0)).toMatchObject({ word: 'Working', line: 'Step 2 of 3', done: 1 })
+  expect(planState(p, false, 2).word).toBe('Waiting on 2 jobs')
+  expect(planState(p, false, 0)).toMatchObject({ word: 'Paused', tone: 'amber' })
+  expect(planState({ ...p, items: p.items.map(x => ({ ...x, status: 'completed' as const })) }, false, 0)).toMatchObject({ word: 'Done', line: 'All 3 steps done' })
+  // Home shows a window from the step before the current one; the rest is counted
+  const long = { items: Array.from({ length: 11 }, (_, i) => ({ content: `step ${i + 1}`, status: (i < 5 ? 'completed' : i === 5 ? 'in_progress' : 'pending') as PlanStatus })), ts: 1, closed: false }
+  const b = planBlock(long, true, 0, 400, false)
+  expect(b.alt).toContain('Done: step 5')
+  expect(b.alt).toContain('Now: step 6')
+  expect(b.alt).not.toContain('Done: step 4')
+  expect(b.cut).toBe(true)
+  expect(planBlock(long, true, 0, 400, true).alt.filter(x => /^(Done|Now|To do): /.test(x)).length).toBe(11)
+})
+
+test('Home keeps the Tasks card after the turn ends, ticks it as the plan moves, and opens every step on All tasks', async ($, on) => {
+  workOn(on, { value: [] })
+  await harness($, on, { guide: guideOf([item()]), pane: panePayload() })
+  await $.turn.start({ text: 'go', turnId: 't1' } as never)
+  await $.tool.call({ tool: 'mcp__ccd_turn__update_plan', items: Array.from({ length: 9 }, (_, i) => ({ content: `step ${i + 1}`, status: i === 0 ? 'in_progress' : 'pending' })), scope: 'first_task' } as never)
+  await $.tool.call({ tool: 'mcp__ccd_turn__update_plan', advance: true } as never)
+  await $.tool.call({ tool: 'mcp__ccd_turn__update_plan', items: [{ content: 'sub step', status: 'in_progress' }], agentId: 'a1' } as never) // a subagent's own list is not the session's
+  const home = await mountDesk($, 'home')
+  let lines = await altLines(home)
+  for (const t of ['Tasks', '1 / 9', 'Working', 'Step 2 of 9', 'Done: step 1', 'Now: step 2']) expect([t, lines.includes(t)]).toEqual([t, true])
+  expect(lines).not.toContain('Now: sub step')
+  await $.turn.complete({ turnId: 't1', answer: 'ok' } as never)
+  lines = await altLines(home)
+  expect(lines).toContain('Paused')
+  expect(lines).toContain('Now: step 2') // still there after the turn
+  await home.press({ key: 'detail:tasks' })
+  lines = await altLines(home)
+  expect(lines).toContain('To do: step 9')
+  await home.unmount()
+})
+
+test('a finished list has Hide; Tasks hide = auto hides it at the turn end, next at the next turn; an unfinished list never hides; a new list shows again', async ($, on) => {
+  workOn(on, { value: [] })
+  const UP = 'mcp__ccd_turn__update_plan'
+  const list = (n: number, done: number) => Array.from({ length: n }, (_, i) => ({ content: `s${i + 1}`, status: i < done ? 'completed' : i === done ? 'in_progress' : 'pending' }))
+  await harness($, on, { guide: guideOf([item()]), pane: panePayload({ tasks_hide: 'auto' }) })
+  await $.turn.start({ text: 'go', turnId: 't1' } as never)
+  await $.tool.call({ tool: UP, items: list(3, 1) } as never)
+  await $.turn.complete({ turnId: 't1', answer: 'ok' } as never)
+  const home = await mountDesk($, 'home')
+  expect(await altLines(home)).toContain('Paused') // unfinished: auto leaves it
+  expect(await has(home, 'tasks:hide')).toBe(false)
+  await $.turn.start({ text: 'go', turnId: 't2' } as never)
+  await $.tool.call({ tool: UP, items: list(3, 3) } as never)
+  expect(await altLines(home)).toContain('Done')
+  expect(await has(home, 'tasks:hide')).toBe(true)
+  await $.turn.complete({ turnId: 't2', answer: 'ok' } as never)
+  expect(await altLines(home)).not.toContain('Tasks') // auto: gone with the turn that finished it
+  await $.turn.start({ text: 'go', turnId: 't3' } as never)
+  await $.tool.call({ tool: UP, items: list(2, 2) } as never)
+  expect(await altLines(home)).toContain('Done') // a new list shows again
+  await home.press({ key: 'tasks:hide' })
+  expect(await altLines(home)).not.toContain('Tasks')
+  await home.unmount()
+})
+
+test('Tasks hide = next keeps a finished list through its turn end and hides it when the next turn starts; Tasks place = off is its own test', async ($, on) => {
+  workOn(on, { value: [] })
+  await harness($, on, { guide: guideOf([item()]), pane: panePayload({ tasks_hide: 'next' }) })
+  await $.turn.start({ text: 'go', turnId: 't1' } as never)
+  await $.tool.call({ tool: 'mcp__ccd_turn__update_plan', items: [{ content: 'a', status: 'completed' }] } as never)
+  await $.turn.complete({ turnId: 't1', answer: 'ok' } as never)
+  const home = await mountDesk($, 'home')
+  expect(await altLines(home)).toContain('Done')
+  await $.turn.start({ text: 'next', turnId: 't2' } as never)
+  expect(await altLines(home)).not.toContain('Tasks')
+  await home.unmount()
+})
+
+test('Tasks place = off draws no Tasks card', async ($, on) => {
+  workOn(on, { value: [] })
+  await harness($, on, { guide: guideOf([item()]), pane: panePayload({ places: { ...PLACES, tasks: 'off' } }) })
+  await $.tool.call({ tool: 'mcp__ccd_turn__update_plan', items: [{ content: 'a', status: 'in_progress' }] } as never)
+  const home = await mountDesk($, 'home')
+  expect(await altLines(home)).not.toContain('Tasks')
+  await home.unmount()
+})
+
+test('the Tasks card says the share of steps done, rounded', () => {
+  const p = (done: number, n: number) => ({ items: Array.from({ length: n }, (_, i) => ({ content: `s${i}`, status: (i < done ? 'completed' : i === done ? 'in_progress' : 'pending') as PlanStatus })), ts: 1, closed: done >= n })
+  expect(planBlock(p(1, 4), true, 0, 400, false).alt).toContain('25%')
+  expect(planBlock(p(0, 4), true, 0, 400, false).alt).toContain('0%')
+  expect(planBlock(p(1, 3), true, 0, 400, false).alt).toContain('33%')
+  expect(planBlock(p(4, 4), false, 0, 400, false).alt).toContain('100%')
 })

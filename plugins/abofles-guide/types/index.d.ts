@@ -28,6 +28,7 @@ export type PanePlaces = {
   guide: 'pane' | 'band' // where the guide shows; old hooks: the band
   resume: 'pane' | 'output' // where /abofles:resume shows; old hooks: the output
   spawns: 'pane' | 'output' // where /abofles:bill shows; old hooks: the output
+  tasks?: 'pane' | 'off' // the Tasks card (the session's task list); absent in older state files: pane
   running: 'pane' | 'off' // the Running page and Home's Running card; old hooks: the pane
 }
 
@@ -95,8 +96,14 @@ export type Pane = {
   overrides: PaneOverrides | null
   decisions?: PaneDecisions | null // absent in older state files: no Decisions card
   memo_health?: PaneHealth | null // what the memo's last tidy-up moved; absent in older state files
+  tasks_hide?: 'manual' | 'auto' | 'next' // when a finished task list hides itself; absent in older state files: manual
   cmd: { overrides: string[] | null } // argv prefix of the script the overrides editor runs
 }
+
+// ---- the session's task list, kept by the mod from the main session's update_plan / TodoWrite / TaskCreate / TaskUpdate calls (tasks.tsx)
+export type PlanStatus = 'pending' | 'in_progress' | 'completed'
+export type PlanItem = { content: string; status: PlanStatus; id?: string } // id: a TaskCreate task's id, for TaskUpdate
+export type Plan = { items: PlanItem[]; ts: number; closed: boolean; hidden?: boolean } // ts: last change (ms); closed: every step done (or the wrap-up checked them off); hidden: a finished list taken off Home (its Hide button or `Tasks hide`), until a new list
 
 // ---- what runs now, kept by the mod from the engine's events (running.tsx); no hook and no model call feeds it.
 export type WorkLoop = { startedAt: number; now: string | null; uses: number; tokens: number; model: string | null; effort: string | null; recent?: { at: number; s: string }[]; endedAt?: number } // startedAt: ms; now: its last tool, in words; recent: its last tools, oldest first; endedAt: an agent's turn ended (its reply is in), while the engine may still hold it on background work it owns
@@ -124,6 +131,7 @@ declare module 'claude-code' {
     // `paneNavTs`: when the person last moved to a page (ms): its cards slide in for a moment after.
     // `work`: what runs now (Work); `workTick`: bumped every few seconds while anything runs, so the elapsed times move; `workBusy`: how many agents and commands run, the nav bar's dot;
     // `workConfirm`: the row whose Stop waits for its confirmation.
+    // `plan`: the session's task list (Plan), kept after the turn ends until a new list replaces it.
     // `paneFolds`: open (true) or folded (false) by id: a card, an editor group (`g:<name>`), a long list (`more:<id>`); also in $.store.
     'abofles-guide': {
       guide: Guide | null
@@ -146,6 +154,7 @@ declare module 'claude-code' {
       workTick: number
       workBusy: number
       workConfirm: string | null
+      plan: Plan | null
     }
   }
 }

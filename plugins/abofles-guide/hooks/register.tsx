@@ -2,6 +2,7 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { Guide } from '../types'
 import { renderPane } from './pane'
+import { notePlan, notePlanTurn } from './tasks'
 import { noteBackground, noteNotified, noteStep, noteTool, noteToolDone, noteTurnEnd, noteTurnStart, startTick } from './running'
 import {
   anyPane,
@@ -71,6 +72,7 @@ export const register: Register = on => {
   // What runs now, for the Running page (running.tsx). Each note catches its own failure: the tool or the model call goes on whatever happens there.
   on('turn.start', async ($, e, next) => {
     await noteTurnStart($, e.agentId)
+    await notePlanTurn($, 'start', e.agentId)
     return next(e)
   })
 
@@ -84,6 +86,7 @@ export const register: Register = on => {
     await noteTool($, e)
     const ran = await next(e)
     await noteToolDone($, e, ran)
+    await notePlan($, e, ran)
     return ran
   })
 
@@ -95,6 +98,7 @@ export const register: Register = on => {
   on('turn.complete', async ($, e, next) => {
     const result = await next(e)
     await noteTurnEnd($, e.agentId)
+    await notePlanTurn($, 'end', e.agentId)
     await refresh($)
     return result
   })

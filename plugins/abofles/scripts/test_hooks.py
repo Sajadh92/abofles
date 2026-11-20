@@ -4581,7 +4581,7 @@ def main():
         check("launcher: no Python at all -> one clear stderr line, exit 0 (hook never breaks the session)", r.returncode == 0 and "Python 3.8+ not found" in r.stderr and r.stdout == "")
         hj = json.loads((HOOK.parent / "hooks.json").read_text(encoding="utf-8"))
         cmds = [h["command"] for ev in hj["hooks"].values() for grp in ev for h in grp["hooks"] if "run.py" in h["command"]]
-        check("launcher: every hook command runs bash scripts/py --hook hooks/run.py <mode>, no `||` (no double run)", len(cmds) == 17 and all(c.startswith('bash "${CLAUDE_PLUGIN_ROOT}/scripts/py" --hook "${CLAUDE_PLUGIN_ROOT}/hooks/run.py" ') and "||" not in c for c in cmds))
+        check("launcher: every hook command runs bash scripts/py --hook hooks/run.py <mode>, no `||` (no double run)", len(cmds) == 18 and all(c.startswith('bash "${CLAUDE_PLUGIN_ROOT}/scripts/py" --hook "${CLAUDE_PLUGIN_ROOT}/hooks/run.py" ') and "||" not in c for c in cmds))
         r = subprocess.run(["bash", str(PY), "--hook", str(Path(state, "missing.py"))], capture_output=True, text=True, env=base)
         check("launcher: --hook always exits 0, even when Python fails (exit 2 would block the tool call)", r.returncode == 0)
         r = subprocess.run(["bash", str(PY), str(Path(state, "missing.py"))], capture_output=True, text=True, env=base)
@@ -4761,7 +4761,31 @@ def main():
         run("start", {"session_id": ps, "cwd": pd}, led)
         pn_ = gstate(ps).get("pane") or {}
         check("pane: start writes the payload with v, ts, root, sid, places, resume, agents, overrides, cmd", {"v", "ts", "root", "sid", "places", "resume", "spawns", "overrides", "cmd"} <= set(pn_) and pn_["v"] == 1 and pn_["sid"] == ps and pn_["root"] == pd)
-        check("pane: places are the effective ones (mod on -> pane)", pn_["places"] == {"guide": "pane", "resume": "pane", "spawns": "pane", "running": "pane"})
+        check("pane: places are the effective ones (mod on -> pane)", pn_["places"] == {"guide": "pane", "resume": "pane", "spawns": "pane", "running": "pane", "tasks": "pane"})
+        # the task list: an open list gets the ask note on a prompt and the tick note every `Tasks nudge` calls; wrap_up or all done stops both
+        tl, tp = "tasklist1", tempfile.mkdtemp()
+        run("start", {"session_id": tl, "cwd": tp}, led)
+        ctx = lambda o: ((o or {}).get("hookSpecificOutput") or {}).get("additionalContext") or ""
+        UP = "mcp__ccd_turn__update_plan"
+        run("plan", {"session_id": tl, "cwd": tp, "tool_name": UP, "tool_input": {"items": [{"content": "a", "status": "in_progress"}, {"content": "b", "status": "pending"}]}}, led)
+        check("tasks: update_plan with an open step marks the list open", gstate(tl).get("plan_open") is True and gstate(tl).get("plan_steps") == ["in_progress", "pending"])
+        check("tasks: a new message while the list is open gets the add-a-step note", "add it as its own step" in ctx(run("prompt", {"session_id": tl, "cwd": tp, "prompt": "also show the percent"}, led)))
+        check("tasks: a task notification gets no ask note", "add it as its own step" not in ctx(run("prompt", {"session_id": tl, "cwd": tp, "prompt": "<task-notification>x</task-notification>"}, led)))
+        notes = [ctx(run("guard", {"session_id": tl, "cwd": tp, "tool_name": "Bash", "tool_input": {"command": "echo hi"}}, led)) for _ in range(12)]
+        check("tasks: the 12th call with no list update gets the tick note, the 11 before it none", "since the task list last moved" in notes[11] and not any("since the task list last moved" in n for n in notes[:11]))
+        en_ = ctx(run("edit", {"session_id": tl, "cwd": tp, "tool_name": "Edit", "tool_input": {"file_path": os.path.join(tp, "x.txt")}}, led))
+        check("tasks: an edit counts too, and the note waits another 12 calls", "since the task list last moved" not in en_ and gstate(tl).get("plan_calls") == 13)
+        run("plan", {"session_id": tl, "cwd": tp, "tool_name": UP, "tool_input": {"advance": True}}, led)
+        check("tasks: advance moves the mirror and starts the count over", gstate(tl).get("plan_steps") == ["completed", "in_progress"] and gstate(tl).get("plan_calls") == 0)
+        run("plan", {"session_id": tl, "cwd": tp, "tool_name": UP, "tool_input": {"advance": True}}, led)
+        check("tasks: the last advance closes the list: no ask note", gstate(tl).get("plan_open") is False and "add it as its own step" not in ctx(run("prompt", {"session_id": tl, "cwd": tp, "prompt": "next"}, led)))
+        run("plan", {"session_id": tl, "cwd": tp, "tool_name": "TodoWrite", "tool_input": {"todos": [{"content": "a", "status": "pending", "activeForm": "A"}]}}, led)
+        run("plan", {"session_id": tl, "cwd": tp, "tool_name": "mcp__ccd_turn__wrap_up", "tool_input": {"recap": "r"}}, led)
+        check("tasks: TodoWrite opens a list, wrap_up closes it", gstate(tl).get("plan_open") is False)
+        put_md(tp, "- Tasks nudge = off\n")
+        run("plan", {"session_id": tl, "cwd": tp, "tool_name": UP, "tool_input": {"items": [{"content": "a", "status": "in_progress"}]}}, led)
+        check("tasks: Tasks nudge = off: no ask note", "add it as its own step" not in ctx(run("prompt", {"session_id": tl, "cwd": tp, "prompt": "more"}, led)))
+        check("tasks: a subagent's list call is not the session's", run("plan", {"session_id": tl, "cwd": tp, "agent_id": "sub1", "tool_name": UP, "tool_input": {"items": []}}, led) is None and gstate(tl).get("plan_open") is True)
         rs_ = pn_["resume"] or {}
         check("pane: resume has head, now, left, next, needs (n + text), needs_open, last", set(rs_) == {"head", "now", "left", "next", "needs", "needs_open", "needs_fill", "others", "others_items", "last"} and rs_["now"] == ["write the pane"] and rs_["left"] == ["tests", "docs"]
               and rs_["needs"] == [{"n": 1, "text": "owner decision: cap per unit or per order?"}] and rs_["needs_open"] == 1 and rs_["head"].startswith("📍 Resume") and "**" not in rs_["head"] and "`" not in rs_["head"] and rs_["last"] == [])
@@ -5017,8 +5041,8 @@ def main():
         form_marks = ["Topic / Side cap", "Topic / Side =", "Topic / Session =", "Topic: Name", "Reviewers:", "Workflow:", "Review: <Tag>"]  # COMPLEX_FORMS order
         check("README: ... and every COMPLEX_FORMS form (one row each)", len(form_marks) == len(HG.COMPLEX_FORMS) and all(re.search(r"^\| `" + re.escape(m), sec_, re.M) for m in form_marks))
         check("README: ... with defaults from the code, the pane editor, /abofles:pane and /abofles:history", all(f"| `{k}` |" in sec_ and (v["default"] in sec_ if v["default"] else True) for k, v in HG.OVERRIDE_KEYS.items()) and "/abofles:pane" in sec_ and "/abofles:history" in sec_ and "pane" in sec_.split("| `Main session`")[0])
-        check("overrides.md: the five place forms are described and the form count matches the code", all(f"`{w} place = " in (HOOK.parent.parent / "skills/abofles/references/overrides.md").read_text() for w in ("Guide", "Resume", "Agents", "Receipt", "Running"))
-              and f"Forty-four forms" in (HOOK.parent.parent / "skills/abofles/references/overrides.md").read_text() and len(HG.OVERRIDE_KEYS) + len(HG.COMPLEX_FORMS) == 44)
+        check("overrides.md: the six place forms are described and the form count matches the code", all(f"`{w} place = " in (HOOK.parent.parent / "skills/abofles/references/overrides.md").read_text() for w in ("Guide", "Resume", "Agents", "Receipt", "Running", "Tasks"))
+              and f"Forty-seven forms" in (HOOK.parent.parent / "skills/abofles/references/overrides.md").read_text() and len(HG.OVERRIDE_KEYS) + len(HG.COMPLEX_FORMS) == 47)
 
         # a receipt's Journal line keeps every field, and reads back
         rc_ = HG.parse_receipt("🧾 **1 Agent · 63K Tokens · $0.03**\n- `done` → the page\n- `why` → asked\n- `workflow` → Read ✓ · Work ✓\n- `check` → 181 pass\n- `open` → none\n- `next` → run /compact")

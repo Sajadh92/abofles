@@ -4,7 +4,8 @@ import type { Guide, GuideItem, Pane, PaneDecision, PaneLive, PaneRow, PaneSpawn
 import { overridesCard, overridesPage } from './editor'
 import { BRAND_AR, BRAND_EN, WHOLE, brandFooter, decisionCards, guideBlock, guideDetail, homeBlocks, othersBlock, receiptCard, receiptDetail, resumeBlocks, resumeDetail, spawnsBlocks, spawnsDetail, subhead, toneOf } from './html'
 import type { Block, CardItem, DecisionRow, Fact, Receipt, SpawnRow, Tone } from './html'
-import { getWorkBusy, runningDetail, runningHomeCard, runningPage, runningTerminal } from './running'
+import { tasksDetail, tasksHomeCard, tasksTerminal } from './tasks'
+import { getMainRunning, getWorkBusy, runningDetail, runningHomeCard, runningPage, runningTerminal } from './running'
 import {
   fmtTokens,
   modelName,
@@ -921,7 +922,7 @@ function detailOf(id: string, p: Pane | null, g: Guide | null, look: Look, now: 
 async function detailPage($: EngineInterface, ui: Ui, p: Pane | null, g: Guide | null, look: Look, now: number) {
   const { Box, Button, Text } = ui
   const id = await getPaneDetail($)
-  const d = !id ? null : id.startsWith('run:') ? await runningDetail($, id.slice(4), p, look) : detailOf(id, p, g, look, now)
+  const d = !id ? null : id.startsWith('run:') ? await runningDetail($, id.slice(4), p, look) : id === 'tasks' ? await tasksDetail($, look, await getMainRunning($), await getWorkBusy($)) : detailOf(id, p, g, look, now)
   const tab = await getPaneTab($)
   const back = <Button key="detail-back" label={glyph(look, '‹', NAV.find(n => n.id === tab)?.label ?? 'Back')} variant="secondary" onPress={() => setPaneView($, 'main')} />
   if (d === null) return <Box flexDirection="column" rowGap="sm"><Box flexDirection="row" alignItems="center">{back}</Box><Text dimColor>Nothing to show here any more.</Text></Box>
@@ -949,7 +950,7 @@ function clearNote(g: Guide | null, v: GuideView | null): { title: string; text:
 // The Home page of the desktop: the one thing to do next with its buttons, the numbers that matter from every section at a glance,
 // what runs now, the spend card, where the work stands, and the latest decision and receipt. The nav bar's other pages hold the detail.
 // Only the sections the pane holds feed it: one placed in the band or the chat is not summed up here (`p` and `g` come filtered).
-function homeHtml($: EngineInterface, ui: Ui, p: { resume: Pane['resume']; spawns: PaneSpawns | null; decisions: Pane['decisions'] | null }, g: Guide | null, look: Look, hidden: boolean, running: JSX.Element | null) {
+function homeHtml($: EngineInterface, ui: Ui, p: { resume: Pane['resume']; spawns: PaneSpawns | null; decisions: Pane['decisions'] | null }, g: Guide | null, look: Look, hidden: boolean, running: JSX.Element | null, tasks: JSX.Element | null = null) {
   const { Button } = ui
   const v = g ? viewOf(g) : null
   const open = v ? v.items.filter(i => i.p !== '✅').length : 0
@@ -1002,6 +1003,7 @@ function homeHtml($: EngineInterface, ui: Ui, p: { resume: Pane['resume']; spawn
         ]),
   ]
   if (b.glance) body.push(pic(ui, look, b.glance, ['At a glance', ...glance.flatMap(f => [f.label, f.value])]))
+  if (tasks) body.push(tasks) // where the work stands, step by step: under At a glance, above Running and the Agents spend
   if (running) body.push(running)
   if (b.spend && spend) body.push(pic(ui, look, b.spend, ['Agents', String(spend.spawns), ...spend.alt]))
   if (b.where) body.push(pic(ui, look, b.where, [r?.now[0] ? 'Now' : null, r?.now[0] ? plain(r.now[0]) : null, r?.next[0] ? 'Next' : null, r?.next[0] ? plain(r.next[0]) : null]))
@@ -1076,6 +1078,7 @@ export async function renderPane($: EngineInterface, e: RenderEvent) {
                     lk,
                     g !== null && hideKeyOf(g) === (await getHiddenKey($)),
                     p?.places.running !== 'off' ? await runningHomeCard($, ui, p, lk) : null,
+                    p?.places.tasks !== 'off' ? await tasksHomeCard($, ui, lk, await getMainRunning($), await getWorkBusy($)) : null,
                   )
     const { Box } = ui
     return (
@@ -1089,6 +1092,10 @@ export async function renderPane($: EngineInterface, e: RenderEvent) {
   const cards: JSX.Element[] = []
   const gc = await guideHere(look)
   if (gc) cards.push(gc)
+  if (p?.places.tasks !== 'off') {
+    const tc = await tasksTerminal($, ui, folds, look, await getMainRunning($), await getWorkBusy($))
+    if (tc) cards.push(tc)
+  }
   if (p?.places.running !== 'off') {
     const rc = await runningTerminal($, ui, p, folds, look, e)
     if (rc) cards.push(rc)

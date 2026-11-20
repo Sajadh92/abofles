@@ -121,6 +121,15 @@ async function syncBusy($: EngineInterface): Promise<number> {
   return n
 }
 
+// The main session's turn is on (its loop started and has not ended).
+export async function getMainRunning($: EngineInterface): Promise<boolean> {
+  try {
+    return (await read($, work)).main !== null
+  } catch {
+    return false
+  }
+}
+
 export async function getWorkBusy($: EngineInterface): Promise<number> {
   const n = await read($, workBusy)
   return isNum(n) ? n : 0

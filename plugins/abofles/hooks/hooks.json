@@ -149,6 +149,15 @@
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/py\" --hook \"${CLAUDE_PLUGIN_ROOT}/hooks/run.py\" edit"
           }
         ]
+      },
+      {
+        "matcher": "mcp__ccd_turn__update_plan|mcp__ccd_turn__wrap_up|TodoWrite|TaskCreate|TaskUpdate",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/py\" --hook \"${CLAUDE_PLUGIN_ROOT}/hooks/run.py\" plan"
+          }
+        ]
       }
     ],
     "PostToolUseFailure": [

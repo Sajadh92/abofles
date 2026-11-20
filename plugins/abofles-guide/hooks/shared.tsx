@@ -672,6 +672,7 @@ function cleanPlaces(raw: unknown): PanePlaces {
     resume: p.resume === 'pane' ? 'pane' : 'output',
     spawns: p.spawns === 'pane' ? 'pane' : 'output',
     running: p.running === 'off' ? 'off' : 'pane',
+    tasks: p.tasks === 'off' ? 'off' : 'pane',
   }
 }
 
@@ -793,6 +794,7 @@ export function cleanPane(raw: unknown): Pane | null {
       overrides: cleanOverrides(raw.overrides),
       decisions: cleanDecisions(raw.decisions),
       memo_health: cleanHealth(raw.memo_health),
+      tasks_hide: raw.tasks_hide === 'auto' || raw.tasks_hide === 'next' ? raw.tasks_hide : 'manual',
       cmd: { overrides: scriptArgv(cmd.overrides, ['overrides.py']) },
     }
   } catch {
