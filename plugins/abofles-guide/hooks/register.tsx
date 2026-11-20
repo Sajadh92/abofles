@@ -3,6 +3,7 @@ import type { EngineInterface, Register } from 'claude-code'
 import type { Guide } from '../types'
 import { renderPane } from './pane'
 import { notePlan, notePlanTurn, seedPlan } from './tasks'
+import { checkRelease } from './version'
 import { noteBackground, noteNotified, noteStep, noteTool, noteToolDone, noteTurnEnd, noteTurnStart, startTick } from './running'
 import {
   anyPane,
@@ -67,6 +68,7 @@ export const register: Register = on => {
     await seedPlan($)
     await autoOpen($)
     startTick($)
+    void checkRelease($) // the network call never holds the session's start
     return next(e)
   })
 
@@ -102,6 +104,7 @@ export const register: Register = on => {
     await notePlanTurn($, 'end', e.agentId)
     await refresh($)
     await seedPlan($)
+    if (!e.agentId) void checkRelease($) // at most every 6 hours: a session left open sees a new release too
     return result
   })
 

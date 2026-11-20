@@ -5,6 +5,8 @@ import { overridesCard, overridesPage } from './editor'
 import { BRAND_AR, BRAND_EN, WHOLE, brandFooter, decisionCards, guideBlock, guideDetail, homeBlocks, othersBlock, receiptCard, receiptDetail, resumeBlocks, resumeDetail, spawnsBlocks, spawnsDetail, subhead, toneOf } from './html'
 import type { Block, CardItem, DecisionRow, Fact, Receipt, SpawnRow, Tone } from './html'
 import { tasksDetail, tasksHomeCard, tasksTerminal } from './tasks'
+import { getVersionView, versionFoot, versionHomeCard } from './version'
+import type { VersionView } from './version'
 import { getMainRunning, getWorkBusy, runningDetail, runningHomeCard, runningPage, runningTerminal } from './running'
 import {
   fmtTokens,
@@ -950,7 +952,7 @@ function clearNote(g: Guide | null, v: GuideView | null): { title: string; text:
 // The Home page of the desktop: the one thing to do next with its buttons, the numbers that matter from every section at a glance,
 // what runs now, the spend card, where the work stands, and the latest decision and receipt. The nav bar's other pages hold the detail.
 // Only the sections the pane holds feed it: one placed in the band or the chat is not summed up here (`p` and `g` come filtered).
-function homeHtml($: EngineInterface, ui: Ui, p: { resume: Pane['resume']; spawns: PaneSpawns | null; decisions: Pane['decisions'] | null }, g: Guide | null, look: Look, hidden: boolean, running: JSX.Element | null, tasks: JSX.Element | null = null) {
+function homeHtml($: EngineInterface, ui: Ui, p: { resume: Pane['resume']; spawns: PaneSpawns | null; decisions: Pane['decisions'] | null }, g: Guide | null, look: Look, hidden: boolean, running: JSX.Element | null, tasks: JSX.Element | null = null, version: JSX.Element | null = null) {
   const { Button } = ui
   const v = g ? viewOf(g) : null
   const open = v ? v.items.filter(i => i.p !== '✅').length : 0
@@ -1008,6 +1010,7 @@ function homeHtml($: EngineInterface, ui: Ui, p: { resume: Pane['resume']; spawn
   if (b.spend && spend) body.push(pic(ui, look, b.spend, ['Agents', String(spend.spawns), ...spend.alt]))
   if (b.where) body.push(pic(ui, look, b.where, [r?.now[0] ? 'Now' : null, r?.now[0] ? plain(r.now[0]) : null, r?.next[0] ? 'Next' : null, r?.next[0] ? plain(r.next[0]) : null]))
   if (b.latest) body.push(pic(ui, look, b.latest, [decision ? 'Last decision' : null, decision?.when, decision && !decision.note ? decision.q : null, decision?.a, done ? 'Last receipt' : null, done ? plain(done) : null]))
+  if (version) body.push(version) // a newer version waits (Update or Reload): last on Home, above the footer's version line
   if (body.length === 0) body.push(emptyPic(ui, look, 'Nothing to sum up yet'))
   return htmlSection(ui, look, { icon: 'house', tone: 'mint', title: 'Home', summary: g ? (open > 0 ? `${open} open` : 'all clear') : null, summaryTone: g ? (open > 0 ? 'amber' : 'green') : null }, body)
 }
@@ -1016,12 +1019,17 @@ function homeHtml($: EngineInterface, ui: Ui, p: { resume: Pane['resume']; spawn
 
 // The brand line under the last section: on the desktop a muted picture row (the mascot, the English and Arabic name); in the
 // terminal the name alone, dim and centred.
-function brandFoot(ui: Ui, look: Look) {
-  if (hasSvg(ui, look)) return pic(ui, look, brandFooter(), [`${BRAND_EN} · ${BRAND_AR}`])
+function brandFoot(ui: Ui, look: Look, v: VersionView | null = null) {
   const { Box, Text } = ui
+  if (hasSvg(ui, look)) {
+    const line = versionFoot(ui, look, v)
+    const brand = pic(ui, look, brandFooter(), [`${BRAND_EN} · ${BRAND_AR}`])
+    return line ? <Box flexDirection="column">{brand}{line}</Box> : brand
+  }
   return (
-    <Box flexDirection="row" justifyContent="center">
+    <Box flexDirection="column" alignItems="center">
       <Text dimColor>{`${BRAND_EN} · ${BRAND_AR}`}</Text>
+      {v ? <Text dimColor>{v.line}</Text> : null}
     </Box>
   )
 }
@@ -1079,13 +1087,14 @@ export async function renderPane($: EngineInterface, e: RenderEvent) {
                     g !== null && hideKeyOf(g) === (await getHiddenKey($)),
                     p?.places.running !== 'off' ? await runningHomeCard($, ui, p, lk) : null,
                     p?.places.tasks !== 'off' ? await tasksHomeCard($, ui, lk, await getMainRunning($), await getWorkBusy($)) : null,
+                    await versionHomeCard($, ui, lk),
                   )
     const { Box } = ui
     return (
       <Box flexDirection="column" rowGap="lg">
         {navBar($, ui, look, tab, tabs, await getWorkBusy($))}
         {page}
-        {brandFoot(ui, look)}
+        {brandFoot(ui, look, await getVersionView($))}
       </Box>
     )
   }
@@ -1104,6 +1113,6 @@ export async function renderPane($: EngineInterface, e: RenderEvent) {
   if (p?.decisions) cards.push(decisionsCard($, ui, p.decisions, folds, look))
   if (p?.places.spawns === 'pane') cards.push(spawnsCard($, ui, p.spawns, folds, look, p.ts, await $.clock.now())) // the engine's clock: Today / Yesterday
   cards.push(await overridesCard($, ui, p, folds, look))
-  cards.push(brandFoot(ui, look))
+  cards.push(brandFoot(ui, look, await getVersionView($)))
   return sections(ui, look, cards)
 }

@@ -74,6 +74,7 @@ const KEY_INFO: Record<string, { group: (typeof GROUPS)[number]; help: string }>
   'Running place': { group: 'Where it shows', help: 'Running page and Home card, or off' },
   'Tasks place': { group: 'Where it shows', help: "Home's task list, kept after the turn ends, or off" },
   'Tasks nudge': { group: 'Where it shows', help: 'Notes that keep the task list moving: every N tool calls with no update, or off' },
+  'Update check': { group: 'Where it shows', help: 'Ask GitHub for a newer release every 6 hours (on), or never (off)' },
   'Tasks hide': { group: 'Where it shows', help: 'A finished list: Hide button only, gone when its turn ends, or at your next message' },
   'Receipt place': { group: 'Where it shows', help: 'Recorded to the pane, or printed' },
 }

@@ -509,6 +509,7 @@ OVERRIDE_KEYS = {
     "Running place": {"kind": "select", "options": ["pane", "off"], "default": "pane"},  # the Running page and Home's Running card; off: neither
     "Tasks place": {"kind": "select", "options": ["pane", "off"], "default": "pane"},  # Home's Tasks card: the session's task list, kept after the turn ends; off: none
     "Tasks nudge": {"kind": "number", "options": [], "default": "12"},  # while a task list is open: a new ask gets a note to add it as a step, and every N tool calls with no list update a note to tick it; off = no notes
+    "Update check": {"kind": "select", "options": ["on", "off"], "default": "on"},  # on: the pane asks GitHub for the newest release (once per 6 hours) and offers Update; off: no network call, the pane still says when a newer installed version waits for a reload
     "Tasks hide": {"kind": "select", "options": ["manual", "auto", "next"], "default": "manual"},  # a finished task list: manual = stays until its Hide button; auto = hidden when the turn that finished it ends; next = hidden when the next message starts a turn
     "Receipt place": {"kind": "select", "options": ["pane", "output"], "default": "pane"},  # pane: the receipt is recorded by a command, not printed
     "Memo agent": {"kind": "select", "options": ["auto", "manual", "off"], "default": "auto"},  # the memo-keeping agent: auto offers it in the background when a by-meaning check is due, manual only /abofles:memo, off never
@@ -1334,6 +1335,35 @@ def pane_overrides(root, sid):
                     if m and simple_key(m.group(1)) is None]}  # never clipped: Save writes them back; path: project scope has two files
 
 
+INSTALLED_PLUGINS = Path.home() / ".claude" / "plugins" / "installed_plugins.json"
+
+
+def plugin_versions(root):
+    """The versions the pane compares: `running` — the abofles code these hooks run from (its own plugin.json: a session keeps the plugin
+    folder it started with until a reload); `installed` — what Claude Code installed for abofles and abofles-guide (installed_plugins.json, user
+    scope first), with the marketplace name; `check` — the Update check override. Never raises: an unknown value is None."""
+    def ver(p):
+        try:
+            return str(json.loads(Path(p).read_text()).get("version") or "") or None
+        except Exception:
+            return None
+    out = {"running": {"abofles": ver(Path(__file__).resolve().parent.parent / ".claude-plugin" / "plugin.json")}, "installed": {}, "market": None,
+           "check": select_override(root, "Update check")}
+    try:
+        plugins = json.loads(INSTALLED_PLUGINS.read_text()).get("plugins") or {}
+    except Exception:
+        plugins = {}
+    for key, rows in plugins.items():
+        name, _, market = key.partition("@")
+        if name not in ("abofles", "abofles-guide") or not isinstance(rows, list):
+            continue
+        rows = sorted((r for r in rows if isinstance(r, dict)), key=lambda r: r.get("scope") != "user")
+        if rows and rows[0].get("version"):
+            out["installed"][name] = str(rows[0]["version"])
+            out["market"] = out["market"] or market or None
+    return out
+
+
 def tasks_hide(root):
     """When the pane's finished task list hides itself: manual (its Hide button only), auto (the turn that finished it ends) or next (the next turn starts)."""
     v = first_word(override_value(root, "Tasks hide")) or "manual"
@@ -1357,6 +1387,7 @@ def refresh_pane(root, st, sid, rows=None):
                       "decisions": pane_decisions(root, sid),
                       "memo_health": health_info(root),
                       "tasks_hide": tasks_hide(root),
+                      "version": plugin_versions(root),
                       "plan": st.get("plan"),  # the hook's mirror of the task list: the mod's card starts from it when it saw no list call itself
                       "cmd": {"overrides": script_cmd("overrides.py", "--session", sid)}}
     except Exception:

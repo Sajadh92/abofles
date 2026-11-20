@@ -97,9 +97,15 @@ export type Pane = {
   decisions?: PaneDecisions | null // absent in older state files: no Decisions card
   memo_health?: PaneHealth | null // what the memo's last tidy-up moved; absent in older state files
   plan?: Plan | null // the hook's mirror of the task list (rebuilt from the transcript when the session made it before the hook ran); the card starts from it when the mod saw no list call
+  version?: PaneVersion | null // the versions the Version card compares; absent in older state files: no card
   tasks_hide?: 'manual' | 'auto' | 'next' // when a finished task list hides itself; absent in older state files: manual
   cmd: { overrides: string[] | null } // argv prefix of the script the overrides editor runs
 }
+
+// ---- versions: what the hooks run, what Claude Code installed (installed_plugins.json), the Update check override
+export type PaneVersion = { running: { abofles: string | null }; installed: { abofles?: string; 'abofles-guide'?: string }; market: string | null; check: 'on' | 'off' }
+// the newest releases on GitHub, per plugin, kept in the session and in $.store across sessions
+export type Release = { abofles: { version: string; url: string } | null; guide: { version: string; url: string } | null; checkedAt: number }
 
 // ---- the session's task list, kept by the mod from the main session's update_plan / TodoWrite / TaskCreate / TaskUpdate calls (tasks.tsx)
 export type PlanStatus = 'pending' | 'in_progress' | 'completed'
@@ -133,6 +139,7 @@ declare module 'claude-code' {
     // `work`: what runs now (Work); `workTick`: bumped every few seconds while anything runs, so the elapsed times move; `workBusy`: how many agents and commands run, the nav bar's dot;
     // `workConfirm`: the row whose Stop waits for its confirmation.
     // `plan`: the session's task list (Plan), kept after the turn ends until a new list replaces it.
+    // `release`: the newest releases on GitHub (Release), checked at most every 6 hours; also in $.store under `release`.
     // `paneFolds`: open (true) or folded (false) by id: a card, an editor group (`g:<name>`), a long list (`more:<id>`); also in $.store.
     'abofles-guide': {
       guide: Guide | null
@@ -156,6 +163,7 @@ declare module 'claude-code' {
       workBusy: number
       workConfirm: string | null
       plan: Plan | null
+      release: Release | null
     }
   }
 }

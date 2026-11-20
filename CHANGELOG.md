@@ -2,6 +2,11 @@
 
 All notable changes to the plugins in this marketplace.
 
+## abofles 2.11.0 · abofles-guide 0.13.0 — 2026-11-20
+
+- abofles-guide: **version on Home.** The footer of every page says which Abo Fles this session runs and whether it is current (`Abo Fles 2.10.1 · guide 0.12.1 · up to date`). When Claude Code has a newer version installed than the session runs (an update the open session has not loaded), Home shows a Version card with `Reload now`, which runs `/reload-plugins`. When GitHub has a newer release, the card says so with `Update` (puts the update request in the prompt box: refresh the marketplace, update both plugins) and a `What's new` link to the release notes. The running guide version is the loaded code's own plugin.json; the running abofles version comes from the hooks; the installed ones from Claude Code's installed_plugins.json.
+- abofles: `Update check = on | off` (default `on`: GitHub's public releases list is asked at most once every 6 hours, no data of yours sent; `off`: no network call, Reload still shows).
+
 ## abofles 2.10.1 · abofles-guide 0.12.1 — 2026-11-20
 
 - abofles, abofles-guide: **a task list made before the pane loaded now shows.** The hook rebuilds the session's newest list once from its transcript (the main session's own list calls, each once; subagent lines left out) at the next message or read, and keeps a copy with every list call; the pane starts from that copy when it saw no list call itself (after a reload, an update or a restart), and the next tick moves it.

@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface } from 'claude-code'
 
-import type { Guide, GuideItem, Pane, PaneDecision, PaneDecisions, PaneHealth, PaneLive, PaneModel, PaneOverrideKey, PaneOverrides, PanePlaces, PaneResume, PaneRow, PaneSpawns, PaneTotals, Plan, PlanStatus } from '../types'
+import type { Guide, GuideItem, Pane, PaneDecision, PaneDecisions, PaneHealth, PaneLive, PaneModel, PaneOverrideKey, PaneOverrides, PanePlaces, PaneResume, PaneRow, PaneSpawns, PaneTotals, PaneVersion, Plan, PlanStatus } from '../types'
 import { ICONS, emptyCard, headerBlock, headerWidth, paneWidth, svgOf, textOf, tileSvg } from './html'
 import type { Block, IconName, Tone } from './html'
 
@@ -779,6 +779,22 @@ function cleanOverrides(raw: unknown): PaneOverrides | null {
 
 // The pane payload from the state file with every part type-checked, or null (no payload, or one of another version).
 // A malformed part is dropped and the rest kept; it never throws.
+// The hook's versions: strings that look like versions, the rest dropped.
+function cleanVersion(raw: unknown): PaneVersion | null {
+  if (!isObj(raw)) return null
+  const v = (x: unknown) => (isStr(x) && /^\d+\.\d+\.\d+/.test(x) ? x : null)
+  const run = isObj(raw.running) ? raw.running : {}
+  const ins = isObj(raw.installed) ? raw.installed : {}
+  const a = v(ins.abofles)
+  const g = v(ins['abofles-guide'])
+  return {
+    running: { abofles: v(run.abofles) },
+    installed: { ...(a ? { abofles: a } : {}), ...(g ? { 'abofles-guide': g } : {}) },
+    market: isStr(raw.market) && /^[\w.-]+$/.test(raw.market) ? raw.market : null,
+    check: raw.check === 'off' ? 'off' : 'on',
+  }
+}
+
 // The hook's task list: steps with a text and a known status; anything else is dropped (no steps: null).
 function cleanPlan(raw: unknown): Plan | null {
   if (!isObj(raw) || !Array.isArray(raw.items)) return null
@@ -807,6 +823,7 @@ export function cleanPane(raw: unknown): Pane | null {
       decisions: cleanDecisions(raw.decisions),
       memo_health: cleanHealth(raw.memo_health),
       plan: cleanPlan(raw.plan),
+      version: cleanVersion(raw.version),
       tasks_hide: raw.tasks_hide === 'auto' || raw.tasks_hide === 'next' ? raw.tasks_hide : 'manual',
       cmd: { overrides: scriptArgv(cmd.overrides, ['overrides.py']) },
     }

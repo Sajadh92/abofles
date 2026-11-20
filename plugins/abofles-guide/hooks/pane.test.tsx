@@ -1,6 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 import { applyPlan, planBlock, planState } from './tasks'
 import type { PlanStatus } from '../types'
+import { newer, releasesOf, updatePrompt, versionView } from './version'
 
 import { fmtWhen, headParts, receiptOf } from './pane'
 import { rawBase } from './editor'
@@ -2573,5 +2574,47 @@ test('a list the session made before the mod loaded shows from the hook copy, an
   lines = await altLines(home)
   expect(lines).toContain('2 / 3')
   expect(lines).toContain('Now: three')
+  await home.unmount()
+})
+
+// ---- Version: up to date, a newer version installed (Reload), a newer one out (Update)
+
+test('versions compare by number; GitHub releases give the newest per plugin, drafts and pre-releases left out', () => {
+  expect(newer('2.10.1', '2.9.9')).toBe(true)
+  expect(newer('2.10.0', '2.10.0')).toBe(false)
+  expect(newer('0.12.0', '0.12.1')).toBe(false)
+  expect(newer(null, '1.0.0')).toBe(false)
+  const r = releasesOf([
+    { tag_name: 'abofles-guide--v0.12.1', html_url: 'https://github.com/Sajadh92/abofles/releases/tag/abofles-guide--v0.12.1' },
+    { tag_name: 'abofles--v2.11.0', html_url: 'https://github.com/x', draft: true },
+    { tag_name: 'abofles--v2.10.1', html_url: 'https://github.com/Sajadh92/abofles/releases/tag/abofles--v2.10.1' },
+    { tag_name: 'abofles--v2.9.1', html_url: 'https://github.com/Sajadh92/abofles/releases/tag/abofles--v2.9.1' },
+    { tag_name: 'other--v9.0.0', html_url: 'https://github.com/x' },
+  ], 7)
+  expect(r).toEqual({ abofles: { version: '2.10.1', url: 'https://github.com/Sajadh92/abofles/releases/tag/abofles--v2.10.1' }, guide: { version: '0.12.1', url: 'https://github.com/Sajadh92/abofles/releases/tag/abofles-guide--v0.12.1' }, checkedAt: 7 })
+  expect(updatePrompt('sajadh92')).toContain('claude plugin update abofles-guide@sajadh92')
+})
+
+test('the version view: up to date, Reload when a newer one is installed than this session runs, Update when a newer one is out', () => {
+  const pane = (run: string, insA: string, insG: string, check: 'on' | 'off' = 'on') => ({ version: { running: { abofles: run }, installed: { abofles: insA, 'abofles-guide': insG }, market: 'sajadh92', check } }) as any
+  const rel = (a: string, g: string) => ({ abofles: { version: a, url: 'https://github.com/a' }, guide: { version: g, url: 'https://github.com/g' }, checkedAt: 1 })
+  expect(versionView(pane('2.10.1', '2.10.1', '0.12.1'), '0.12.1', rel('2.10.1', '0.12.1'))).toMatchObject({ kind: 'ok', line: 'Abo Fles 2.10.1 · guide 0.12.1 · up to date' })
+  const reload = versionView(pane('2.10.0', '2.10.1', '0.12.1'), '0.12.0', rel('2.10.1', '0.12.1'))
+  expect(reload).toMatchObject({ kind: 'reload', tone: 'amber', title: 'Abo Fles 2.10.1 and guide 0.12.1 are installed' })
+  expect(reload?.sub).toBe('This session still runs Abo Fles 2.10.0 · guide 0.12.0. Reload to use the new one.')
+  const upd = versionView(pane('2.10.1', '2.10.1', '0.12.1'), '0.12.1', rel('2.11.0', '0.12.1'))
+  expect(upd).toMatchObject({ kind: 'update', tone: 'blue', title: 'Abo Fles 2.11.0 is out', url: 'https://github.com/a' })
+  expect(versionView(pane('2.10.1', '2.10.1', '0.12.1', 'off'), '0.12.1', rel('2.11.0', '0.12.1'))?.kind).toBe('ok') // check off: no Update
+  expect(versionView(null, null, null)).toBeNull()
+})
+
+test('Home shows the Version card with Reload when a newer abofles is installed, and the footer says what runs', async ($, on) => {
+  workOn(on, { value: [] })
+  await harness($, on, { guide: guideOf([item()]), pane: panePayload({ version: { running: { abofles: '2.10.0' }, installed: { abofles: '2.10.1' }, market: 'sajadh92', check: 'off' } }) })
+  const home = await mountDesk($, 'home')
+  const lines = await altLines(home)
+  for (const t of ['Version', 'Reload', 'Abo Fles 2.10.1 is installed', 'Abo Fles 2.10.0 · reload to update']) expect([t, lines.includes(t)]).toEqual([t, true])
+  expect(await has(home, 'version:reload')).toBe(true)
+  expect(await has(home, 'version:update')).toBe(false)
   await home.unmount()
 })

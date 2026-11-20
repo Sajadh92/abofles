@@ -674,6 +674,23 @@ export function tasksCard(t: TasksIn): Block {
   return cardOf([head, rows.length ? stack([note(t.before, 'done above'), ...rows, note(t.after, 'more')], GAP) : null])
 }
 
+// ---- Version
+
+// Home's Version card, shown only when there is something to do: the caption and its pill (Update in blue, Reload in amber), what is
+// newer, and one muted line on what this session runs.
+export function versionCard(v: { word: string; tone: Tone; title: string; sub: string; paneW: number }): Block {
+  const room = textRoom(v.paneW)
+  return cardOf([stack([capRow('Version', v.word, v.tone), fit(v.title, room, 2, 'b'), v.sub ? fitSmall(v.sub, room, 2) : null], GAP)])
+}
+
+// The footer's line: what this session runs and whether it is current, centred, muted (its state word in the tone when it asks for something).
+export function versionLine(text: string, tone: Tone, loud: boolean): Block {
+  const at = text.lastIndexOf(' · ')
+  const head = at > 0 ? text.slice(0, at + 2) : '' // `… 0.12.1 ·`: the row's gap is the space after it
+  const tail = at > 0 ? text.slice(at + 3) : text
+  return { html: `<div class="row small" style="justify-content:center"><span class="faint one">${esc(head)}</span><span class="fix ${loud ? `ink b t-${tone}` : 'faint'}">${esc(tail)}</span></div>`, h: LINE }
+}
+
 // ---- Decisions
 
 export type DecisionRow = { when: string; q: string; a: string; note: boolean }
