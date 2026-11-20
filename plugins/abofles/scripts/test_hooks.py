@@ -42,6 +42,15 @@ def agent(model=None, effort=None, stype="abofles:abofles-reader", prompt="abofl
     return d
 
 
+def pc_free(o):
+    """A pre() output with the Prompt checkup note (warn) taken out: None when that note was all of it. For the checks written before
+    the checkup that expect a short test prompt to start with no output at all."""
+    h = o.get("hookSpecificOutput", {}) if isinstance(o, dict) else {}
+    if h and "permissionDecision" not in h and all(m.startswith("abofles: prompt checkup — ") for m in (h.get("additionalContext") or "x").split("\n\n")):
+        return None
+    return o
+
+
 def open_task(sid, cwd, led):
     """2.9.1: a receipt is journaled only when it closes its task — one agent opens one."""
     run("post", dict(agent("haiku", "low", resp="STATUS: done\nCONFIDENCE: high\nFACTS:\n- none\nGAPS: none", cwd=cwd), session_id=sid), led)
@@ -2076,6 +2085,136 @@ def git_header_291_tests(check):
         check("2.9.1 header gate: an unreadable transcript is no background work", _H.background_open(Path(hh, "missing.jsonl")) == [])
 
 
+def prompt_checkup_tests(check):
+    """Prompt checkup: prompt_checkup() flags each missing part of an agent prompt; pre() adds it as a note (warn, the default), denies on
+    `Prompt checkup = deny`, says nothing on off, and leaves abofles:skip prompts and the memo agent alone."""
+    pc = _H.prompt_checkup
+    good = "abofles: Billing / Work · T2\nEdit `src/billing.py` so the surcharge is capped at 5000 IQD for every single order. Done when the tests pass.\nLine cap: 20"
+    body = "Edit `src/billing.py` so the surcharge is capped at 5000 IQD for every single order. Done when the tests pass."
+    check("prompt checkup: a full Work prompt (header with tier, path, done, Line cap) has no problem", pc(good, "Work") == [])
+    check("prompt checkup: a: no header on line 1, or a header with no tier, is flagged",
+          any("header on line 1" in x for x in pc(body + "\nLine cap: 20", None)) and any("no tier" in x for x in pc("abofles: Billing / Work\n" + body + "\nLine cap: 20", "Work")))
+    check("prompt checkup: b: a last line that is not `Line cap: <N>` is flagged (a trailing blank line is fine)",
+          any("Line cap" in x for x in pc(good.rsplit("\n", 1)[0], "Work")) and pc(good + "\n\n", "Work") == [])
+    check("prompt checkup: c: under 15 words is not self-contained", any("under 15 words" in x for x in pc("abofles: Billing / Read · T2\nread it\nLine cap: 20", "Read")))
+    vf = "abofles: Billing / Verify · T2\nCheck that the surcharge rule caps the amount for every single order we take today please.\nLine cap: 20"
+    check("prompt checkup: d: a Verify or Work prompt with no path, file or backticked command is flagged; a Read prompt is not",
+          pc(vf, "Verify") == ["names no file path or command"] and pc(vf.replace("/ Verify", "/ Read"), "Read") == []
+          and pc(vf.replace("the surcharge rule", "Rules.cs"), "Verify") == [])
+    wk = "abofles: Unit Test / Work · T2\nEdit `src/billing.py` so the surcharge is capped at 5000 IQD for every single order taken today.\nLine cap: 20"
+    check("prompt checkup: e: a Work prompt with no done criterion is flagged (the header's own `Test` does not count)",
+          pc(wk, "Work") == ["no done criterion (when is it done?)"] and pc(wk.replace("today.", "today, until it passes."), "Work") == [] and pc(wk, "Verify") == [])
+    nd = "no done criterion (when is it done?)"
+    check("prompt checkup: e: a bare `test` or `verify` is work, not a done criterion; a stated end state is",
+          nd in pc(wk.replace("today.", "today, and write a test for it."), "Work")
+          and nd in pc(wk.replace("today.", "today, then verify it."), "Work")
+          and nd in pc(wk.replace("today.", "today; mark it done."), "Work")
+          and all(pc(wk.replace("today.", "today. " + s), "Work") == [] for s in
+                  ("Done: the cap holds.", "Done when it holds.", "`pytest -q` passes.", "The test suite is green.", "Meets the acceptance criteria.")))
+    check("prompt checkup: a prompt that is not text never raises", isinstance(pc(None, "Work"), list) and isinstance(pc("", None), list))
+    with tempfile.TemporaryDirectory() as hh:
+        led = str(Path(hh, "led")); Path(led).mkdir()
+        def mk(name, mode=None):
+            r = Path(hh, name); r.mkdir()
+            subprocess.run(["git", "init", "-q"], cwd=r, capture_output=True)
+            if mode:
+                r.joinpath("CLAUDE.md").write_text(f"## abofles overrides\n- Prompt checkup = {mode}\n")
+            return r
+        def pre_(root, prompt, sid, stype="abofles:abofles-worker", model="opus", effort="medium", **extra):
+            ti = {"prompt": prompt, "model": model, "effort": effort, "subagent_type": stype, "description": "x"}
+            return run("pre", {"session_id": sid, "cwd": str(root), "tool_name": "Agent", "tool_input": ti, **extra}, led)
+        denies = lambda o: isinstance(o, dict) and o.get("hookSpecificOutput", {}).get("permissionDecision") == "deny"
+        ctx = lambda o: (o or {}).get("hookSpecificOutput", {}).get("additionalContext", "") if isinstance(o, dict) else ""
+        why = lambda o: (o or {}).get("hookSpecificOutput", {}).get("permissionDecisionReason", "") if isinstance(o, dict) else ""
+        bad = "abofles: Billing / Work · T2\ndo it"
+        rw, rd, ro = mk("W"), mk("D", "deny"), mk("O", "off")
+        o_ = pre_(rw, bad, "pc110000-1111-2222-3333-444444444444")
+        check("prompt checkup hook: warn (the default) adds one note line to the single JSON and allows the agent",
+              isinstance(o_, dict) and not denies(o_) and "abofles: prompt checkup — the last line is not `Line cap: <N>`; under 15 words" in ctx(o_))
+        o_ = pre_(rw, bad, "pc120000-1111-2222-3333-444444444444", agent_id="sub1")
+        check("prompt checkup hook: ... an agent a subagent starts is checked too (one JSON with the note)", isinstance(o_, dict) and not denies(o_) and "prompt checkup" in ctx(o_))
+        check("prompt checkup hook: ... a good prompt gets no note", "prompt checkup" not in ctx(pre_(rw, good, "pc130000-1111-2222-3333-444444444444")))
+        o_ = pre_(rd, bad, "pc210000-1111-2222-3333-444444444444")
+        check("prompt checkup hook: Prompt checkup = deny blocks a bad prompt, naming its problems", denies(o_) and why(o_).startswith("abofles: prompt checkup — ") and "Prompt checkup = warn" in why(o_))
+        o_ = pre_(rd, good, "pc220000-1111-2222-3333-444444444444")
+        check("prompt checkup hook: ... and allows a good one", not denies(o_) and "prompt checkup" not in ctx(o_))
+        o_ = pre_(ro, bad, "pc310000-1111-2222-3333-444444444444")
+        check("prompt checkup hook: Prompt checkup = off is silent", not denies(o_) and "prompt checkup" not in ctx(o_))
+        o_ = pre_(rd, "abofles:skip do it", "pc410000-1111-2222-3333-444444444444")
+        check("prompt checkup hook: an abofles:skip prompt is exempt under deny", not denies(o_) and "prompt checkup" not in ctx(o_))
+        o_ = pre_(rd, "abofles: Memo Upkeep / Work · T1\ntidy", "pc420000-1111-2222-3333-444444444444", stype="abofles:abofles-memo", model="haiku", effort="low")
+        check("prompt checkup hook: the memo agent is exempt under deny", not denies(o_) and "prompt checkup" not in ctx(o_))
+
+
+def user_prompt_checkup_tests(check):
+    """User prompt checkup: user_prompt_checkup() flags a risky change ask of the user's with no file or no end state; the prompt hook adds
+    one note line (warn, the default), is silent on off, never denies; the counts land in the state and in the pane payload."""
+    up = _H.user_prompt_checkup
+    check("user prompt checkup: a risky English change ask with no file and no end state is flagged",
+          up("fix the payment rounding so refunds come out right") == ["names no file or component", "says no end state"])
+    check("user prompt checkup: ... a named file or component clears one problem, a stated end state the other",
+          up("fix the refund rounding in PaymentService so refunds come out right") == ["says no end state"]
+          and up("fix the payment rounding so refunds come out right. Done when refunds match the invoice") == ["names no file or component"])
+    check("user prompt checkup: a risky Arabic change ask is flagged", up("صلح الدفع بالفاتورة لان السعر يطلع غلط") == ["names no file or component", "says no end state"])
+    check("user prompt checkup: ... an Arabic end state counts", up("صلح الدفع بالفاتورة لان السعر يطلع غلط، المفروض يطلع مضبوط") == ["names no file or component"])
+    check("user prompt checkup: a non-risky ask, a question, a slash command, a notification and short text give []",
+          up("fix the typo in the page header text please") == [] and up("why does login fail when the token expires?") == []
+          and up("/abofles fix the payment token flow now please") == [] and up("<task-notification> fix the payment token flow now") == []
+          and up("fix payment") == [] and up(None) == [] and up("") == [])
+    check("user prompt checkup: a full risky ask (a path and `Done when`) gives []",
+          up("fix the refund rounding in src/billing/refund.py. Done when the refund tests pass.") == [])
+    with tempfile.TemporaryDirectory() as hh:
+        led = str(Path(hh, "led")); Path(led).mkdir()
+        def mk(name, extra=""):
+            r = Path(hh, name); r.mkdir()
+            subprocess.run(["git", "init", "-q"], cwd=r, capture_output=True)
+            if extra:
+                r.joinpath("CLAUDE.md").write_text("## abofles overrides\n" + extra)
+            return r
+        sdir = Path(os.environ["ABOFLES_STATE_DIR"])
+        gst = lambda sid: json.loads(sdir.joinpath(sid + ".json").read_text())
+        ctx = lambda o: (o or {}).get("hookSpecificOutput", {}).get("additionalContext", "") if isinstance(o, dict) else ""
+        denies = lambda o: isinstance(o, dict) and "permissionDecision" in o.get("hookSpecificOutput", {})
+        risky = "fix the payment rounding so refunds come out right"
+        rw, ro = mk("UW"), mk("UO", "- User prompt checkup = off\n")
+        sid = "upc10000-1111-2222-3333-444444444444"
+        sdir.mkdir(parents=True, exist_ok=True)
+        sdir.joinpath(sid + ".json").write_text(json.dumps({"pane": {"v": 1}}))
+        o_ = run("prompt", {"session_id": sid, "cwd": str(rw), "prompt": risky}, led)
+        check("user prompt checkup hook: warn (the default) adds the one note line and never denies",
+              not denies(o_) and "abofles: user prompt checkup — a risky change ask names no file or component and says no end state. Find the missing part in the repo first" in ctx(o_)
+              and "Do not refuse the task." in ctx(o_))
+        c_ = gst(sid).get("checkup") or {}
+        check("user prompt checkup hook: ... the hit is counted in the state, with the last hit's kind and problems",
+              c_.get("user") == 1 and c_.get("agent") == 0 and c_.get("denied") == 0 and (c_.get("last") or {}).get("kind") == "user"
+              and c_["last"].get("problems") == ["names no file or component", "says no end state"] and c_["last"].get("at"))
+        check("user prompt checkup hook: ... and in the pane payload that is there", gst(sid)["pane"].get("checkup") == c_)
+        o_ = run("prompt", {"session_id": sid, "cwd": str(rw), "prompt": "fix the refund rounding in src/billing/refund.py. Done when the refund tests pass."}, led)
+        check("user prompt checkup hook: a full ask gets no note and no count", "user prompt checkup" not in ctx(o_) and gst(sid)["checkup"]["user"] == 1)
+        sid2 = "upc20000-1111-2222-3333-444444444444"
+        o_ = run("prompt", {"session_id": sid2, "cwd": str(ro), "prompt": risky}, led)
+        check("user prompt checkup hook: User prompt checkup = off is silent and counts nothing",
+              not denies(o_) and "user prompt checkup" not in ctx(o_) and not (gst(sid2).get("checkup") or {}).get("user"))
+        bad = "abofles: Billing / Work · T2\ndo it"
+        def pre_(root, sid_):
+            ti = {"prompt": bad, "model": "opus", "effort": "medium", "subagent_type": "abofles:abofles-worker", "description": "x"}
+            return run("pre", {"session_id": sid_, "cwd": str(root), "tool_name": "Agent", "tool_input": ti}, led)
+        pre_(rw, sid)
+        c_ = gst(sid)["checkup"]
+        check("prompt checkup counts: an agent prompt hit (warn) counts as agent, not denied", c_["agent"] == 1 and c_["user"] == 1 and c_["denied"] == 0 and c_["last"]["kind"] == "agent")
+        rd = mk("UD", "- Prompt checkup = deny\n")
+        sid3 = "upc30000-1111-2222-3333-444444444444"
+        o_ = pre_(rd, sid3)
+        check("prompt checkup counts: a deny counts as agent and denied", denies(o_) and gst(sid3)["checkup"]["agent"] == 1 and gst(sid3)["checkup"]["denied"] == 1)
+        st_ = gst(sid)
+        _H.refresh_pane(str(rw), st_, sid)
+        check("prompt checkup counts: refresh_pane puts `checkup` {agent, user, denied, last} in the pane payload",
+              st_["pane"].get("checkup") == st_["checkup"])
+        st0 = {}
+        _H.refresh_pane(str(rw), st0, "upc40000-1111-2222-3333-444444444444")
+        check("prompt checkup counts: ... zeros when there was no hit", st0["pane"].get("checkup") == {"agent": 0, "user": 0, "denied": 0, "last": None})
+
+
 def main():
     fails = 0
     def check(name, cond):
@@ -2112,7 +2251,7 @@ def main():
         check("pre: fable on reader blocked", "fable is only for" in reason(run("pre", agent("fable", "medium"), led)))
         _fa = run("pre", agent("fable", "medium", "abofles:abofles-analyst"), led)
         check("pre: fable on analyst allowed (an advisory cell note at most)", _fa is None or ("permissionDecision" not in json.dumps(_fa) and "× the cell" in ctx(_fa)))
-        check("pre: good call allowed", run("pre", agent("haiku", "low"), led) is None)
+        check("pre: good call allowed", pc_free(run("pre", agent("haiku", "low"), led)) is None)
         check("pre: skip bypass", run("pre", agent(prompt="abofles:skip x", stype="Explore"), led) is None)
         check("pre: non-Agent tool ignored", run("pre", {"tool_name": "Bash", "tool_input": {}}, led) is None)
 
@@ -2506,7 +2645,7 @@ def main():
         check("gate: agent 1 allowed", allowed(run("pre", p1, led)))
         out = run("post", dict(p1, tool_response=good), led)
         check("gate: 1 left warning", "1 agent left in this task's agent budget (2" in ctx(out))
-        check("gate: agent 2 allowed", run("pre", p1, led) is None)
+        check("gate: agent 2 allowed", pc_free(run("pre", p1, led)) is None)
         run("post", dict(p1, tool_response=good), led)
         out = run("pre", p1, led)
         check("gate: agent 3 denied (budget 2)", "agent budget is 2" in reason(out) and "2 already ran" in reason(out) and "no Judge" in reason(out))
@@ -2542,7 +2681,7 @@ def main():
             run("post", dict(p1, tool_response={"status": "async_launched", "agentId": f"bg{i}", "prompt": "p", "description": "t"}), led)
         pb = dict(p1, tool_input=dict(p1["tool_input"], run_in_background=True))
         check("gate: 4th background agent denied (Parallel = 3)", "3 background agents are already running" in reason(run("pre", pb, led)))
-        check("gate: a sync agent is not blocked by the parallel cap", run("pre", p1, led) is None)
+        check("gate: a sync agent is not blocked by the parallel cap", pc_free(run("pre", p1, led)) is None)
         Path(cwd, "CLAUDE.md").unlink()
         # overrides: Agents = 1 (silent fixed budget), Agents = off, Agent budgets table, Parallel
         run("start", {"session_id": "ag2", "cwd": cwd, "transcript_path": str(tr)}, led)
@@ -2552,7 +2691,7 @@ def main():
         run("post", dict(p2, tool_response=good), led)
         check("gate: Agents = 1 -> second denied", "agent budget is 1 (Agents = 1)" in reason(run("pre", p2, led)))
         Path(cwd, "CLAUDE.md").write_text("## abofles overrides\n- Agents = off\n")
-        check("gate: Agents = off -> unlimited", run("pre", p2, led) is None)
+        check("gate: Agents = off -> unlimited", pc_free(run("pre", p2, led)) is None)
         Path(cwd, "CLAUDE.md").write_text("## abofles overrides\n- Agents = auto\n- Agent budgets = 1, 1, 1, 1\n- Budget raise = ask\n")
         check("gate: Agent budgets override -> T2 budget 1 reached", "agent budget is 1 (auto · 🟡 Normal" in reason(run("pre", p2, led)))
         Path(cwd, "CLAUDE.md").unlink()
@@ -2582,7 +2721,7 @@ def main():
         json.dump(dict(json.loads(Path(state, "qg.json").read_text()), gate="auto"), open(Path(state, "qg.json"), "w"))
         jp = lambda tier, resp: dict(agent("sonnet", "medium", "abofles:abofles-judge", prompt=f"abofles: Pricing, Fees, Commission & Tax / Judge · T{tier}\nq\nLine cap: 40", resp=resp, cwd=cwd), session_id="qg", transcript_path=str(tr))
         ask = "STATUS: done\nCONFIDENCE: high\nVERDICT: ASK\nQUESTION: Should the cap apply per unit or per order?\nEVIDENCE:\n- src/a.cs:10 — cap read here\nWHY: per order lets a 10-unit order pass uncapped\nOPTIONS:\n- Per unit — means: x · then: y · pick when: z\nRECOMMEND: Per unit — matches the Jira AC"
-        check("qgate: judge agent is allowed with budget 0 (exempt)", run("pre", dict(jp(2, None), tool_input=dict(jp(2, None)["tool_input"])), led) is None)
+        check("qgate: judge agent is allowed with budget 0 (exempt)", pc_free(run("pre", dict(jp(2, None), tool_input=dict(jp(2, None)["tool_input"])), led)) is None)
         out = run("post", dict(jp(2, ask), tool_input=dict(jp(2, ask)["tool_input"], name="judge-q")), led)  # spawned with a name: SendMessage `to` can use it
         check("qgate: judge ASK unlocks and instructs", "question judged" in ctx(out) and json.loads(Path(state, "qg.json").read_text()).get("judge_ok") == 1)
         st_b = json.loads(Path(state, "qg.json").read_text())
@@ -2645,7 +2784,7 @@ def main():
         Path(cwd, "CLAUDE.md").write_text("## abofles overrides\n- Questions = off\n")
         check("qgate: Questions = off -> allowed", run("qgate", aq, led) is None)
         Path(cwd, "CLAUDE.md").unlink()
-        check("qgate: header side Judge/Explain parse", run("pre", dict(agent("opus", "medium", "abofles:abofles-explainer", prompt="abofles: X / Explain · T4\nq\nLine cap: 40", cwd=cwd), session_id="qg"), led) is None)
+        check("qgate: header side Judge/Explain parse", pc_free(run("pre", dict(agent("opus", "medium", "abofles:abofles-explainer", prompt="abofles: X / Explain · T4\nq\nLine cap: 40", cwd=cwd), session_id="qg"), led)) is None)
         check("qgate: ... an explainer on fable is refused (fable: Analyse and Plan only)", "fable is only for" in ((run("pre", dict(agent("fable", "medium", "abofles:abofles-explainer", prompt="abofles: X / Explain · T4\nq\nLine cap: 40", cwd=cwd), session_id="qg"), led) or {}).get("hookSpecificOutput") or {}).get("permissionDecisionReason", ""))
         # field-test fixes (2026-10-13)
         # 1. memo and overrides follow the project root, not the per-event cwd (a `cd` into a nested repo)
@@ -2725,13 +2864,13 @@ def main():
         run("start", {"session_id": "bb", "cwd": cwd, "transcript_path": str(tr)}, led)
         json.dump(dict(json.loads(Path(state, "bb.json").read_text()), gate="auto", spawns_since_receipt=13, task_judges=2, task_tier_max=4), open(Path(state, "bb.json"), "w"))
         p4 = dict(agent("haiku", "low", prompt="abofles: Payments & Gateway Integration / Read · T4\nq\nLine cap: 40", cwd=cwd), session_id="bb")
-        check("budget: 11 work agents of 12 + inflight -> 12th allowed", run("pre", p4, led) is None)
+        check("budget: 11 work agents of 12 + inflight -> 12th allowed", pc_free(run("pre", p4, led)) is None)
         Path(cwd, "CLAUDE.md").write_text("## abofles overrides\n- Budget raise = ask\n")
         check("budget: 13th denied", "agent budget is 12" in reason(run("pre", p4, led)))
         Path(cwd, "CLAUDE.md").unlink()
         run("decision", {"session_id": "bb", "cwd": cwd, "tool_name": "AskUserQuestion", "tool_input": {"questions": [{"question": "Abo Fles agent gate: how many?", "options": []}]}, "tool_response": {"answers": {"Abo Fles agent gate: how many?": "Auto (recommended)"}}}, led)
         json.dump(dict(json.loads(Path(state, "bb.json").read_text()), inflight=0), open(Path(state, "bb.json"), "w"))
-        check("budget: answering Auto again releases a stuck budget", run("pre", p4, led) is None)
+        check("budget: answering Auto again releases a stuck budget", pc_free(run("pre", p4, led)) is None)
         out = run("post", dict(p4, tool_response=good), led)
         check("budget: header counts work agents and names gate runs apart", "🧾 **12 Agents + 2 gate ·" in ctx(out))
         check("budget: agents.py shows used vs budget and the gate runs", "1 of budget 8 used" in ag() or "gate run" in ag() or True)
@@ -5086,7 +5225,7 @@ def main():
         check("README: ... and every COMPLEX_FORMS form (one row each)", len(form_marks) == len(HG.COMPLEX_FORMS) and all(re.search(r"^\| `" + re.escape(m), sec_, re.M) for m in form_marks))
         check("README: ... with defaults from the code, the pane editor, /abofles:pane and /abofles:history", all(f"| `{k}` |" in sec_ and (v["default"] in sec_ if v["default"] else True) for k, v in HG.OVERRIDE_KEYS.items()) and "/abofles:pane" in sec_ and "/abofles:history" in sec_ and "pane" in sec_.split("| `Main session`")[0])
         check("overrides.md: the six place forms are described and the form count matches the code", all(f"`{w} place = " in (HOOK.parent.parent / "skills/abofles/references/overrides.md").read_text() for w in ("Guide", "Resume", "Agents", "Receipt", "Running", "Tasks"))
-              and f"Forty-eight forms" in (HOOK.parent.parent / "skills/abofles/references/overrides.md").read_text() and len(HG.OVERRIDE_KEYS) + len(HG.COMPLEX_FORMS) == 48)
+              and f"Fifty forms" in (HOOK.parent.parent / "skills/abofles/references/overrides.md").read_text() and len(HG.OVERRIDE_KEYS) + len(HG.COMPLEX_FORMS) == 50)
 
         # a receipt's Journal line keeps every field, and reads back
         rc_ = HG.parse_receipt("🧾 **1 Agent · 63K Tokens · $0.03**\n- `done` → the page\n- `why` → asked\n- `workflow` → Read ✓ · Work ✓\n- `check` → 181 pass\n- `open` → none\n- `next` → run /compact")
@@ -5327,7 +5466,7 @@ def main():
         os.environ["ABOFLES_STATE_DIR"] = state
         os.environ["ABOFLES_TEST_CWD"] = cwd
         sdir_g = Path(__file__).resolve().parent
-        gpre = lambda topic, side, model, effort, n: ctx(run("pre", dict(agent(model, effort, "abofles:abofles-git", prompt=f"abofles: {topic} / {side} · T{n}\nq\nLine cap: 20", cwd=cwd), session_id="git-" + side + str(n) + model + effort), led))
+        gpre = lambda topic, side, model, effort, n: ctx(pc_free(run("pre", dict(agent(model, effort, "abofles:abofles-git", prompt=f"abofles: {topic} / {side} · T{n}\nq\nLine cap: 20", cwd=cwd), session_id="git-" + side + str(n) + model + effort), led)))
         check("git: T2 git topic at the Work cell (sonnet·medium) -> no cell note, topic known", gpre("Tags, Releases & Changelogs", "Git", "sonnet", "medium", 2) == "")
         o_ = gpre("Tags, Releases & Changelogs", "Git", "opus", "high", 2)
         check("git: a `/ Git` header at T2 is judged against the Work cell (names sonnet·medium)", "sonnet·medium" in o_ and "× the cell" in o_)
@@ -5742,6 +5881,8 @@ def main():
         fixes_291_tests(check)
         overrides_editor_tests(check)
         git_header_291_tests(check)
+        prompt_checkup_tests(check)
+        user_prompt_checkup_tests(check)
 
     print(f"\n{'ALL PASS' if not fails else f'{fails} FAILED'}")
     sys.exit(1 if fails else 0)

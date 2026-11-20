@@ -494,6 +494,8 @@ OVERRIDE_KEYS = {
     "Budget raise": {"kind": "select", "options": ["auto", "ask"], "default": "auto"},  # auto: an over-budget spawn under an auto budget raises it (twice a task); ask: it is denied
     "Loop guard": {"kind": "number", "options": [], "default": "3"},  # rounds with no word from the user: the Nth FAIL of one check on one topic, or N Judges/Explainers with no question asked, stops the loop and opens the question gate; off = never
     "Git guard": {"kind": "select", "options": ["warn", "deny", "off"], "default": "warn"},  # a risky git command outside abofles-git: warn is a note, deny blocks it
+    "Prompt checkup": {"kind": "select", "options": ["warn", "deny", "off"], "default": "warn"},  # lint of each agent prompt (header, Line cap, files, done): warn is a note, deny blocks it
+    "User prompt checkup": {"kind": "select", "options": ["warn", "off"], "default": "warn"},  # a risky change ask of the user's with no file or no end state: warn is a note to Claude (no deny: a block erases the user's message)
     "Agent budgets": {"kind": "list", "options": [], "default": "2, 3, 7, 12"},
     "Questions": {"kind": "select", "options": ["judge", "off"], "default": "judge"},
     "Language": {"kind": "text", "options": [], "default": ""},
@@ -1388,6 +1390,7 @@ def refresh_pane(root, st, sid, rows=None):
                       "memo_health": health_info(root),
                       "tasks_hide": tasks_hide(root),
                       "version": plugin_versions(root),
+                      "checkup": pane_checkup(st),  # the Prompt checkup counts (agent prompts, user prompts, denied) and the last hit
                       "plan": st.get("plan"),  # the hook's mirror of the task list: the mod's card starts from it when it saw no list call itself
                       "cmd": {"overrides": script_cmd("overrides.py", "--session", sid)}}
     except Exception:
@@ -5519,7 +5522,27 @@ def pre(data):
             + ". Route it first with the abofles skill (topic -> tier -> side), then pass both "
             "`model` and `effort` on the Agent call. To bypass once, start the prompt with `abofles:skip`."
         )
+    pc_note = None
+    try:  # the prompt checkup is advice: any error in it is swallowed, never a blocked agent
+        pc_mode = "off" if is_memo else select_override(project_root(data, load_state(data.get("session_id", ""))), "Prompt checkup")
+        pc = prompt_checkup(prompt, hside) if pc_mode != "off" else []
+    except Exception:
+        pc_mode, pc = "off", []
+    if pc and data.get("session_id"):
+        try:  # the pane's counts; a subagent's agent prompt counts too (same session state)
+            with state_lock(data["session_id"]):
+                st_c = load_state(data["session_id"])
+                checkup_count(st_c, "agent", pc, denied=pc_mode == "deny")
+                save_state(data["session_id"], st_c)
+        except Exception:
+            pass
+    if pc and pc_mode == "deny":
+        deny("abofles: prompt checkup — " + "; ".join(pc) + ". Fix the prompt (SKILL Step 5) or set Prompt checkup = warn.")
+    if pc:
+        pc_note = "abofles: prompt checkup — " + "; ".join(pc)
     if in_subagent(data):
+        if pc_note:
+            print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": pc_note}}))
         return
     sid = data.get("session_id", "")
     with state_lock(sid):
@@ -5598,9 +5621,113 @@ def pre(data):
     tn = None if is_memo else topic_note(ti, cwd, sid)  # "Memo Upkeep" is no routing topic
     if tn:
         msgs.append(tn)
+    if pc_note:
+        msgs.append(pc_note)
     if msgs:
         msg = "\n\n".join(msgs)
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": msg}}))  # context only: the permission flow (the user's prompt) stays untouched
+
+
+# A done criterion is a stated end state, not a stray word: "Done when …" / "Done: …", "until … passes", "the tests pass",
+# "acceptance criteria". A bare "test" or "verify" (write a test, verify it) names work, not when it ends.
+PROMPT_DONE_RE = re.compile(
+    r"\bdone\s*(?:when|if|once|means|[:=])"
+    r"|\buntil\b[^.\n]{0,60}\b(?:pass(?:es)?|green|succeeds?|works?|matches?)\b"
+    r"|(?:\b(?:tests?|checks?|suite|build|lint|command|run)\b|`[^`\n]+`)[^.\n]{0,40}\b(?:pass(?:es)?|green|succeeds?|exits? 0)\b"
+    r"|\bacceptance criteri(?:a|on)\b",
+    re.I)
+
+
+def prompt_checkup(prompt, side):
+    """The Prompt checkup: short problems of an agent prompt (SKILL Step 5) — the header with a tier on line 1, `Line cap: <N>` as the last
+    line, 15 words at least, a file path or command for a Work or Verify side, a done criterion for a Work side. [] when it is fine."""
+    prompt = str(prompt or "")
+    lines = [l for l in prompt.splitlines() if l.strip()]
+    topic, _, tier = parse_header(prompt)
+    out = []
+    if not topic:
+        out.append("no `abofles: <Topic> / <Side> · T<n>` header on line 1")
+    elif tier is None:
+        out.append("the header names no tier (`· T<n>`)")
+    if not lines or not re.match(r"\s*Line cap:\s*\d+\s*$", lines[-1], re.I):
+        out.append("the last line is not `Line cap: <N>`")
+    if len(prompt.split()) < 15:
+        out.append("under 15 words: not self-contained")
+    body = "\n".join(prompt.splitlines()[1:] if topic else prompt.splitlines())  # the header's own ` / ` and topic words count for nothing
+    if side in ("Work", "Verify") and not re.search(r"\S/\S|`[^`\n]+`|\b\w+\.[A-Za-z][A-Za-z0-9]{0,7}\b", body):
+        out.append("names no file path or command")
+    if side == "Work" and not PROMPT_DONE_RE.search(body):
+        out.append("no done criterion (when is it done?)")
+    return out
+
+
+# The User prompt checkup: a change ask of the user's (a change verb) that touches something risky (a risk word) and names no file or
+# no end state gets a note to Claude — find the missing part in the repo, else ask one question. Arabic words match inside a word
+# (prefixes و/ف/ب/ال and suffixes are common), English ones as words.
+USER_CHANGE_RE = re.compile(
+    r"\b(?:fix(?:es|ed|ing)?|add(?:s|ed|ing)?|implement(?:s|ed|ing)?|chang(?:e|es|ed|ing)|refactor(?:s|ed|ing)?|build(?:s|ing)?|built"
+    r"|mak(?:e|es|ing)|creat(?:e|es|ed|ing)|remov(?:e|es|ed|ing)|delet(?:e|es|ed|ing)|drop(?:s|ped|ping)?|migrat(?:e|es|ed|ing)"
+    r"|updat(?:e|es|ed|ing)|renam(?:e|es|ed|ing)|deploy(?:s|ed|ing)?)\b"
+    r"|صلح|سوي|ضيف|اضف|أضف|غير|عدل|احذف|امسح|ابني|ابدي|شيل|انقل",
+    re.I)
+USER_RISK_RE = re.compile(
+    r"\b(?:money|payments?|pric(?:e|es|ing)|invoices?|billing|refunds?|auth\w*|log-?ins?|passwords?|tokens?|secrets?|keys?|permissions?"
+    r"|roles?|migrations?|schemas?|databases?|prod|production|delet(?:e|es|ed|ing)|drop(?:s|ped|ping)?|pii)\b"
+    r"|فلوس|دفع|سعر|فاتور|باسورد|صلاحي|حذف|قاعدة بيانات|قاعدة البيانات",
+    re.I)
+USER_NAMED_RE = re.compile(
+    r"\S/\S|`[^`\n]+`|\b\w+\.[A-Za-z][A-Za-z0-9]{0,7}\b|\b[A-Za-z][a-z0-9]+[A-Z][A-Za-z0-9]*\b|\b[A-Za-z][A-Za-z0-9]*_[A-Za-z0-9_]+\b")
+USER_DONE_AR_RE = re.compile(r"لما يخلص|يخلص لما|المفروض|النتيجة|لازم يرجع")
+
+
+def user_prompt_checkup(prompt):
+    """The User prompt checkup: short problems of a risky change ask of the user's (a change verb and a risk word) — it names no file
+    or component, or says no end state. [] for any other prompt (a question, a slash command, a notification, under 6 words) or a full one."""
+    try:
+        text = str(prompt or "").strip()
+        if not text or text.startswith(("<", "/")) or "task-notification" in text[:200] or len(text.split()) < 6:
+            return []
+        if not (USER_CHANGE_RE.search(text) and USER_RISK_RE.search(text)):
+            return []
+        out = []
+        if not USER_NAMED_RE.search(text):
+            out.append("names no file or component")
+        if not (PROMPT_DONE_RE.search(text) or USER_DONE_AR_RE.search(text)):
+            out.append("says no end state")
+        return out
+    except Exception:
+        return []
+
+
+def user_checkup_note(problems):
+    return ("abofles: user prompt checkup — a risky change ask " + " and ".join(problems) + ". Find the missing part in the repo first "
+            "(a Read agent); if the repo cannot answer, ask the user one question through the question gate. Do not refuse the task.")
+
+
+def pane_checkup(st):
+    """The Prompt checkup counts for the pane: {"agent", "user", "denied": int, "last": {"kind", "problems", "at"} or None}. Never raises."""
+    try:
+        c = st.get("checkup") if isinstance(st.get("checkup"), dict) else {}
+        last = c.get("last") if isinstance(c.get("last"), dict) else None
+        return {"agent": int(c.get("agent") or 0), "user": int(c.get("user") or 0), "denied": int(c.get("denied") or 0), "last": last}
+    except Exception:
+        return {"agent": 0, "user": 0, "denied": 0, "last": None}
+
+
+def checkup_count(st, kind, problems, denied=False):
+    """Count one checkup hit (`kind` = "agent" | "user") in the session state, and in the pane payload when there is one. Call under
+    the state lock; the caller saves. Never raises."""
+    try:
+        c = pane_checkup(st)
+        c[kind] = c.get(kind, 0) + 1
+        if denied:
+            c["denied"] += 1
+        c["last"] = {"kind": kind, "problems": [str(p) for p in problems], "at": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
+        st["checkup"] = c
+        if isinstance(st.get("pane"), dict):
+            st["pane"]["checkup"] = c
+    except Exception:
+        pass
 
 
 def topic_note(ti, cwd, sid):
@@ -7458,6 +7585,15 @@ def prompt(data):
                 close_task(st, "prompt")  # no receipt was wanted: the task ended with the last answer
             if not st.get("spawns_since_receipt"):
                 st["connector_free"] = 0  # a new ask with no open task: its first fetch-by-key reads are free again
+        un = None
+        try:  # the User prompt checkup is advice: any error is swallowed; it never blocks (a block erases the user's message)
+            if not notification and select_override(cwd, "User prompt checkup") != "off":
+                up = user_prompt_checkup(ptxt)
+                if up:
+                    checkup_count(st, "user", up)
+                    un = user_checkup_note(up)
+        except Exception:
+            un = None
         inote = install_note_once(st)
         if plan_seed(st):
             refresh_pane(cwd, st, sid)
@@ -7482,7 +7618,7 @@ def prompt(data):
                 mn = memo_agent_note(cwd, sid)
                 registry_set(cwd, memo_agent_offered_at=int(time.time()))  # the offer starts the window: ignored or not, the line is not printed again inside it
         save_state(sid, st)
-    msg = "\n\n".join(m for m in (en, rn, inote, gn, bn, mn, pa) if m)
+    msg = "\n\n".join(m for m in (en, rn, inote, gn, bn, mn, pa, un) if m)
     if msg:
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": msg}}))
 

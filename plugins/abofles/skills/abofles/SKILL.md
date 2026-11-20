@@ -132,6 +132,8 @@ After a verifier FAIL, re-verify only the failed criterion: [references/agent-de
 - Self-contained (goal, exact files, constraints, "done"): the subagent has none of your context.
 - First line: `abofles: <Topic> / <Side> · T<tier>` (side as a full word: `Read`, `Analyse`, `Plan`, `Work`, `Verify`, `Judge`, `Explain`). Last line: `Line cap: N`.
 - Read: a precise question; working tree only, never `.worktrees/`, `.claude/worktrees/`, `node_modules/`, `bin/`, `obj/`, `vendor/` unless named. Plan: files in scope, not to touch, out of scope. Work: plan or findings as a short list. Verify: criteria and the command.
+- **Prompt checkup** (hook, `Prompt checkup = warn`): notes (warn) or refuses (deny) an agent prompt missing the header with tier, `Line cap: N` as the last line, 15+ words, a file or command (Work/Verify), or an end state (Work: "Done when …", a test or command that passes, acceptance criteria).
+- **User prompt checkup** (hook, `User prompt checkup = warn`): a user's risky change ask (money, auth, data, prod) with no file or no end state gets a note: find the missing part in the repo with a Read agent, else ask one question. Never refuse the task.
 - Judge/Verifier needing a ticket (no Jira access): fetch it yourself (first two fetch-by-key reads per task are free) or via the Scrum agent at the Read cell, then paste summary, acceptance criteria and status. A tracker write (create, edit, move, assign, comment, link) goes through `abofles:abofles-scrum` with the user's exact words quoted; without them it returns DRAFTS for you to ask about.
 
 ## Step 6 — Progress line, receipt, gates, memo

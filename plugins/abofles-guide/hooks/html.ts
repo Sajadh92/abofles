@@ -165,7 +165,7 @@ const ASCII_EM = [
 const MARK_EM: Record<string, number> = { '«': 65, '»': 65, '·': 29, '×': 62, '–': 57, '—': 87, '‘': 29, '’': 29, '“': 45, '”': 45, '•': 46, '…': 79, '→': 90 }
 function em(ch: string): number {
   const c = ch.codePointAt(0) ?? 0
-  if (c >= 32 && c < 127) return ASCII_EM[c - 32] / 100
+  if (c >= 32 && c < 127) return ASCII_EM[c - 32]! / 100
   if (MARK_EM[ch] !== undefined) return MARK_EM[ch] / 100
   if (/[\u0600-\u06ff\u0750-\u077f\ufb50-\ufdff\ufe70-\ufeff]/.test(ch)) return 0.43 // joined letters run narrower than alone (measured 0.42)
   if (/[\u2e80-\u9fff\uac00-\ud7af\uff00-\uffef]/.test(ch)) return 1
@@ -447,7 +447,7 @@ const LABEL_W = 44
 
 const kindOf = (d: string): { kind: string; text: string } => {
   const m = /^([a-z][a-z ]{1,14}):\s*(.*)$/i.exec(d)
-  return m ? { kind: m[1].toLowerCase(), text: m[2] } : { kind: '', text: d }
+  return m ? { kind: m[1]!.toLowerCase(), text: m[2]! } : { kind: '', text: d }
 }
 
 // A receipt detail: its kind as a small word in its tone, in a column of its own (no fill: nine filled labels in one list would
@@ -481,6 +481,19 @@ export function receiptCard(x: Receipt, paneW: number): Block {
 // A small heading above a group of cards, on their content's inset.
 export function subhead(text: string): Block {
   return { html: `<div class="head sub"><span class="cap grow">${esc(text)}</span></div>`, h: CAP }
+}
+
+// ---- Prompt checkup (inside the Agents page): two counts, a red count of refused agents only when there is one, and the newest
+// hit's problems as a muted line, so the owner can judge whether `warn` is enough.
+export type CheckupIn = { paneW: number; agent: number; user: number; denied: number; last: string | null }
+export function checkupBlock(c: CheckupIn): Block {
+  const list: Fact[] = [
+    { label: 'Agent prompts flagged', value: String(c.agent) },
+    { label: 'Your asks flagged', value: String(c.user) },
+  ]
+  if (c.denied > 0) list.push({ label: 'Agents refused', value: String(c.denied), tone: 'red' })
+  if (c.last) list[list.length - 1]!.sub = c.last
+  return cardOf([stack([subhead('Prompt checkup'), facts(list, textRoom(c.paneW))], GAP)])
 }
 
 export type ResumeIn = {

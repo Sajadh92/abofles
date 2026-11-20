@@ -56,7 +56,7 @@ function withLoop(w: Work, agentId: string | undefined, at: number, f: (l: WorkL
 }
 
 const baseName = (p: string): string => p.split(/[\\/]/).filter(Boolean).pop() ?? p
-const firstLine = (t: string): string => t.trim().split('\n')[0]
+const firstLine = (t: string): string => t.trim().split('\n')[0]!
 
 // What a tool call says the loop is doing, from its own arguments: `Read html.ts`, `Bash: run the tests`, `Grep agent.spawn`.
 export function toolLabel(tool: string, a: Record<string, unknown>): string {
@@ -86,11 +86,11 @@ export function toolLabel(tool: string, a: Record<string, unknown>): string {
       text = one(tool, s('query'))
       break
     case 'WebFetch':
-      text = one(tool, s('url').replace(/^https?:\/\//, '').split('/')[0])
+      text = one(tool, s('url').replace(/^https?:\/\//, '').split('/')[0]!)
       break
     default: {
       const m = /^mcp__.+?__(.+)$/.exec(tool)
-      text = m ? m[1] : tool
+      text = m ? m[1]! : tool
     }
   }
   const clean = plain(text)
@@ -308,10 +308,10 @@ const loopMeta = (l: WorkLoop | undefined, model: string): string =>
 // `abofles:abofles-worker` -> `Worker`, `general-purpose` -> `General-purpose`.
 function typeName(type: string): string {
   const t = type.split(':').pop()?.replace(/^abofles-/, '') ?? type
-  return t ? t[0].toUpperCase() + t.slice(1) : 'Agent'
+  return t ? t[0]!.toUpperCase() + t.slice(1) : 'Agent'
 }
 
-type Live = PaneLive & { agent_id?: string | null }
+type Live = Omit<PaneLive, 'agent_id'> & { agent_id?: string | null }
 
 // Each agent's ledger row (side, model): the row with its agent id; else, as a fallback, the first row with its ask that no other agent took
 // and that names no other agent — two agents with one ask each get their own.
@@ -383,7 +383,7 @@ export async function runningOf($: EngineInterface, p: Pane | null): Promise<Run
   })
   const crons = w.crons.map((c): RunRow => ({ id: c.id, tone: 'grey', word: '', wordTone: null, side: 'Scheduled', desc: c.prompt, cost: '', now: '', meta: `${c.schedule} · ${c.recurring ? 'repeats' : 'once'}`, stop: null, open: false }))
   const main: RunRow | null = w.main ? { id: 'main', tone: 'blue', word: '', wordTone: null, side: 'Main session', desc: '', cost: since(w.main), now: w.main.now ?? '', meta: loopMeta(w.main, loopModel(w.main, labels)), stop: null, open: false } : null
-  const alt = [main, ...agents, ...tasks, ...crons].flatMap(r => (r ? [r.side, r.desc, r.now, r.meta, r.word, r.cost].filter(Boolean) : []))
+  const alt = [main, ...agents, ...tasks, ...crons].flatMap(r => (r ? [r.side, r.desc, r.now, r.meta, r.word, r.cost].filter((x): x is string => !!x) : []))
   return { main, agents, tasks, crons, n: agents.length + tasks.length, confirm, alt }
 }
 

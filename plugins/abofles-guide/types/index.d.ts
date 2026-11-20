@@ -85,6 +85,9 @@ export type PaneOverrides = {
   raw: { line: string; source: string; path?: string }[] // override lines the table cannot show; path: the file it is in (newer hooks)
 }
 
+// ---- Prompt checkup: how many agent prompts and user asks the hook flagged, how many agents it refused, and the newest hit
+export type PaneCheckup = { agent: number; user: number; denied: number; last: { kind: 'agent' | 'user'; problems: string[]; at: string } | null }
+
 export type Pane = {
   v: 1
   ts: number
@@ -98,6 +101,7 @@ export type Pane = {
   memo_health?: PaneHealth | null // what the memo's last tidy-up moved; absent in older state files
   plan?: Plan | null // the hook's mirror of the task list (rebuilt from the transcript when the session made it before the hook ran); the card starts from it when the mod saw no list call
   version?: PaneVersion | null // the versions the Version card compares; absent in older state files: no card
+  checkup?: PaneCheckup | null // Prompt checkup hits this session (agent prompts, the user's risky asks); absent in older state files: no block
   tasks_hide?: 'manual' | 'auto' | 'next' // when a finished task list hides itself; absent in older state files: manual
   cmd: { overrides: string[] | null } // argv prefix of the script the overrides editor runs
 }

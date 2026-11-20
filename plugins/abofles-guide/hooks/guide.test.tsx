@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
 
-const MOUNT = { plugin: 'abofles-guide', surface: 'desktop', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false, maxRows: 4 } } as const
+const MOUNT = { plugin: 'abofles-guide', surface: 'desktop', component: 'AbovePrompt', props: { hasSurvey: false, isCollapsed: false, isWorking: false, maxRows: 4, bodyColumns: 46, scroll: { offset: 0, bodyRows: 4 }, view: {} } } as const
 
 // Starts a session whose state file (when `file` is a string) is read by the refresh; returns the paths it read.
 function session($: any, on: any, file: string | null) {

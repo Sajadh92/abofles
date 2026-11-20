@@ -40,7 +40,7 @@ export function releasesOf(list: unknown, at: number): Release {
     if (!m) continue
     const k = m[1] === 'abofles' ? 'abofles' : 'guide'
     const url = isStr(r.html_url) && r.html_url.startsWith('https://github.com/') ? r.html_url : `https://github.com/${REPO}/releases`
-    if (!out[k] || newer(m[2], out[k]?.version)) out[k] = { version: m[2], url }
+    if (!out[k] || newer(m[2], out[k]?.version)) out[k] = { version: m[2]!, url }
   }
   return out
 }

@@ -4,7 +4,7 @@ import type { Pane, PaneOverrideKey, PaneOverrides } from '../types'
 import { chipSvg, overridesBlocks } from './html'
 import { GLYPH, applyOverrides, buttonRow, card, glyph, hasSvg, htmlSection, emptyPic, paneW, pic, heavyRule, ruled, type Look, claimSave, getPaneDraft, getPaneSaving, plain, refresh, releaseSave, setFold, setPaneView, updatePaneDraft } from './shared'
 import { plural } from './shared'
-import type { Folds, IconName, Ui } from './shared'
+import type { Folds, IconName, SvgUi, Ui } from './shared'
 
 // The overrides of the Abo Fles pane, in two places. On the pane's main page, a short card: the values a file sets, each with what
 // it does and which file sets it, the other lines, and Edit. Edit turns the pane into the editor page, laid out as the app's settings:
@@ -53,6 +53,7 @@ const KEY_INFO: Record<string, { group: (typeof GROUPS)[number]; help: string }>
   Questions: { group: 'Agents', help: 'A Judge answers first' },
   'Budget raise': { group: 'Agents', help: 'auto: +half the start budget, twice at most, then asks; ask: always asks' },
   'Git guard': { group: 'Agents', help: 'Warn or deny git writes outside the git agent, or off' },
+  'Prompt checkup': { group: 'Agents', help: 'Check each agent prompt: header, Line cap, files, done — warn, deny or off' },
   'Loop guard': { group: 'Agents', help: 'Rounds with no word from you before a fix or Judge loop stops and asks you; off = never' },
   'Sub sessions': { group: 'Agents', help: 'Open sub sessions one session may start; 0 = none allowed; off = no cap' },
   'Session routing': { group: 'Agents', help: 'on: a sub session must carry the routed model and effort; warn: note only; off' },
@@ -105,7 +106,7 @@ export const whereOf = (k: PaneOverrideKey, d: Draft): Scope => {
 }
 const moved = (k: PaneOverrideKey, d: Draft): boolean => isSet(k) && valueOf(k, d) !== '' && whereOf(k, d) !== k.source
 
-const isChanged = (k: PaneOverrideKey, d: Draft): boolean => (d[k.key] !== undefined && written(k, d[k.key]) !== baseline(k)) || moved(k, d)
+const isChanged = (k: PaneOverrideKey, d: Draft): boolean => (d[k.key] !== undefined && written(k, d[k.key]!) !== baseline(k)) || moved(k, d)
 
 // What Save writes, per file. A reset takes the key out of the file it comes from, one level at a time: under a project value an all-projects value takes over, and
 // other projects change only when the row says All projects. All projects also takes the key out of this project, since a project value would win; This project
@@ -318,7 +319,7 @@ function field($: EngineInterface, ui: Ui, look: Look, k: PaneOverrideKey, d: Dr
   const edited = isChanged(k, d)
   const value = valueOf(k, d)
   const to = whereOf(k, d)
-  const Svg = hasSvg(ui, look) ? (ui as Ui & { Svg: NonNullable<Ui['Svg']> }).Svg : null
+  const Svg = hasSvg(ui, look) ? (ui as SvgUi).Svg : null
   const chip = isSet(k) && Svg ? chipSvg('Set', 'blue') : null
   const resetting = isSet(k) && value === ''
   // the two targets: the chosen one marked ✓ and at full strength
@@ -448,7 +449,7 @@ export async function overridesPage($: EngineInterface, ui: Ui, p: Pane | null, 
         $,
         ui,
         // folded while this file has none of these lines: they are the rare, free-form overrides
-        { id: 'g:Other', title: 'Other overrides', summary: rawEdited ? 'edited' : raw.length > 0 ? `${raw.length} line${raw.length === 1 ? '' : 's'}` : others.length > 0 ? `${others.length} in ${WHERE[others[0].source] ?? others[0].source}` : null, tone: rawEdited ? 'warning' : undefined, folds, icon: 'sliders', neutral: true, look, def: raw.length > 0 || rawEdited },
+        { id: 'g:Other', title: 'Other overrides', summary: rawEdited ? 'edited' : raw.length > 0 ? `${raw.length} line${raw.length === 1 ? '' : 's'}` : others.length > 0 ? `${others.length} in ${WHERE[others[0]!.source] ?? others[0]!.source}` : null, tone: rawEdited ? 'warning' : undefined, folds, icon: 'sliders', neutral: true, look, def: raw.length > 0 || rawEdited },
         <Box flexDirection="column" rowGap={1}>
           <Box flexDirection="row" alignItems="center" flexWrap="wrap" columnGap={1}>
             {scopeButton('project', 'This project')}
@@ -515,7 +516,7 @@ export async function overridesCard($: EngineInterface, ui: Ui, p: Pane | null, 
     const edit = <Button key="edit-overrides" label={glyph(look, GLYPH.edit, 'Edit')} variant="secondary" onPress={() => openEditor($)} />
     return htmlSection(ui, look, { icon: 'sliders', tone: 'grey', title: 'Overrides', summary, summaryTone: dirty > 0 ? 'amber' : set.length > 0 ? 'blue' : null, action: edit }, [
       other ? buttonRow(ui, [<Button key="edit-other" label={glyph(look, GLYPH.other, other)} variant="secondary" onPress={() => openEditor($, 'g:Other')} />]) : null,
-      ...shown.map((g, i) => pic(ui, look, blocks.cards[i], [g.title, String(g.rows.length), ...g.rows.flatMap(k => [k.key, k.value, k.help])])),
+      ...shown.map((g, i) => pic(ui, look, blocks.cards[i]!, [g.title, String(g.rows.length), ...g.rows.flatMap(k => [k.key, k.value, k.help])])),
       pic(ui, look, blocks.note, [note]),
     ])
   }
@@ -530,7 +531,7 @@ export async function overridesCard($: EngineInterface, ui: Ui, p: Pane | null, 
           <Text size="caption" dimColor>{WHERE[k.source]}</Text>
         </Box>
       </Box>
-      {KEY_INFO[k.key]?.help ? <Text size="caption" dimColor>{KEY_INFO[k.key].help}</Text> : null}
+      {KEY_INFO[k.key]?.help ? <Text size="caption" dimColor>{KEY_INFO[k.key]!.help}</Text> : null}
     </Box>
   ))
   const summary = dirty > 0 ? `${dirty} unsaved` : set.length > 0 ? `${set.length} set` : 'defaults'

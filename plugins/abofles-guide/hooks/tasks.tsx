@@ -39,14 +39,14 @@ export function applyPlan(p: Plan | null, tool: string, a: Record<string, unknow
     case 'mcp__ccd_turn__update_plan': {
       if (!Array.isArray(a.items) && !p) return null
       const next = Array.isArray(a.items) ? itemsOf(a.items, 'content') : items
-      if (Array.isArray(a.done)) for (const n of a.done) if (isNum(n) && next[n - 1]) next[n - 1].status = 'completed'
-      if (isNum(a.start) && next[a.start - 1]) next[a.start - 1].status = 'in_progress'
+      if (Array.isArray(a.done)) for (const n of a.done) if (isNum(n) && next[n - 1]) next[n - 1]!.status = 'completed'
+      if (isNum(a.start) && next[a.start - 1]) next[a.start - 1]!.status = 'in_progress'
       if (a.advance === true) {
         const cur = next.findIndex(x => x.status === 'in_progress')
-        if (cur >= 0) next[cur].status = 'completed'
+        if (cur >= 0) next[cur]!.status = 'completed'
         const nx = next.findIndex((x, i) => i > cur && x.status === 'pending')
         const pick = nx >= 0 ? nx : next.findIndex(x => x.status === 'pending')
-        if (pick >= 0) next[pick].status = 'in_progress'
+        if (pick >= 0) next[pick]!.status = 'in_progress'
       }
       return { items: next, ts: at, closed: next.length > 0 && next.every(x => x.status === 'completed') }
     }
@@ -71,8 +71,8 @@ export function applyPlan(p: Plan | null, tool: string, a: Record<string, unknow
       if (i < 0) return null
       if (a.status === 'deleted') items.splice(i, 1)
       else {
-        if (isStr(a.status)) items[i].status = statusOf(a.status)
-        if (isStr(a.subject) && a.subject.trim()) items[i].content = textOf(a.subject)
+        if (isStr(a.status)) items[i]!.status = statusOf(a.status)
+        if (isStr(a.subject) && a.subject.trim()) items[i]!.content = textOf(a.subject)
       }
       return { items, ts: at, closed: items.length > 0 && items.every(x => x.status === 'completed') }
     }
@@ -142,7 +142,7 @@ export async function planWhere($: EngineInterface): Promise<{ now: string; next
   const cur = i >= 0 ? i : p.items.findIndex(x => x.status === 'pending')
   if (cur < 0) return null
   const after = p.items.slice(cur + 1).find(x => x.status !== 'completed')
-  return { now: `Step ${cur + 1} of ${p.items.length} — ${p.items[cur].content}`, next: after ? after.content : 'The last step: then the receipt', step: p.items[cur].content, nextStep: after?.content ?? null }
+  return { now: `Step ${cur + 1} of ${p.items.length} — ${p.items[cur]!.content}`, next: after ? after.content : 'The last step: then the receipt', step: p.items[cur]!.content, nextStep: after?.content ?? null }
 }
 
 // Where the list stands: its word and tone, and the line beside it. `running`: the main turn is on; `busy`: agents and commands at work.

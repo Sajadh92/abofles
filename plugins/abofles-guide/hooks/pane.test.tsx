@@ -1,6 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 import { applyPlan, planBlock, planState } from './tasks'
 import type { PlanStatus } from '../types'
+import type { OpEventResult } from 'claude-code'
 import { newer, releasesOf, updatePrompt, versionView } from './version'
 
 import { fmtWhen, headParts, receiptOf } from './pane'
@@ -13,7 +14,7 @@ const NOW = 1_700_000_000 // epoch seconds the mocked clock stands at
 const hhmm = (ts: number): string => `${String(new Date(ts * 1000).getHours()).padStart(2, '0')}:${String(new Date(ts * 1000).getMinutes()).padStart(2, '0')}` // local time, as the card draws a live start
 
 const PANE_PROPS = { title: 'Abo Fles', isFocused: false, bodyColumns: 60, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} } as const
-const BAND_PROPS = { hasSurvey: false, isWorking: false, maxRows: 4 } as const
+const BAND_PROPS = { hasSurvey: false, isCollapsed: false, isWorking: false, maxRows: 4, bodyColumns: 46, scroll: { offset: 0, bodyRows: 4 }, view: {} } as const
 const RUN = { args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 100 } } as const
 
 type It = { p: string; text: string; fill: string; recheck?: string | null; id?: string }
@@ -68,7 +69,7 @@ async function harness($: any, on: any, state: object | null, options: { canPlac
     toasts: [] as string[],
     fills: [] as { text: string; mode: string }[],
     copies: [] as string[],
-    runs: [] as { argv: unknown; cwd?: string }[],
+    runs: [] as { argv: string[]; cwd?: string }[],
     stdins: [] as (string | undefined)[], // what each run was given on stdin
     exits: [] as number[],
     stdouts: [] as string[], // the next runs' stdout (default: one line)
@@ -481,7 +482,7 @@ test('the classic PostCompact refreshes the pane: the context number drops witho
 })
 
 // The transcript a compact runs over: a test has no core to hand it in.
-const COMPACT_MESSAGES = [{ role: 'user', text: 'summary', toolUses: [] }]
+const COMPACT_MESSAGES = [{ role: 'user' as const, text: 'summary', toolUses: [] }]
 const compactNow = ($: any, more: object = {}) => $.session.compact({ messages: COMPACT_MESSAGES, ...more })
 
 test('after a compact the Context row stays: the engine\'s size until the hooks can read one, whichever fires first', async ($, on) => {
@@ -893,7 +894,7 @@ for (const surface of SURFACES) {
     const ui = await mountPane($, surface)
     expect(await labelOf(ui, 'fold-caret:resume')).toBe('▾')
     expect(await propOf(ui, 'fold-caret:resume', 'dimColor')).toBe(true) // grey, as the native caret
-    if (surface === 'desktop') {
+    if ((surface as string) === 'desktop') {
       const rules = (await ui.findAll({ type: 'Svg' })).filter((x: any) => x.props.alt === 'section divider')
       const heads = (await ui.findAll({ type: 'Button' })).filter((x: any) => /^fold:(guide|resume|decisions|spawns|overrides)$/.test(String(x.props.key ?? '')))
       expect(rules.length).toBe(heads.length - 1) // none above the first, none below the last
@@ -1119,7 +1120,7 @@ test('a history row meta line: time, the model as the app names it, tokens, the 
 
 test('a history row keeps its Read more state when a newer row is prepended (keyed by ts + text, not position)', async ($, on) => {
   const desc = 'rebuild the whole spawn pipeline so that every long running agent reports back through the shared ledger before the next turn starts'
-  const old = { ...ROWS[0], description: desc }
+  const old = { ...ROWS[0]!, description: desc }
   const w = await harness($, on, { guide: guideOf([item()]), pane: panePayload({ spawns: { live: [], rows: [old], totals: { spawns: 1, tokens: 1, usd: 0, base_usd: 0, saved_pct: 0, open_fail: 0 } } }) })
   const key = `more:spawn:${old.ts}:${shortHash(`${old.side} · ${desc}`)}`
   const ui = await mountPane($, 'terminal') // the native rows' own Read more (the desktop's card has one per section)
@@ -1515,7 +1516,7 @@ for (const surface of SURFACES) {
       return ui.unmount()
     }
     const texts = (await ui.findAll({ type: 'Text' })).map((x: any) => x.text)
-    const at = (re: RegExp) => texts.findIndex(t => re.test(t))
+    const at = (re: RegExp) => texts.findIndex((t: string) => re.test(t))
     expect(at(/^Oct 10 09:00$/)).toBeGreaterThan(-1)
     expect(at(/^question 0$/)).toBe(at(/^Oct 10 09:00$/) + 1) // the headline, then the question
     expect(at(/^answer 0$/)).toBe(at(/^question 0$/) + 2) // then the arrow and the answer
@@ -1545,7 +1546,7 @@ test('desktop: each section is a header strip (icon tile, title, summary) over i
 test('every SVG colour has a light twin and a dark value, each >= 4.5:1 on white / #1a1a1a', () => {
   const lum = (hex: string): number => {
     const c = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255).map(v => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4))
-    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+    return 0.2126 * c[0]! + 0.7152 * c[1]! + 0.0722 * c[2]!
   }
   const ratio = (a: string, b: string): number => (Math.max(lum(a), lum(b)) + 0.05) / (Math.min(lum(a), lum(b)) + 0.05)
   for (const [name, { light, dark }] of Object.entries(COLOR_PAIRS)) {
@@ -1564,7 +1565,7 @@ test('desktop: a nav bar of icons shows one page at a time: each page its header
   const icons = (await ui.findAll({ type: 'Svg' })).filter((x: any) => x.props.width === 36)
   expect(icons.map((x: any) => x.props.alt)).toEqual(['Home, shown', 'Running', 'Guide', 'Resume', 'Decisions', 'Agents', 'Overrides'])
   expect(icons.every((x: any) => /class="htile t-\w+"/.test(x.props.source))).toBe(true) // the header strips' own tiles
-  expect(icons[0].props.source).toContain('background:color-mix(in srgb,var(--c) 80%,#000);color:#fff') // filled: the page shown
+  expect(icons[0]!.props.source).toContain('background:color-mix(in srgb,var(--c) 80%,#000);color:#fff') // filled: the page shown
   // Home: the next step with its buttons, the numbers at a glance, where the work stands, the latest decision and receipt
   const alts = (await ui.findAll({ type: 'Svg' })).map((x: any) => String(x.props.alt))
   expect(alts.some(a => /^Next up, urgent priority\nopen FAIL$/.test(a))).toBe(true)
@@ -1586,11 +1587,11 @@ test('desktop: a nav bar of icons shows one page at a time: each page its header
   // the brand footer closes every page: the mascot inlined, the English and Arabic name, no card around it, drawn still
   const foot = (await ui.findAll({ type: 'Svg' })).filter((x: any) => String(x.props.alt) === 'Abo Fles · ابو فليس')
   expect(foot.length).toBe(1)
-  expect(foot[0].props.source).toContain('class="foot"')
-  expect(foot[0].props.source).toContain('src="data:image/png;base64,')
-  expect(foot[0].props.source).toContain('ابو فليس')
-  expect(foot[0].props.source).not.toContain('class="card"')
-  expect(foot[0].props.source).not.toContain('root enter')
+  expect(foot[0]!.props.source).toContain('class="foot"')
+  expect(foot[0]!.props.source).toContain('src="data:image/png;base64,')
+  expect(foot[0]!.props.source).toContain('ابو فليس')
+  expect(foot[0]!.props.source).not.toContain('class="card"')
+  expect(foot[0]!.props.source).not.toContain('root enter')
   await ui.unmount()
 })
 
@@ -1947,7 +1948,7 @@ test('a path in a result that does not end in the task\'s own id is not taken as
 
 test('terminal: Open puts the agent in the main view and a refusal is a toast; while one is in view its row has no Open and the card leads back', async ($, on) => {
   const views: object[] = []
-  let answer: object = { value: {} }
+  let answer: OpEventResult<'ui.view'> = { value: {} }
   workOn(on, { value: [AGENT] })
   on('ui.view', ($: any, e: any) => {
     views.push(e)
@@ -2123,7 +2124,7 @@ for (const surface of SURFACES) {
     willSave(w, [K('Receipt', 'short', 'project', { user: 'short' })])
     await ui.press({ key: 'save' })
     expect(w.runs.length).toBe(1)
-    expect(w.runs[0].argv.slice(-2)).toEqual(['--scope', 'project'])
+    expect(w.runs[0]!.argv.slice(-2)).toEqual(['--scope', 'project'])
     expect(JSON.parse(w.stdins[0] ?? '')).toEqual({ set: { Receipt: 'short' } })
     await ui.unmount()
   })
@@ -2167,7 +2168,7 @@ for (const surface of SURFACES) {
     await ui.press({ key: 'reset:Receipt' })
     willSave(w, [K('Receipt', 'full', 'default')])
     await ui.press({ key: 'save' })
-    expect(w.runs[0].argv.slice(-2)).toEqual(['--scope', 'project'])
+    expect(w.runs[0]!.argv.slice(-2)).toEqual(['--scope', 'project'])
     expect(JSON.parse(w.stdins[0] ?? '')).toEqual({ set: { Receipt: '' } })
     await ui.unmount()
   })
@@ -2180,13 +2181,13 @@ for (const surface of SURFACES) {
     willSave(w, [K('Receipt', 'off', 'user')])
     await ui.press({ key: 'save' })
     expect(w.runs.length).toBe(1)
-    expect(w.runs[0].argv.slice(-2)).toEqual(['--scope', 'project']) // the all-projects line stays
+    expect(w.runs[0]!.argv.slice(-2)).toEqual(['--scope', 'project']) // the all-projects line stays
     expect(JSON.parse(w.stdins[0] ?? '')).toEqual({ set: { Receipt: '' } })
     await ui.press({ key: 'reset:Receipt' })
     expect(await said(ui, /^On save: back to default in every project$/)).toBe(true)
     willSave(w, [K('Receipt', 'full', 'default')])
     await ui.press({ key: 'save' })
-    expect(w.runs[1].argv.slice(-2)).toEqual(['--scope', 'user'])
+    expect(w.runs[1]!.argv.slice(-2)).toEqual(['--scope', 'user'])
     expect(JSON.parse(w.stdins[1] ?? '')).toEqual({ set: { Receipt: '' } })
     await ui.unmount()
   })
@@ -2252,8 +2253,8 @@ test('each scope has a card of its own, and what the rest uses stands under them
   await harness($, on, ovState([K('Receipt', 'short', 'project'), N('Parallel', '5', 'user')], []))
   const ui = await mountDesk($, 'overrides')
   const pics = (await ui.findAll({ type: 'Svg' })).map((x: any) => String(x.props.alt))
-  const project = pics.find(a => a.startsWith('This project\n'))
-  const all = pics.find(a => a.startsWith('All projects\n'))
+  const project = pics.find((a: string) => a.startsWith('This project\n'))
+  const all = pics.find((a: string) => a.startsWith('All projects\n'))
   expect(project).toContain('Receipt')
   expect(project).not.toContain('Parallel')
   expect(all).toContain('Parallel')
@@ -2275,8 +2276,8 @@ test('the Edit page draws a line between settings and between groups, and the lo
   await harness($, on, ovState([K('Receipt', 'short', 'project'), K('Guide', 'off', 'user'), N('Parallel', '3'), { ...N('Context marks', '500, 600, 700, 750, 800, 850, 900, 950', 'user'), kind: 'list' }], []))
   const ui = await mountEditor($, 'desktop')
   const alts = (await ui.findAll({ type: 'Svg' })).map((x: any) => String(x.props.alt))
-  expect(alts.filter(a => a === 'group divider').length).toBeGreaterThanOrEqual(2)
-  expect(alts.filter(a => a === 'row divider').length).toBeGreaterThanOrEqual(1)
+  expect(alts.filter((a: string) => a === 'group divider').length).toBeGreaterThanOrEqual(2)
+  expect(alts.filter((a: string) => a === 'row divider').length).toBeGreaterThanOrEqual(1)
   expect(alts).toContain('actions divider')
   expect(await valueOf(ui, 'in:Context marks')).toBe('500, 600, 700, 750, 800, 850, 900, 950')
   expect(await propOf(ui, 'in:Context marks', 'rows')).toBe(2) // the one long value shows whole
@@ -2311,9 +2312,9 @@ test('every card of a Full details page says its own text, so the desktop draws 
   const ui = await mountDesk($, 'resume')
   await ui.press({ key: 'detail:resume' })
   const alts = (await ui.findAll({ type: 'Svg' })).map((x: any) => String(x.props.alt))
-  expect(alts.every(a => a.trim() !== '')).toBe(true)
-  expect(alts.some(a => a.split('\n').includes('Needs you') && a.includes('ship it, A & B') && !a.startsWith('Now'))).toBe(true)
-  expect(alts.some(a => a.split('\n').includes('left one') && !a.startsWith('Now'))).toBe(true)
+  expect(alts.every((a: string) => a.trim() !== '')).toBe(true)
+  expect(alts.some((a: string) => a.split('\n').includes('Needs you') && a.includes('ship it, A & B') && !a.startsWith('Now'))).toBe(true)
+  expect(alts.some((a: string) => a.split('\n').includes('left one') && !a.startsWith('Now'))).toBe(true)
   await ui.unmount()
 })
 
@@ -2449,7 +2450,7 @@ test('the task list follows update_plan: items, advance, done/start, wrap_up; To
   const UP = 'mcp__ccd_turn__update_plan'
   let p = applyPlan(null, UP, { items: [{ content: 'Look', status: 'in_progress' }, { content: 'Build', status: 'pending' }, { content: '**Test**', status: 'pending' }] }, {}, 1)
   expect(p?.items.map(x => x.status)).toEqual(['in_progress', 'pending', 'pending'])
-  expect(p?.items[2].content).toBe('Test')
+  expect(p?.items[2]!.content).toBe('Test')
   p = applyPlan(p, UP, { advance: true }, {}, 2)
   expect(p?.items.map(x => x.status)).toEqual(['completed', 'in_progress', 'pending'])
   p = applyPlan(p, UP, { done: [2], start: 3 }, {}, 3)
@@ -2640,3 +2641,26 @@ test('Home keeps the memo Now and Next and adds the live step and the running co
   expect(lines).toContain('G4 review · ask about the BE sort ticket')
   await home.unmount()
 })
+
+test('the Agents section shows the Prompt checkup counts once the hook flagged something, and nothing before', async ($, on) => {
+  const last = { kind: 'user', problems: ['names no file or component', 'says no end state'], at: '2026-11-21T10:00:00Z' }
+  await harness($, on, { guide: guideOf([item()]), pane: panePayload({ checkup: { agent: 3, user: 1, denied: 2, last } }) })
+  for (const surface of SURFACES) {
+    const ui = await mountPane($, surface)
+    const lastLine = /^Last, your ask: names no file or component; says no end state$/
+    const want = surface === 'desktop'
+      ? [/^Prompt checkup$/, /^Agent prompts flagged 3$/, /^Your asks flagged 1$/, /^Agents refused 2$/, lastLine]
+      : [/^Prompt checkup$/, /^3 agent prompts · 1 of your asks · 2 refused$/, lastLine]
+    for (const re of want) expect([surface, String(re), await said(ui, re)]).toEqual([surface, String(re), true])
+  }
+})
+
+for (const [name, checkup] of [['no hits yet', { agent: 0, user: 0, denied: 0, last: null }], ['an older state file with no checkup', undefined]] as const) {
+  test(`the Agents section draws no Prompt checkup block with ${name}`, async ($, on) => {
+    await harness($, on, { guide: guideOf([item()]), pane: panePayload(checkup ? { checkup } : {}) })
+    for (const surface of SURFACES) {
+      const ui = await mountPane($, surface)
+      expect([surface, await said(ui, /^Prompt checkup$/)]).toEqual([surface, false])
+    }
+  })
+}

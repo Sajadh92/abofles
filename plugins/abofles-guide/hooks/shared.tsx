@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface } from 'claude-code'
 
-import type { Guide, GuideItem, Pane, PaneDecision, PaneDecisions, PaneHealth, PaneLive, PaneModel, PaneOverrideKey, PaneOverrides, PanePlaces, PaneResume, PaneRow, PaneSpawns, PaneTotals, PaneVersion, Plan, PlanStatus } from '../types'
+import type { Guide, GuideItem, Pane, PaneCheckup, PaneDecision, PaneDecisions, PaneHealth, PaneLive, PaneModel, PaneOverrideKey, PaneOverrides, PanePlaces, PaneResume, PaneRow, PaneSpawns, PaneTotals, PaneVersion, Plan, PlanStatus } from '../types'
 import { ICONS, emptyCard, headerBlock, headerWidth, paneWidth, svgOf, textOf, tileSvg } from './html'
 import type { Block, IconName, Tone } from './html'
 
@@ -165,7 +165,10 @@ export const PANE_ID = 'abofles'
 export const PANE_TITLE = 'Abo Fles'
 
 export type Ui = ReturnType<EngineInterface['ui']['resolve']>
-export type RenderEvent = Parameters<EngineInterface['ui']['resolve']>[0]
+// The surfaces' tables that carry `Svg` (every one but the terminal's), what hasSvg() admits.
+export type SvgUi = Extract<Ui, { Svg: unknown }>
+// A `ui.render` input: what `$.ui.resolve` takes, plus the component's props (ResolveInput names no props).
+export type RenderEvent = Parameters<EngineInterface['ui']['resolve']>[0] & { props: unknown }
 
 // A line of a memo or a ledger as the cards draw it: control bytes and markdown marks (**bold**, `code`, __x__) dropped, spaces folded.
 export const plain = (text: string): string =>
@@ -365,7 +368,7 @@ export function emptyLine(ui: Ui, look: Look, text: string, name: IconName = 'ch
 // that is past the middle, trailing punctuation dropped, and "…" added.
 function cutAt(chars: string[], room: number): string {
   let cut = Math.max(8, room)
-  while (cut < chars.length && /\p{M}/u.test(chars[cut])) cut++ // never between a letter and its combining mark
+  while (cut < chars.length && /\p{M}/u.test(chars[cut]!)) cut++ // never between a letter and its combining mark
   let head = chars.slice(0, cut).join('')
   const sp = head.lastIndexOf(' ')
   if (sp > head.length / 2) head = head.slice(0, sp)
@@ -508,7 +511,7 @@ export const paneW = (look: Look): number => paneWidth(look.width + 4)
 // An HTML block as a picture laid out at the pane's width and scaled to the slot keeping its ratio (a 4096 px width capped at
 // the slot, no height); `alt` is every text in it, one per line, or the block's own text when none is given: later cards with a blank alt did not show on the desktop.
 export function pic(ui: Ui, look: Look, b: Block, alt: (string | null | undefined)[], width?: number) {
-  const { Svg } = ui as Ui & { Svg: NonNullable<Ui['Svg']> }
+  const { Svg } = ui as SvgUi
   const enter = look.enter ? look.enter.n++ * 50 : -1 // one after another, 50 ms apart
   return <Svg source={svgOf(b, width ?? paneW(look), enter)} alt={alt.filter((x): x is string => !!x).join('\n') || textOf(b.html) || ' '} width={width ?? 4096} />
 }
@@ -546,7 +549,7 @@ const NAV_MIN = 24
 const NAV_CELL = 9 // px per unit of a Box's width: a 36 px tile fills 4
 const NAV_SPREAD = 5
 export function navBar($: EngineInterface, ui: Ui, look: Look, tab: string, tabs: string[], busy = 0) {
-  const { Box, Button, Svg } = ui as Ui & { Svg: NonNullable<Ui['Svg']> }
+  const { Box, Button, Svg } = ui as SvgUi
   const shown = NAV.filter(n => tabs.includes(n.id))
   const size = Math.max(NAV_MIN, Math.min(NAV_TILE, Math.floor(paneW(look) / Math.max(1, shown.length))))
   const spread = shown.length >= NAV_SPREAD
@@ -591,7 +594,7 @@ export const plural = (n: number, word: string): string => `${n} ${word}${n === 
 
 const EFFORT: Record<string, string> = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra', max: 'Max' }
 const MODEL_NAME: Record<string, string> = { haiku: 'Haiku 5.5', sonnet: 'Sonnet 5.5', opus: 'Opus 5.5', fable: 'Fable 5.1' }
-const capFirst = (t: string): string => (t ? t[0].toUpperCase() + t.slice(1) : t)
+const capFirst = (t: string): string => (t ? t[0]!.toUpperCase() + t.slice(1) : t)
 export function modelName(model: string, effort: string, labels: Record<string, string> = {}): string {
   const m = model ? labels[model] ?? MODEL_NAME[model] ?? capFirst(model) : '?'
   return effort ? `${m} · ${EFFORT[effort] ?? capFirst(effort)}` : m
@@ -607,8 +610,8 @@ const argvOf = (v: unknown): string[] | null => (Array.isArray(v) && v.length > 
 // is the user's own, but anything that can write it must not get an arbitrary command run by a press. Any other argv is dropped.
 export function scriptArgv(v: unknown, scripts: readonly string[]): string[] | null {
   const a = argvOf(v)
-  if (!a || a.length < 3 || !/^(?:.*\/)?bash(?:\.exe)?$/i.test(a[0])) return null
-  const m = /^(.*\/abofles(?:\/[^/]+)?\/scripts)\/py$/.exec(a[1])
+  if (!a || a.length < 3 || !/^(?:.*\/)?bash(?:\.exe)?$/i.test(a[0]!)) return null
+  const m = /^(.*\/abofles(?:\/[^/]+)?\/scripts)\/py$/.exec(a[1]!)
   if (!m || !scripts.some(name => a[2] === `${m[1]}/${name}`)) return null
   return a
 }
@@ -719,6 +722,16 @@ function cleanHealth(v: unknown): PaneHealth | null {
   return { archived_items: n(v.archived_items), archived_sessions: n(v.archived_sessions), trimmed: n(v.trimmed), deduped: n(v.deduped), line: strOr(v.line, '') }
 }
 
+// The Prompt checkup counts (newer hooks); anything else is null, so the Agents page draws no block.
+function cleanCheckup(v: unknown): PaneCheckup | null {
+  if (!isObj(v)) return null
+  const n = (x: unknown) => (isNum(x) && x > 0 ? Math.floor(x) : 0)
+  const l = isObj(v.last) ? v.last : null
+  const problems = l && Array.isArray(l.problems) ? l.problems.filter(isStr).slice(0, 6) : []
+  const last = l && problems.length > 0 ? { kind: l.kind === 'user' ? ('user' as const) : ('agent' as const), problems, at: strOr(l.at, '') } : null
+  return { agent: n(v.agent), user: n(v.user), denied: n(v.denied), last }
+}
+
 function cleanLive(v: unknown): PaneLive | null {
   if (!isObj(v)) return null
   return { side: strOr(v.side, ''), model: strOr(v.model, ''), effort: strOr(v.effort, ''), description: strOr(v.description, ''), ts: numOrNull(v.ts), ...(isStr(v.agent_id) && v.agent_id ? { agent_id: v.agent_id } : {}) }
@@ -822,6 +835,7 @@ export function cleanPane(raw: unknown): Pane | null {
       overrides: cleanOverrides(raw.overrides),
       decisions: cleanDecisions(raw.decisions),
       memo_health: cleanHealth(raw.memo_health),
+      checkup: cleanCheckup(raw.checkup),
       plan: cleanPlan(raw.plan),
       version: cleanVersion(raw.version),
       tasks_hide: raw.tasks_hide === 'auto' || raw.tasks_hide === 'next' ? raw.tasks_hide : 'manual',

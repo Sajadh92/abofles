@@ -17,7 +17,7 @@ test('draws Use, Copy and Hide buttons when the session has a guide line', async
     return <Text key="engine-own"> </Text>
   })
   await $.session.start({ cwd: '/home', surface: 'desktop', isInteractive: true })
-  const ui = await $.ui.mount({ plugin: 'abofles-guide', surface: 'desktop', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false, maxRows: 4 } })
+  const ui = await $.ui.mount({ plugin: 'abofles-guide', surface: 'desktop', component: 'AbovePrompt', props: { hasSurvey: false, isCollapsed: false, isWorking: false, maxRows: 4, bodyColumns: 46, scroll: { offset: 0, bodyRows: 4 }, view: {} } })
   expect(await ui.find({ key: 'use' })).toBeDefined()
   expect(await ui.find({ key: 'copy' })).toBeDefined()
   expect(await ui.find({ key: 'hide' })).toBeDefined()
@@ -47,7 +47,7 @@ test('Re-check shows for a red item with a recheck prompt and no Resolve', async
     return <Text key="engine-own"> </Text>
   })
   await $.session.start({ cwd: '/home', surface: 'desktop', isInteractive: true })
-  const ui = await $.ui.mount({ plugin: 'abofles-guide', surface: 'desktop', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false, maxRows: 4 } })
+  const ui = await $.ui.mount({ plugin: 'abofles-guide', surface: 'desktop', component: 'AbovePrompt', props: { hasSurvey: false, isCollapsed: false, isWorking: false, maxRows: 4, bodyColumns: 46, scroll: { offset: 0, bodyRows: 4 }, view: {} } })
   expect(await ui.find({ key: 'recheck' })).toBeDefined()
   expect(await ui.find({ key: 'resolve' })).toBeUndefined()
   await ui.unmount()
@@ -105,7 +105,7 @@ async function harness($: any, on: any, first: object | null) {
     return <Text key="engine-own"> </Text>
   })
   await $.session.start({ cwd: '/home', surface: 'desktop', isInteractive: true })
-  w.ui = await $.ui.mount({ plugin: 'abofles-guide', surface: 'desktop', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false, maxRows: 4 } })
+  w.ui = await $.ui.mount({ plugin: 'abofles-guide', surface: 'desktop', component: 'AbovePrompt', props: { hasSurvey: false, isCollapsed: false, isWorking: false, maxRows: 4, bodyColumns: 46, scroll: { offset: 0, bodyRows: 4 }, view: {} } })
   return w
 }
 const turn = (id: string) => ({ answer: 'x', durationMs: 1, isAborted: false, turnId: id, reason: 'answered' }) as never

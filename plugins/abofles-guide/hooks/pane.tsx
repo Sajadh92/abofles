@@ -1,8 +1,8 @@
 import type { EngineInterface } from 'claude-code'
 
-import type { Guide, GuideItem, Pane, PaneDecision, PaneLive, PaneRow, PaneSpawns, PaneTotals } from '../types'
+import type { Guide, GuideItem, Pane, PaneDecision, PaneLive, PaneCheckup, PaneRow, PaneSpawns, PaneTotals } from '../types'
 import { overridesCard, overridesPage } from './editor'
-import { BRAND_AR, BRAND_EN, WHOLE, brandFooter, decisionCards, guideBlock, guideDetail, homeBlocks, othersBlock, receiptCard, receiptDetail, resumeBlocks, resumeDetail, spawnsBlocks, spawnsDetail, subhead, toneOf } from './html'
+import { BRAND_AR, BRAND_EN, WHOLE, brandFooter, checkupBlock, decisionCards, guideBlock, guideDetail, homeBlocks, othersBlock, receiptCard, receiptDetail, resumeBlocks, resumeDetail, spawnsBlocks, spawnsDetail, subhead, toneOf } from './html'
 import type { Block, CardItem, DecisionRow, Fact, Receipt, SpawnRow, Tone } from './html'
 import { planWhere, tasksDetail, tasksHomeCard, tasksTerminal } from './tasks'
 import { getVersionView, versionFoot, versionHomeCard } from './version'
@@ -203,7 +203,7 @@ function clearRows($: EngineInterface, ui: Ui, g: Guide, top: GuideItem | undefi
   return (
     <Box flexDirection="column">
       {emptyLine(ui, look, m ? 'Next from the memo' : 'All clear', 'check', 'success')}
-      {longText($, ui, look, folds, `guide:clear:${top ? idOf(top) : 'line'}`, m ? m[1] : text, { dim: !m, lines: 2 })}
+      {longText($, ui, look, folds, `guide:clear:${top ? idOf(top) : 'line'}`, m ? m[1]! : text, { dim: !m, lines: 2 })}
     </Box>
   )
 }
@@ -216,14 +216,14 @@ function mainFact(line: string | null | undefined): Fact | null {
   const raw = (line ?? '').replace(/^\s*main:\s*/i, '').replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]\uFE0F?\s*/gu, '').trim()
   if (!raw) return null
   const fits = /^(.+?)\s+fits this (.+?) task/i.exec(raw)
-  if (fits) return { label: 'Main model', value: fits[1], sub: `Fits this ${fits[2]} task` }
+  if (fits) return { label: 'Main model', value: fits[1]!, sub: `Fits this ${fits[2]} task` }
   const yours = /^(.+?)\s+fits your setting/i.exec(raw)
-  if (yours) return { label: 'Main model', value: yours[1], sub: 'Fits your setting' }
+  if (yours) return { label: 'Main model', value: yours[1]!, sub: 'Fits your setting' }
   const set = /^suggest\s+(.+?),\s+your setting\s*\(now ([^)]+)\)/i.exec(raw)
-  if (set) return { label: 'Main model', value: set[2], sub: `Your setting is ${set[1]}. Switch in the model picker.`, subMark: set[1] }
+  if (set) return { label: 'Main model', value: set[2]!, sub: `Your setting is ${set[1]}. Switch in the model picker.`, subMark: set[1] }
   const sug = /^suggest\s+(.+?)(?:\s+for this (.+?) task)?\s*\(now ([^)]+)\)/i.exec(raw)
-  if (sug) return { label: 'Main model', value: sug[3], sub: `Use ${sug[1]} for this task. Switch in the model picker.`, subMark: sug[1] }
-  return { label: 'Suggested model', value: raw.replace(/^suggest\s+/i, '').split(/\s+for this |\s*\(/)[0] }
+  if (sug) return { label: 'Main model', value: sug[3]!, sub: `Use ${sug[1]} for this task. Switch in the model picker.`, subMark: sug[1] }
+  return { label: 'Suggested model', value: raw.replace(/^suggest\s+/i, '').split(/\s+for this |\s*\(/)[0]! }
 }
 
 function guideFacts(g: Guide, v: GuideView): { facts: Fact[]; alt: string[] } {
@@ -274,7 +274,7 @@ function guideHtml($: EngineInterface, ui: Ui, g: Guide, v: GuideView, folds: Fo
   if (clear) {
     const text = plain(v.top?.text ?? g.line.replace(/^\s*🧭\s*/, ''))
     const m = /memo:\s*(.+)$/i.exec(text)
-    note = { title: m ? 'Next from the memo' : 'All clear', text: m ? m[1] : text }
+    note = { title: m ? 'Next from the memo' : 'All clear', text: m ? m[1]! : text }
   }
   const t = guideFacts(g, v)
   const { block, more } = guideBlock({ paneW: paneW(look), top: top ? cardItem(top) : null, rest: shown.map(cardItem), clear: note, facts: t.facts })
@@ -318,7 +318,7 @@ function guideCard($: EngineInterface, ui: Ui, g: Guide, hidden: boolean, last: 
       const shown = isOpen(folds, 'more:guide', false) ? rest : rest.slice(0, 2)
       parts.push(
         <Box flexDirection="column" rowGap={1}>
-          {guideItem($, ui, look, folds, top, true)}
+          {guideItem($, ui, look, folds, top!, true)}
           {shown.map(it => guideItem($, ui, look, folds, it, false))}
           {moreButton($, ui, folds, 'guide', v.items.length, rest.length > 2 ? 3 : v.items.length)}
         </Box>,
@@ -364,8 +364,8 @@ export function receiptOf(line: string): { time: string | null; spawns: string |
   return {
     time,
     spawns: `${plural(Number(n[1]), 'agent')}${n[2] ? ` + ${n[2]}` : ''}`,
-    usd: usd ? usd[1] : null,
-    saved: saved ? saved[1] : null,
+    usd: usd ? usd[1]! : null,
+    saved: saved ? saved[1]! : null,
     tokens: tokens ? `${tokens[1]} tokens` : null,
     money: money ? money.replace(/^Saved (\d+%)/i, '$1 saved') : null,
     text: '',
@@ -450,7 +450,7 @@ function resumeHtml($: EngineInterface, ui: Ui, r: Pane['resume'], folds: Folds,
   const others = r.others_items ?? []
   const othersN = r.others ? r.others.sessions + r.others.projects : others.length
   const w = paneW(look)
-  const b = resumeBlocks({ paneW: w, now: r.now.map(plain), next: r.next.map(plain), needs: needs.map((n, i) => ({ n: nums[i], text: plain(n.text), other: n.other })), needsOpen: r.needs_open, left: left.map(plain), facts })
+  const b = resumeBlocks({ paneW: w, now: r.now.map(plain), next: r.next.map(plain), needs: needs.map((n, i) => ({ n: nums[i]!, text: plain(n.text), other: n.other })), needsOpen: r.needs_open, left: left.map(plain), facts })
   const body: (JSX.Element | null)[] = []
   if (b.status) body.push(pic(ui, look, b.status, [...(r.now.length ? ['Now', ...r.now.map(plain)] : []), ...(r.next.length ? ['Next', ...r.next.map(plain)] : [])]))
   const needsRow = [
@@ -716,11 +716,44 @@ function spendOf(t: PaneTotals, openFail: boolean) {
 
 // Agents on the desktop: the saving and the spend split by model, the history by day (newest first) with its
 // Show all and the section's Full details under it.
-function spawnsHtml($: EngineInterface, ui: Ui, s: PaneSpawns, folds: Folds, look: Look, ts: number, now: number) {
+// The Prompt checkup counts, shown in the Agents page only once the hook has flagged something (nothing to read before that).
+function checkupLast(c: PaneCheckup): string | null {
+  if (!c.last || c.last.problems.length === 0) return null
+  return `Last, ${c.last.kind === 'user' ? 'your ask' : 'an agent prompt'}: ${c.last.problems.join('; ')}`
+}
+function checkupShown(c: PaneCheckup | null | undefined): c is PaneCheckup {
+  return !!c && c.agent + c.user + c.denied > 0
+}
+function checkupPic(ui: Ui, look: Look, c: PaneCheckup | null | undefined) {
+  if (!checkupShown(c)) return null
+  const last = checkupLast(c)
+  return pic(ui, look, checkupBlock({ paneW: paneW(look), agent: c.agent, user: c.user, denied: c.denied, last }), [
+    'Prompt checkup',
+    `Agent prompts flagged ${c.agent}`,
+    `Your asks flagged ${c.user}`,
+    c.denied > 0 ? `Agents refused ${c.denied}` : null,
+    last,
+  ])
+}
+function checkupText(ui: Ui, c: PaneCheckup | null | undefined) {
+  const { Box, Text } = ui
+  if (!checkupShown(c)) return null
+  const last = checkupLast(c)
+  const counts = [`${c.agent} agent prompts`, `${c.user} of your asks`, ...(c.denied > 0 ? [`${c.denied} refused`] : [])].join(' · ')
+  return (
+    <Box flexDirection="column">
+      <Text size="caption" weight="medium" dimColor>Prompt checkup</Text>
+      <Text tabular>{counts}</Text>
+      {last ? <Text size="caption" dimColor>{last}</Text> : null}
+    </Box>
+  )
+}
+
+function spawnsHtml($: EngineInterface, ui: Ui, s: PaneSpawns, folds: Folds, look: Look, ts: number, now: number, ck?: PaneCheckup | null) {
   const { Button } = ui
   const t = s.totals
   const head = { icon: 'fork' as const, tone: 'violet' as const, title: 'Agents' }
-  if (s.rows.length === 0) return htmlSection(ui, look, head, [emptyPic(ui, look, 'No agents yet')])
+  if (s.rows.length === 0) return htmlSection(ui, look, head, [emptyPic(ui, look, 'No agents yet'), checkupPic(ui, look, ck)])
   const spend = spendOf(t, true)
   const newest = [...s.rows].reverse()
   const { days, alt } = spawnRowsOf(s, isOpen(folds, 'more:history', false) ? newest : newest.slice(0, HISTORY_ROWS), now)
@@ -728,6 +761,7 @@ function spawnsHtml($: EngineInterface, ui: Ui, s: PaneSpawns, folds: Folds, loo
   const b = spawnsBlocks({ ...spend, paneW: paneW(look), days, updated })
   const body: (JSX.Element | null)[] = [
     pic(ui, look, b.spend, spend.alt),
+    checkupPic(ui, look, ck),
   ]
   // a long history is split into cards: the first carries the whole list's alt, so it is read once
   b.history.forEach((c, i) => body.push(pic(ui, look, c, i === 0 ? ['History', 'newest first', ...alt, updated] : [])))
@@ -740,17 +774,17 @@ function spawnsHtml($: EngineInterface, ui: Ui, s: PaneSpawns, folds: Folds, loo
   return htmlSection(ui, look, { ...head, summary: spawnsSummary(s), summaryTone: t.open_fail > 0 ? 'red' : null }, body)
 }
 
-function spawnsCard($: EngineInterface, ui: Ui, s: PaneSpawns, folds: Folds, look: Look, ts: number, now: number) {
+function spawnsCard($: EngineInterface, ui: Ui, s: PaneSpawns, folds: Folds, look: Look, ts: number, now: number, ck?: PaneCheckup | null) {
   const { Box, Text } = ui
-  if (hasSvg(ui, look)) return spawnsHtml($, ui, s, folds, look, ts, now)
-  if (s.rows.length === 0) return card($, ui, { id: 'spawns', title: 'Agents', def: false, folds, icon: 'fork', look }, emptyLine(ui, look, 'No agents yet', 'fork'))
+  if (hasSvg(ui, look)) return spawnsHtml($, ui, s, folds, look, ts, now, ck)
+  if (s.rows.length === 0) return card($, ui, { id: 'spawns', title: 'Agents', def: false, folds, icon: 'fork', look }, [emptyLine(ui, look, 'No agents yet', 'fork'), checkupText(ui, ck)])
   const t = s.totals
   const labels = Object.fromEntries(t.by_model.map(m => [m.model, m.label]))
-  const parts: (JSX.Element | null)[] = [spendBlock(ui, s, look)]
+  const parts: (JSX.Element | null)[] = [spendBlock(ui, s, look), checkupText(ui, ck)]
   if (s.rows.length > 0) {
     const newest = [...s.rows].reverse()
     const ids = uniqueIds(newest.map(r => `spawn:${r.ts ?? 'x'}:${shortHash(askOf(r.side, r.description))}`))
-    const shown = (isOpen(folds, 'more:history', false) ? newest : newest.slice(0, HISTORY_ROWS)).map((r, i) => ({ r, id: ids[i] }))
+    const shown = (isOpen(folds, 'more:history', false) ? newest : newest.slice(0, HISTORY_ROWS)).map((r, i) => ({ r, id: ids[i]! }))
     // one muted caption per day; the rows under it show only the time
     const days: { label: string; rows: { r: PaneRow; id: string }[] }[] = []
     for (const x of shown) {
@@ -809,7 +843,7 @@ function decisionGroup($: EngineInterface, ui: Ui, look: Look, folds: Folds, id:
   const shown = isOpen(folds, `more:${id}`, false) ? rows : rows.slice(0, DECISION_ROWS)
   const ids = uniqueIds(rows.map(d => `dec:${id}:${d.ts}:${shortHash(`${d.q}\n${d.a}`)}`))
   return group(ui, heading(ui, title, String(n), undefined, { look, name: judge ? 'scale' : 'user', color: judge ? ACCENT.scale : GREY }), [
-    ...(rows.length === 0 ? [emptyLine(ui, look, 'No decisions yet', judge ? 'scale' : 'user')] : ruled(ui, look, shown.map((d, i) => decisionRow($, ui, look, folds, ids[i], d, judge)))),
+    ...(rows.length === 0 ? [emptyLine(ui, look, 'No decisions yet', judge ? 'scale' : 'user')] : ruled(ui, look, shown.map((d, i) => decisionRow($, ui, look, folds, ids[i]!, d, judge)))),
     moreButton($, ui, folds, id, rows.length, DECISION_ROWS),
   ])
 }
@@ -924,7 +958,7 @@ function detailOf(id: string, p: Pane | null, g: Guide | null, look: Look, now: 
 async function detailPage($: EngineInterface, ui: Ui, p: Pane | null, g: Guide | null, look: Look, now: number) {
   const { Box, Button, Text } = ui
   const id = await getPaneDetail($)
-  const d = !id ? null : id.startsWith('run:') ? await runningDetail($, id.slice(4), p, look) : id === 'tasks' ? await tasksDetail($, look, await getMainRunning($), await getWorkBusy($)) : detailOf(id, p, g, look, now)
+  const d: Detail | null = !id ? null : id.startsWith('run:') ? await runningDetail($, id.slice(4), p, look) : id === 'tasks' ? await tasksDetail($, look, await getMainRunning($), await getWorkBusy($)) : detailOf(id, p, g, look, now)
   const tab = await getPaneTab($)
   const back = <Button key="detail-back" label={glyph(look, '‹', NAV.find(n => n.id === tab)?.label ?? 'Back')} variant="secondary" onPress={() => setPaneView($, 'main')} />
   if (d === null) return <Box flexDirection="column" rowGap="sm"><Box flexDirection="row" alignItems="center">{back}</Box><Text dimColor>Nothing to show here any more.</Text></Box>
@@ -946,7 +980,7 @@ async function detailPage($: EngineInterface, ui: Ui, p: Pane | null, g: Guide |
 function clearNote(g: Guide | null, v: GuideView | null): { title: string; text: string } {
   const text = g ? plain(v?.top?.text ?? g.line.replace(/^\s*🧭\s*/, '')) : 'Nothing from the guide yet'
   const m = /memo:\s*(.+)$/i.exec(text)
-  return { title: m ? 'Next from the memo' : 'All clear', text: m ? m[1] : text }
+  return { title: m ? 'Next from the memo' : 'All clear', text: m ? m[1]! : text }
 }
 
 // The Home page of the desktop: the one thing to do next with its buttons, the numbers that matter from every section at a glance,
@@ -1082,7 +1116,7 @@ export async function renderPane($: EngineInterface, e: RenderEvent) {
           : tab === 'decisions' && p?.decisions
             ? decisionsCard($, ui, p.decisions, folds, lk)
             : tab === 'spawns' && p
-              ? spawnsCard($, ui, p.spawns, folds, lk, p.ts, now)
+              ? spawnsCard($, ui, p.spawns, folds, lk, p.ts, now, p.checkup)
               : tab === 'overrides'
                 ? await overridesCard($, ui, p, folds, lk)
                 : homeHtml(
@@ -1120,7 +1154,7 @@ export async function renderPane($: EngineInterface, e: RenderEvent) {
   }
   if (p?.places.resume === 'pane') cards.push(resumeCard($, ui, p.resume, folds, look, g, p.memo_health))
   if (p?.decisions) cards.push(decisionsCard($, ui, p.decisions, folds, look))
-  if (p?.places.spawns === 'pane') cards.push(spawnsCard($, ui, p.spawns, folds, look, p.ts, await $.clock.now())) // the engine's clock: Today / Yesterday
+  if (p?.places.spawns === 'pane') cards.push(spawnsCard($, ui, p.spawns, folds, look, p.ts, await $.clock.now(), p.checkup)) // the engine's clock: Today / Yesterday
   cards.push(await overridesCard($, ui, p, folds, look))
   cards.push(brandFoot(ui, look, await getVersionView($)))
   return sections(ui, look, cards)

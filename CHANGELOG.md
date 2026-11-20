@@ -2,6 +2,13 @@
 
 All notable changes to the plugins in this marketplace.
 
+## abofles 2.13.0 · abofles-guide 0.15.0 — 2026-11-21
+
+- abofles: **Prompt checkup.** Before an agent starts, the hook checks its prompt: the `abofles: <Topic> / <Side> · T<n>` header on line 1, `Line cap: <N>` as the last line, 15 words at least, a file or command for Work and Verify, and a stated end state for Work ("Done when …", a test or command that passes, acceptance criteria — a bare "test" or "verify" does not count). `Prompt checkup = warn | deny | off` (default `warn`: a note to Claude; `deny`: the agent is refused until the prompt is fixed). `abofles:skip` prompts and the memo agent are left alone; an error in the check never blocks an agent.
+- abofles: **User prompt checkup.** A risky change ask (a change verb plus money, auth, secrets, database, delete or production words, in English or Arabic) that names no file or says no end state gets a note: find the missing part in the repo first, then ask one question through the question gate. `User prompt checkup = warn | off` (default `warn`; no deny, so your message is never dropped).
+- abofles-guide: the Agents page shows a Prompt checkup block once something was flagged: agent prompts flagged, your asks flagged, agents refused (red, only when there is one) and the newest hit's problems. Both keys are in the overrides editor under Agents.
+- abofles, abofles-guide: a plugin icon (the uncle). abofles-guide: its TypeScript now checks clean (typing only, no behaviour change).
+
 ## abofles 2.12.0 · abofles-guide 0.14.0 — 2026-11-20
 
 - abofles: **the memo's Now follows the task list, nothing taken away.** Every list call (and a receipt in the middle of a list) adds the list to this session's Now: Task gets `step k of n — <step>` first (a `none — between tasks` gives way), Left gets the steps after the next one, Next gets the next step first; the old Done, Left, Decisions, Next and Verify stay. Marked `· from task list`; once the list is done (the wrap-up, or every step checked) its lines are taken out again and the rest of Now stays; a hand-written Now newer than the last receipt is left alone. Resume, the guide and the pane read the same Now.

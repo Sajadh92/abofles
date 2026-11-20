@@ -149,7 +149,7 @@ export const register: Register = on => {
     const main = !e.agentId && e.trigger !== 'precompute'
     if (main) await noteCompact($, null)
     const result = await next(e)
-    if (main) await noteCompact($, result.skip ? null : result.tokensAfter ?? null)
+    if (main) await noteCompact($, result.skip === undefined ? result.tokensAfter ?? null : null)
     if (main && e.trigger === 'manual' && !result.skip) await continueAfterCompact($)
     return result
   })
