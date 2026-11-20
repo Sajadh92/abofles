@@ -134,6 +134,17 @@ export async function notePlanTurn($: EngineInterface, phase: 'start' | 'end', a
   }
 }
 
+// Home's Now and Next while a list is open: the step in progress and the one after it (the memo's Now says the same, written by the hook).
+export async function planWhere($: EngineInterface): Promise<{ now: string; next: string | null; step: string; nextStep: string | null } | null> {
+  const p = await getPlan($)
+  if (!p || p.closed) return null
+  const i = p.items.findIndex(x => x.status === 'in_progress')
+  const cur = i >= 0 ? i : p.items.findIndex(x => x.status === 'pending')
+  if (cur < 0) return null
+  const after = p.items.slice(cur + 1).find(x => x.status !== 'completed')
+  return { now: `Step ${cur + 1} of ${p.items.length} — ${p.items[cur].content}`, next: after ? after.content : 'The last step: then the receipt', step: p.items[cur].content, nextStep: after?.content ?? null }
+}
+
 // Where the list stands: its word and tone, and the line beside it. `running`: the main turn is on; `busy`: agents and commands at work.
 export function planState(p: Plan, running: boolean, busy: number): { word: string; tone: Tone; line: string; done: number; cur: number } {
   const n = p.items.length

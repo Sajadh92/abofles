@@ -4,7 +4,7 @@ import type { Guide, GuideItem, Pane, PaneDecision, PaneLive, PaneRow, PaneSpawn
 import { overridesCard, overridesPage } from './editor'
 import { BRAND_AR, BRAND_EN, WHOLE, brandFooter, decisionCards, guideBlock, guideDetail, homeBlocks, othersBlock, receiptCard, receiptDetail, resumeBlocks, resumeDetail, spawnsBlocks, spawnsDetail, subhead, toneOf } from './html'
 import type { Block, CardItem, DecisionRow, Fact, Receipt, SpawnRow, Tone } from './html'
-import { tasksDetail, tasksHomeCard, tasksTerminal } from './tasks'
+import { planWhere, tasksDetail, tasksHomeCard, tasksTerminal } from './tasks'
 import { getVersionView, versionFoot, versionHomeCard } from './version'
 import type { VersionView } from './version'
 import { getMainRunning, getWorkBusy, runningDetail, runningHomeCard, runningPage, runningTerminal } from './running'
@@ -952,7 +952,7 @@ function clearNote(g: Guide | null, v: GuideView | null): { title: string; text:
 // The Home page of the desktop: the one thing to do next with its buttons, the numbers that matter from every section at a glance,
 // what runs now, the spend card, where the work stands, and the latest decision and receipt. The nav bar's other pages hold the detail.
 // Only the sections the pane holds feed it: one placed in the band or the chat is not summed up here (`p` and `g` come filtered).
-function homeHtml($: EngineInterface, ui: Ui, p: { resume: Pane['resume']; spawns: PaneSpawns | null; decisions: Pane['decisions'] | null }, g: Guide | null, look: Look, hidden: boolean, running: JSX.Element | null, tasks: JSX.Element | null = null, version: JSX.Element | null = null) {
+function homeHtml($: EngineInterface, ui: Ui, p: { resume: Pane['resume']; spawns: PaneSpawns | null; decisions: Pane['decisions'] | null }, g: Guide | null, look: Look, hidden: boolean, running: JSX.Element | null, tasks: JSX.Element | null = null, version: JSX.Element | null = null, live: { now: string; next: string | null; step: string; nextStep: string | null } | null = null, busy = 0) {
   const { Button } = ui
   const v = g ? viewOf(g) : null
   const open = v ? v.items.filter(i => i.p !== '✅').length : 0
@@ -979,14 +979,21 @@ function homeHtml($: EngineInterface, ui: Ui, p: { resume: Pane['resume']; spawn
   const last = r?.last[0]
   const rc = last ? receiptOf(last) : null
   const done = rc ? rc.details.map(x => /^done:\s*(.*)$/i.exec(x)?.[1]).find(Boolean) ?? rc.text : null
+  // Now and Next are the memo's, as before; what the session knows live is added when the memo does not say it yet: the task list's step
+  // in progress and the one after it, and how much runs in the background
+  const memoNow = r?.now[0] ? plain(r.now[0]) : null
+  const memoNext = r?.next[0] ? plain(r.next[0]) : null
+  const says = (t: string | null, x: string | null) => !!t && !!x && t.includes(x)
+  const nowT = [live && !says(memoNow, live.step) ? live.now : null, memoNow && !/^none\b/i.test(memoNow) ? memoNow : live ? null : memoNow, busy > 0 ? `${busy} ${busy === 1 ? 'agent or command' : 'agents and commands'} running` : null].filter(Boolean).join(' · ') || null
+  const nextT = [live?.nextStep && !says(memoNext, live.nextStep) ? live.nextStep : null, memoNext && !(live && /^none\b/i.test(memoNext)) ? memoNext : null].filter(Boolean).join(' · ') || (live ? live.next : null)
   const b = homeBlocks({
     paneW: paneW(look),
     top: topItem,
     clear: note,
     glance,
     spend,
-    now: r?.now[0] ? plain(r.now[0]) : null,
-    next: r?.next[0] ? plain(r.next[0]) : null,
+    now: nowT,
+    next: nextT,
     decision,
     receipt: rc && done ? { time: rc.time ? fmtWhen(rc.time) : '', text: plain(done) } : null,
   })
@@ -1008,7 +1015,7 @@ function homeHtml($: EngineInterface, ui: Ui, p: { resume: Pane['resume']; spawn
   if (tasks) body.push(tasks) // where the work stands, step by step: under At a glance, above Running and the Agents spend
   if (running) body.push(running)
   if (b.spend && spend) body.push(pic(ui, look, b.spend, ['Agents', String(spend.spawns), ...spend.alt]))
-  if (b.where) body.push(pic(ui, look, b.where, [r?.now[0] ? 'Now' : null, r?.now[0] ? plain(r.now[0]) : null, r?.next[0] ? 'Next' : null, r?.next[0] ? plain(r.next[0]) : null]))
+  if (b.where) body.push(pic(ui, look, b.where, [nowT ? 'Now' : null, nowT, nextT ? 'Next' : null, nextT]))
   if (b.latest) body.push(pic(ui, look, b.latest, [decision ? 'Last decision' : null, decision?.when, decision && !decision.note ? decision.q : null, decision?.a, done ? 'Last receipt' : null, done ? plain(done) : null]))
   if (version) body.push(version) // a newer version waits (Update or Reload): last on Home, above the footer's version line
   if (body.length === 0) body.push(emptyPic(ui, look, 'Nothing to sum up yet'))
@@ -1088,6 +1095,8 @@ export async function renderPane($: EngineInterface, e: RenderEvent) {
                     p?.places.running !== 'off' ? await runningHomeCard($, ui, p, lk) : null,
                     p?.places.tasks !== 'off' ? await tasksHomeCard($, ui, lk, await getMainRunning($), await getWorkBusy($)) : null,
                     await versionHomeCard($, ui, lk),
+                    p?.places.tasks !== 'off' ? await planWhere($) : null,
+                    await getWorkBusy($),
                   )
     const { Box } = ui
     return (

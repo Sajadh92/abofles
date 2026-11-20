@@ -4807,6 +4807,27 @@ def main():
             f_.write(tu("u3", UP, {"items": [{"content": "new", "status": "in_progress"}]}) + "\n")
         run("prompt", {"session_id": ts_, "cwd": tq, "prompt": "more", "transcript_path": trp}, led)
         check("tasks: the rebuild runs once per session (the live calls keep it after)", [x["content"] for x in gstate(ts_)["plan"]["items"]] == ["one", "two", "three"])
+        # the memo's Now: the open list is added to it, nothing taken away; a step written before gives way when the list moves on
+        old_ = "Task      none — between tasks\nDone      G3 fixed\nLeft      BE ticket\nDecisions keep modal\nNext      ask about sort"
+        its_ = [{"content": "A", "status": "completed"}, {"content": "B", "status": "in_progress"}, {"content": "C", "status": "pending"}, {"content": "D", "status": "pending"}]
+        nt_ = HG.plan_now_text(its_, old_)
+        check("memo Now: Task = the step, old Done, Left, Decisions and Next kept, the list's Next first", nt_.splitlines() == ["Task      step 2 of 4 — B", "Done      G3 fixed", "Left      BE ticket", "Left      D", "Decisions keep modal", "Next      C", "Next      ask about sort"])
+        its2_ = [dict(x, status="completed") if x["content"] in "AB" else (dict(x, status="in_progress") if x["content"] == "C" else x) for x in its_]
+        check("memo Now: the list moves on — the old step lines go, the rest stays", HG.plan_now_text(its2_, nt_).splitlines() == ["Task      step 3 of 4 — C", "Done      G3 fixed", "Left      BE ticket", "Decisions keep modal", "Next      D", "Next      ask about sort"])
+        check("memo Now: a finished list writes nothing", HG.plan_now_text([dict(x, status="completed") for x in its_], old_) == "")
+        check("memo Now: a closed list takes its lines out, the rest stays", HG.plan_now_closed([dict(x, status="completed") for x in its_], nt_).splitlines() == ["Task      none — between tasks", "Done      G3 fixed", "Left      BE ticket", "Decisions keep modal", "Next      ask about sort"])
+        check("memo Now: a Now with no list line is left as it is", HG.plan_now_closed(its_, old_) == "")
+        pm_ = tempfile.mkdtemp()
+        run("start", {"session_id": "planmemo1", "cwd": pm_}, led)
+        run("plan", {"session_id": "planmemo1", "cwd": pm_, "tool_name": UP, "tool_input": {"items": its_}}, led)
+        now_ = HG.sess_read(pm_, "planmemo1")["Now"]
+        check("memo Now: a list call writes it, marked from task list", "· from task list" in now_.splitlines()[0] and "Task      step 2 of 4 — B" in now_)
+        run("plan", {"session_id": "planmemo1", "cwd": pm_, "tool_name": "mcp__ccd_turn__wrap_up", "tool_input": {"recap": "r"}}, led)
+        check("memo Now: wrap_up closes the list and takes the step out of Now", "step " not in HG.sess_read(pm_, "planmemo1")["Now"] and "none — between tasks" in HG.sess_read(pm_, "planmemo1")["Now"])
+        run("plan", {"session_id": "planmemo1", "cwd": pm_, "tool_name": UP, "tool_input": {"items": its_}}, led)
+        HG.memo_now(pm_, "Task      my own words\nNext      mine", "planmemo1")
+        run("plan", {"session_id": "planmemo1", "cwd": pm_, "tool_name": UP, "tool_input": {"advance": True}}, led)
+        check("memo Now: a hand-written Now newer than the last receipt is left alone", "my own words" in HG.sess_read(pm_, "planmemo1")["Now"] and "step 3" not in HG.sess_read(pm_, "planmemo1")["Now"])
         check("tasks: no transcript: no list, no error", HG.plan_from_transcript(os.path.join(tq, "none.jsonl")) is None)
         check("tasks: a subagent's list call is not the session's", run("plan", {"session_id": tl, "cwd": tp, "agent_id": "sub1", "tool_name": UP, "tool_input": {"items": []}}, led) is None and gstate(tl).get("plan_open") is True)
         rs_ = pn_["resume"] or {}

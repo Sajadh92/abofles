@@ -98,7 +98,8 @@ export type VersionView = {
 // What the card says, from the three sources. Pure: the tests drive it.
 export function versionView(p: Pane | null, guideRunning: string | null, rel: Release | null): VersionView | null {
   const v = p?.version
-  const runA = v?.running.abofles ?? null
+  // the hooks' own version; a payload an older hook wrote has none: the installed one stands in until the next refresh
+  const runA = v?.running.abofles ?? v?.installed.abofles ?? null
   const insA = v?.installed.abofles ?? null
   const insG = v?.installed['abofles-guide'] ?? null
   if (!runA && !guideRunning) return null

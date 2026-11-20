@@ -1623,7 +1623,13 @@ def plan(data):
         st["plan_seeded"] = True  # this call is newer than anything a seed would read: no rebuild after it
         plan_set(st, plan_apply((st.get("plan") or {}).get("items"), data.get("tool_name"), data.get("tool_input") or {}))
         st["plan_calls"], st["plan_warned"] = 0, 0
-        refresh_pane(project_root(data, st), st, sid)
+        root = project_root(data, st)
+        if st.get("plan"):  # open: the list is added to Now; done: its lines are taken out again
+            try:
+                memo_apply(root, "plan_now", sid, items=st["plan"]["items"])  # the memo's Now follows the list: resume, guide and pane read it
+            except Exception:
+                pass
+        refresh_pane(root, st, sid)
         save_state(sid, st)
 
 
@@ -2332,7 +2338,7 @@ def trim_to_archive(cwd, lines, keep, heading, newest_first=False):
 
 
 MEMO_OPS = ("now", "needs", "journal", "trace", "decision", "match", "resolve", "reopen", "move", "precompact", "postcompact",
-            "list", "merge", "move_item", "drop_item", "drop_decision", "archive_session", "rewrite_now")  # the last seven are the memo agent's (see "Memo curator ops")
+            "list", "merge", "move_item", "drop_item", "drop_decision", "archive_session", "rewrite_now", "plan_now")  # plan_now: the task list writes Now; the seven before it are the memo agent's (see "Memo curator ops")
 
 
 class MemoResult:
@@ -2415,6 +2421,12 @@ def _op_journal(cwd, session_id, project, rc):
     s = sess_read(cwd, session_id)
     journal_add(s, f"- {stamp} · " + " · ".join(journal_bits(rc)), cwd, session_id)
     s["Now"] = now_text(receipt_now(cwd, s["Now"], rc), " · from receipt")  # the band's "next from the memo" must follow the receipt, not the last /abofles:memo
+    try:
+        pl = (load_state(session_id).get("plan") or {}).get("items") or []
+    except Exception:
+        pl = []
+    if any(x.get("status") != "completed" for x in pl):  # a receipt mid-list is a step's, not the task's end: Now stays on the list
+        s["Now"] = now_text(plan_now_text(pl, s["Now"]), PLAN_NOW_MARK) if plan_now_text(pl, s["Now"]) else s["Now"]
     sec = memo_read(cwd)
     need = [l for l in sec["Needs you"].splitlines() if l.strip()]
     for item in needs_items(rc.get("open"), receipt_items(rc, "open")):
@@ -3060,6 +3072,76 @@ def git_tree(cwd):
     return ["Tree      " + rows[0]] + ["          " + l for l in rows[1:]] if rows else ["Tree      clean"]
 
 
+PLAN_NOW_MARK = " · from task list"
+PLAN_NOW_DONE = 3  # finished steps the Now names (the newest)
+
+
+def plan_now_text(items, old_block):
+    """The Now body with an open task list added to it, nothing taken away: Task gets the step in progress (`step k of n — …`) first, the old
+    Task after it (a `none — between tasks` gives way); Left gets the steps after the next one, after the old Left; Next gets the next step
+    first, the old Next after it (a `none — ready …` gives way). Done, Decisions, Verify and Tree are kept as they are."""
+    old = now_raw(old_block)
+    lab = lambda k, v: f"{k:<10}{v}"
+    n = len(items)
+    cur = next((i for i, x in enumerate(items) if x["status"] == "in_progress"), None)
+    cur = cur if cur is not None else next((i for i, x in enumerate(items) if x["status"] == "pending"), None)
+    if cur is None:
+        return ""
+    rest = [x["content"] for i, x in enumerate(items) if i > cur and x["status"] != "completed"]
+    body = lambda ls: [re.sub(r"^\w+\s+", "", l).strip() if NOW_LABEL_RE.match(l) else l.strip() for l in ls]  # a line's text without its label
+    gone = lambda t: re.match(r"none\b", t, re.I) or t.startswith("step ") and " of " in t  # a placeholder, or a step line this function wrote before
+    task_old = [t for t in body(old.get("Task", [])) if t and not gone(t)]
+    steps = {x["content"] for x in items}  # a step an earlier write added is the list's line, not the old Now's: it is written fresh
+    left_old = [t for t in body(old.get("Left", [])) if t and t not in steps]
+    next_old = [t for t in body(old.get("Next", [])) if t and not re.match(r"none\b", t, re.I) and t not in steps]
+    lines = [lab("Task", f"step {cur + 1} of {n} — {items[cur]['content']}")] + [lab("Task", t) for t in task_old]
+    lines += old.get("Done", [])
+    lines += [lab("Left", t) for t in left_old] + [lab("Left", t) for t in rest[1:]]
+    lines += old.get("Decisions", [])
+    lines += ([lab("Next", rest[0])] if rest else []) + [lab("Next", t) for t in next_old]
+    lines += old.get("Verify", []) + old.get("Tree", [])
+    return "\n".join(lines)
+
+
+def plan_now_closed(items, old_block):
+    """The Now body once the list is done: the lines the list added (its step on Task, its steps on Left and Next) taken out, the rest kept;
+    a Task left empty reads `none — between tasks`. Empty when the block holds no list line."""
+    old = now_raw(old_block)
+    lab = lambda k, v: f"{k:<10}{v}"
+    steps = {x["content"] for x in items}
+    body = lambda l: re.sub(r"^\w+\s+", "", l).strip() if NOW_LABEL_RE.match(l) else l.strip()
+    is_step = lambda t: t in steps or (t.startswith("step ") and " of " in t and " — " in t)
+    if not any(is_step(body(l)) for k in ("Task", "Left", "Next") for l in old.get(k, [])):
+        return ""
+    keep = lambda k: [lab(k, body(l)) for l in old.get(k, []) if body(l) and not is_step(body(l))]
+    lines = keep("Task") or [lab("Task", "none — between tasks")]
+    lines += old.get("Done", []) + keep("Left") + old.get("Decisions", []) + keep("Next") + old.get("Verify", []) + old.get("Tree", [])
+    return "\n".join(lines)
+
+
+def plan_now_ok(block, journal):
+    """True when the task list may write this Now: empty, or written by the hooks (any mark), or a hand-written one already older than the last
+    receipt. A hand-written Now newer than the last receipt is the user's own words and stays."""
+    if not (block or "").strip():
+        return True
+    we, mark = now_written(block)
+    if mark:
+        return True
+    lr = last_receipt(journal)
+    le = stamp_epoch(lr[0]) if lr else None
+    return we is not None and le is not None and we < le
+
+
+def _op_plan_now(cwd, session_id, project, items):
+    s = sess_read(cwd, session_id)
+    done = bool(items) and all(x.get("status") == "completed" for x in items)
+    body = plan_now_closed(items, s["Now"]) if done else plan_now_text(items or [], s["Now"])
+    if not body or not plan_now_ok(s["Now"], s["Journal"]):
+        return
+    s["Now"] = now_text(body, PLAN_NOW_MARK)
+    memo_touch(cwd, session_id, s)
+
+
 def receipt_now(cwd, old_block, rc):
     """The Now body a receipt implies: between tasks, what the receipt did and left, Next = the receipt's own `next` text (the
     🧭 guide line is not copied; no Next while items are left). Decisions are kept from the old block; Done/Verify/Tree too
@@ -3179,7 +3261,7 @@ def resume_data(cwd, session_id="", scope=None, away_min=None, explicit=False, e
         others = []
     now = now_fields(mine)
     written = (now.get("Written") or [None])[0]
-    wmark = re.search(r"· (from receipt|from compact|before compact|from memo agent)", written or "")
+    wmark = re.search(r"· (from receipt|from compact|before compact|from memo agent|from task list)", written or "")
     from_receipt = bool(wmark)  # a Now the hooks wrote: each line is one item already
     wm0 = re.match(r"\d{4}-\d\d-\d\d \d\d:\d\d", written or "")
     written = wm0.group(0) if wm0 else written

@@ -2,6 +2,11 @@
 
 All notable changes to the plugins in this marketplace.
 
+## abofles 2.12.0 · abofles-guide 0.14.0 — 2026-11-20
+
+- abofles: **the memo's Now follows the task list, nothing taken away.** Every list call (and a receipt in the middle of a list) adds the list to this session's Now: Task gets `step k of n — <step>` first (a `none — between tasks` gives way), Left gets the steps after the next one, Next gets the next step first; the old Done, Left, Decisions, Next and Verify stay. Marked `· from task list`; once the list is done (the wrap-up, or every step checked) its lines are taken out again and the rest of Now stays; a hand-written Now newer than the last receipt is left alone. Resume, the guide and the pane read the same Now.
+- abofles-guide: Home's Now and Next keep the memo's text and add what the session knows live when the memo does not say it yet: the step in progress, the next step, and how many agents and commands run. The footer names the abofles version from the installed one until the hooks report theirs.
+
 ## abofles 2.11.0 · abofles-guide 0.13.0 — 2026-11-20
 
 - abofles-guide: **version on Home.** The footer of every page says which Abo Fles this session runs and whether it is current (`Abo Fles 2.10.1 · guide 0.12.1 · up to date`). When Claude Code has a newer version installed than the session runs (an update the open session has not loaded), Home shows a Version card with `Reload now`, which runs `/reload-plugins`. When GitHub has a newer release, the card says so with `Update` (puts the update request in the prompt box: refresh the marketplace, update both plugins) and a `What's new` link to the release notes. The running guide version is the loaded code's own plugin.json; the running abofles version comes from the hooks; the installed ones from Claude Code's installed_plugins.json.

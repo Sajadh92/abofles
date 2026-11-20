@@ -2618,3 +2618,25 @@ test('Home shows the Version card with Reload when a newer abofles is installed,
   expect(await has(home, 'version:update')).toBe(false)
   await home.unmount()
 })
+
+test('an open task list adds its step to Home Now and Next; the footer names abofles from the installed version when the hooks gave none yet', async ($, on) => {
+  workOn(on, { value: [] })
+  await harness($, on, { guide: guideOf([item()]), pane: panePayload({ version: { running: {}, installed: { abofles: '2.11.0' }, market: 'sajadh92', check: 'off' } }) })
+  await $.tool.call({ tool: 'mcp__ccd_turn__update_plan', items: [{ content: 'G3 check', status: 'completed' }, { content: 'G4 build', status: 'in_progress' }, { content: 'G4 review', status: 'pending' }] } as never)
+  const home = await mountDesk($, 'home')
+  const lines = await altLines(home)
+  for (const t of ['Now', 'Step 2 of 3 — G4 build · wiring the pane', 'Next', 'G4 review · ship it']) expect([t, lines.includes(t)]).toEqual([t, true])
+  expect(lines.some(l => l.startsWith('Abo Fles 2.11.0'))).toBe(true)
+  await home.unmount()
+})
+
+test('Home keeps the memo Now and Next and adds the live step and the running count only where the memo does not say them', async ($, on) => {
+  workOn(on, { value: [] })
+  await harness($, on, { guide: guideOf([item()]), pane: panePayload({ resume: { ...(panePayload() as any).resume, now: ['writing the G4 labels'], next: ['ask about the BE sort ticket'] } }) })
+  await $.tool.call({ tool: 'mcp__ccd_turn__update_plan', items: [{ content: 'G4 build', status: 'in_progress' }, { content: 'G4 review', status: 'pending' }] } as never)
+  const home = await mountDesk($, 'home')
+  const lines = await altLines(home)
+  expect(lines).toContain('Step 1 of 2 — G4 build · writing the G4 labels')
+  expect(lines).toContain('G4 review · ask about the BE sort ticket')
+  await home.unmount()
+})
