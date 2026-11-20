@@ -2,6 +2,10 @@
 
 All notable changes to the plugins in this marketplace.
 
+## abofles 2.10.1 · abofles-guide 0.12.1 — 2026-11-20
+
+- abofles, abofles-guide: **a task list made before the pane loaded now shows.** The hook rebuilds the session's newest list once from its transcript (the main session's own list calls, each once; subagent lines left out) at the next message or read, and keeps a copy with every list call; the pane starts from that copy when it saw no list call itself (after a reload, an update or a restart), and the next tick moves it.
+
 ## abofles 2.10.0 · abofles-guide 0.12.0 — 2026-11-20
 
 - abofles-guide: **Tasks card on Home.** The mod keeps the session's task list from the main session's own `update_plan`, `wrap_up`, `TodoWrite`, `TaskCreate` and `TaskUpdate` calls (a subagent's list is left out). Unlike the app's list under the message, it stays after the turn ends, until a new list replaces it. The card shows a progress bar, `done / total`, and a state: Working (the turn runs), Waiting on N jobs (agents or commands in the background), Paused (the turn ended with steps left) or Done. Home sits it under At a glance and above Running and Agents, one line per step (cut with … ; no guessed blank room), a window from the step before the current one; `All tasks (N)` opens every step. The bar has one segment per step (the current one tinted), and the share done shows at the right (`1 / 4` → 25%). A finished list has a `Hide` button. The terminal gets a folding Tasks card.

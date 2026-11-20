@@ -1357,6 +1357,7 @@ def refresh_pane(root, st, sid, rows=None):
                       "decisions": pane_decisions(root, sid),
                       "memo_health": health_info(root),
                       "tasks_hide": tasks_hide(root),
+                      "plan": st.get("plan"),  # the hook's mirror of the task list: the mod's card starts from it when it saw no list call itself
                       "cmd": {"overrides": script_cmd("overrides.py", "--session", sid)}}
     except Exception:
         pass
@@ -1491,34 +1492,91 @@ def tasks_nudge_every(cwd):
     return number_override(cwd, "Tasks nudge")
 
 
-def plan_statuses(prev, tool, ti):
-    """The list's step statuses after one call, as far as the hook can tell (`completed` / other). A TaskCreate adds an open step; a
-    TaskUpdate (its id is in the result, not the hook's mirror) keeps the list open unless it was all done."""
-    s = list(prev or [])
+PLAN_STEP_MAX = 200  # steps kept in the mirror
+PLAN_TEXT_MAX = 300  # characters per step
+
+
+def plan_step(x, key="content"):
+    """One step of a list call as {content, status}, or None."""
+    if not isinstance(x, dict):
+        return None
+    t = re.sub(r"\s+", " ", str(x.get(key) or x.get("content") or "")).strip()
+    st_ = str(x.get("status") or "pending")
+    return {"content": clip(t, PLAN_TEXT_MAX), "status": st_ if st_ in ("pending", "in_progress", "completed") else "pending"} if t else None
+
+
+def plan_apply(prev, tool, ti):
+    """The list ({content, status} per step) after one call, as far as the hook can tell. A TaskCreate adds an open step; a TaskUpdate
+    (its id is in the result, not in the hook's mirror) leaves the list as it is."""
+    s = [dict(x) for x in prev or []]
     if tool == "mcp__ccd_turn__wrap_up":
-        return ["completed"] * len(s)
+        return [{**x, "status": "completed"} for x in s]
     if tool == "TodoWrite":
-        return [str(x.get("status") or "pending") for x in ti.get("todos") or [] if isinstance(x, dict)]
+        return [y for y in (plan_step(x) for x in ti.get("todos") or []) if y][:PLAN_STEP_MAX]
     if tool == "TaskCreate":
-        return s + ["pending"]
+        y = plan_step({"content": ti.get("subject") or ti.get("description")})
+        return (s + [y])[:PLAN_STEP_MAX] if y else s
     if tool == "TaskUpdate":
         return s
     if isinstance(ti.get("items"), list):
-        s = [str(x.get("status") or "pending") for x in ti["items"] if isinstance(x, dict)]
+        s = [y for y in (plan_step(x) for x in ti["items"]) if y][:PLAN_STEP_MAX]
     for n in ti.get("done") or []:
         if isinstance(n, int) and 0 < n <= len(s):
-            s[n - 1] = "completed"
+            s[n - 1]["status"] = "completed"
     if isinstance(ti.get("start"), int) and 0 < ti["start"] <= len(s):
-        s[ti["start"] - 1] = "in_progress"
+        s[ti["start"] - 1]["status"] = "in_progress"
     if ti.get("advance") is True:
-        cur = next((i for i, x in enumerate(s) if x == "in_progress"), -1)
+        cur = next((i for i, x in enumerate(s) if x["status"] == "in_progress"), -1)
         if cur >= 0:
-            s[cur] = "completed"
-        nxt = next((i for i, x in enumerate(s) if i > cur and x == "pending"), None)
-        nxt = nxt if nxt is not None else next((i for i, x in enumerate(s) if x == "pending"), None)
+            s[cur]["status"] = "completed"
+        nxt = next((i for i, x in enumerate(s) if i > cur and x["status"] == "pending"), None)
+        nxt = nxt if nxt is not None else next((i for i, x in enumerate(s) if x["status"] == "pending"), None)
         if nxt is not None:
-            s[nxt] = "in_progress"
+            s[nxt]["status"] = "in_progress"
     return s
+
+
+def plan_from_transcript(path):
+    """The session's newest task list rebuilt from its transcript (the main session's own list calls, in order, each once), or None when it
+    made none. Lines that do not name a list tool are skipped unparsed."""
+    try:
+        f = open(path, encoding="utf-8", errors="replace")
+    except Exception:
+        return None
+    items, seen, any_ = [], set(), False
+    with f:
+        for l in f:
+            if not any(t in l for t in PLAN_TOOLS):
+                continue
+            try:
+                d = json.loads(l)
+            except Exception:
+                continue
+            m = d.get("message") if d.get("type") == "assistant" and not d.get("isSidechain") else None
+            for c in (m.get("content") if isinstance(m, dict) else None) or []:
+                if isinstance(c, dict) and c.get("type") == "tool_use" and c.get("name") in PLAN_TOOLS and c.get("id") not in seen:
+                    seen.add(c.get("id"))
+                    items = plan_apply(items, c["name"], c.get("input") or {})
+                    any_ = True
+    return items if any_ else None
+
+
+def plan_seed(st):
+    """Once per session state: a list the session made before this hook ran (a reload, an update, a restart) is rebuilt from the transcript.
+    Caller holds the lock; True when it changed the state."""
+    if st.get("plan_seeded") or not st.get("transcript_path"):
+        return False
+    st["plan_seeded"] = True
+    if st.get("plan") is None:
+        items = plan_from_transcript(st["transcript_path"])
+        if items:
+            plan_set(st, items)
+    return True
+
+
+def plan_set(st, items):
+    st["plan"] = {"items": items, "ts": int(time.time() * 1000)}
+    st["plan_open"] = any(x["status"] != "completed" for x in items)
 
 
 def plan(data):
@@ -1530,10 +1588,11 @@ def plan(data):
         st = load_state(sid)
         if "started" not in st:
             return
-        s = plan_statuses(st.get("plan_steps"), data.get("tool_name"), data.get("tool_input") or {})
-        st["plan_steps"] = s[:200]
-        st["plan_open"] = any(x != "completed" for x in s)
+        remember_transcript(data, st)
+        st["plan_seeded"] = True  # this call is newer than anything a seed would read: no rebuild after it
+        plan_set(st, plan_apply((st.get("plan") or {}).get("items"), data.get("tool_name"), data.get("tool_input") or {}))
         st["plan_calls"], st["plan_warned"] = 0, 0
+        refresh_pane(project_root(data, st), st, sid)
         save_state(sid, st)
 
 
@@ -7225,6 +7284,8 @@ def guard(data):
             return  # plugin not active in this session (no SessionStart marker)
         remember_transcript(data, st)
         en = effort_note(data, st)
+        if plan_seed(st):
+            refresh_pane(project_root(data, st), st, sid)
         pn = plan_tick(st, project_root(data, st))
         threshold = None
         if MCP_FREE.match(tool) and st.get("connector_free", 0) < FREE_FETCHES:
@@ -7285,6 +7346,8 @@ def prompt(data):
             if not st.get("spawns_since_receipt"):
                 st["connector_free"] = 0  # a new ask with no open task: its first fetch-by-key reads are free again
         inote = install_note_once(st)
+        if plan_seed(st):
+            refresh_pane(cwd, st, sid)
         pa = PLAN_ASK_NOTE if not notification and st.get("plan_open") and tasks_nudge_every(cwd) else None  # a new ask while a list is open: a step of its own
         g = refresh_guide(cwd, st, sid)  # also a row resolved by a script since the last hook: the ladder drops it now
         if last and mins and not notification and (time.time() - last) >= mins * 60 and not resume_off(cwd):

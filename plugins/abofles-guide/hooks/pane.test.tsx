@@ -2561,3 +2561,17 @@ test('the Tasks card says the share of steps done, rounded', () => {
   expect(planBlock(p(1, 3), true, 0, 400, false).alt).toContain('33%')
   expect(planBlock(p(4, 4), false, 0, 400, false).alt).toContain('100%')
 })
+
+test('a list the session made before the mod loaded shows from the hook copy, and the next tick moves it', async ($, on) => {
+  workOn(on, { value: [] })
+  const plan = { items: [{ content: 'one', status: 'completed' }, { content: 'two', status: 'in_progress' }, { content: 'three', status: 'pending' }], ts: 5 }
+  await harness($, on, { guide: guideOf([item()]), pane: panePayload({ plan }) })
+  const home = await mountDesk($, 'home')
+  let lines = await altLines(home)
+  for (const t of ['Tasks', '1 / 3', 'Now: two', 'To do: three']) expect([t, lines.includes(t)]).toEqual([t, true])
+  await $.tool.call({ tool: 'mcp__ccd_turn__update_plan', advance: true } as never)
+  lines = await altLines(home)
+  expect(lines).toContain('2 / 3')
+  expect(lines).toContain('Now: three')
+  await home.unmount()
+})

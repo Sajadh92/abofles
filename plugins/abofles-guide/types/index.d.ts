@@ -96,6 +96,7 @@ export type Pane = {
   overrides: PaneOverrides | null
   decisions?: PaneDecisions | null // absent in older state files: no Decisions card
   memo_health?: PaneHealth | null // what the memo's last tidy-up moved; absent in older state files
+  plan?: Plan | null // the hook's mirror of the task list (rebuilt from the transcript when the session made it before the hook ran); the card starts from it when the mod saw no list call
   tasks_hide?: 'manual' | 'auto' | 'next' // when a finished task list hides itself; absent in older state files: manual
   cmd: { overrides: string[] | null } // argv prefix of the script the overrides editor runs
 }

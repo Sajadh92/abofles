@@ -2,7 +2,7 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { Guide } from '../types'
 import { renderPane } from './pane'
-import { notePlan, notePlanTurn } from './tasks'
+import { notePlan, notePlanTurn, seedPlan } from './tasks'
 import { noteBackground, noteNotified, noteStep, noteTool, noteToolDone, noteTurnEnd, noteTurnStart, startTick } from './running'
 import {
   anyPane,
@@ -64,6 +64,7 @@ export const register: Register = on => {
     }
     await loadFolds($)
     await refresh($)
+    await seedPlan($)
     await autoOpen($)
     startTick($)
     return next(e)
@@ -100,6 +101,7 @@ export const register: Register = on => {
     await noteTurnEnd($, e.agentId)
     await notePlanTurn($, 'end', e.agentId)
     await refresh($)
+    await seedPlan($)
     return result
   })
 
@@ -107,6 +109,7 @@ export const register: Register = on => {
     const result = await next(e)
     await noteBackground($, e)
     await refresh($)
+    await seedPlan($)
     return result
   }).catch(($, e, next) => next(e)) // a failed refresh must not change the Stop result
 
@@ -115,6 +118,7 @@ export const register: Register = on => {
     const result = await next(e)
     await noteBackground($, e)
     await refresh($)
+    await seedPlan($)
     await autoOpen($)
     return result
   }).catch(($, e, next) => next(e))
@@ -122,6 +126,7 @@ export const register: Register = on => {
   on('classic.PostToolUse', async ($, e, next) => {
     const result = await next(e)
     await refresh($)
+    await seedPlan($)
     await autoOpen($)
     return result
   }).catch(($, e, next) => next(e))
@@ -130,6 +135,7 @@ export const register: Register = on => {
   on('classic.PostCompact', async ($, e, next) => {
     const result = await next(e)
     await refresh($)
+    await seedPlan($)
     return result
   }).catch(($, e, next) => next(e))
 

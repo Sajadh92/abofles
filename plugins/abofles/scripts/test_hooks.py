@@ -4768,7 +4768,7 @@ def main():
         ctx = lambda o: ((o or {}).get("hookSpecificOutput") or {}).get("additionalContext") or ""
         UP = "mcp__ccd_turn__update_plan"
         run("plan", {"session_id": tl, "cwd": tp, "tool_name": UP, "tool_input": {"items": [{"content": "a", "status": "in_progress"}, {"content": "b", "status": "pending"}]}}, led)
-        check("tasks: update_plan with an open step marks the list open", gstate(tl).get("plan_open") is True and gstate(tl).get("plan_steps") == ["in_progress", "pending"])
+        check("tasks: update_plan with an open step marks the list open", gstate(tl).get("plan_open") is True and [x["status"] for x in gstate(tl)["plan"]["items"]] == ["in_progress", "pending"] and gstate(tl)["pane"]["plan"]["items"][0]["content"] == "a")
         check("tasks: a new message while the list is open gets the add-a-step note", "add it as its own step" in ctx(run("prompt", {"session_id": tl, "cwd": tp, "prompt": "also show the percent"}, led)))
         check("tasks: a task notification gets no ask note", "add it as its own step" not in ctx(run("prompt", {"session_id": tl, "cwd": tp, "prompt": "<task-notification>x</task-notification>"}, led)))
         notes = [ctx(run("guard", {"session_id": tl, "cwd": tp, "tool_name": "Bash", "tool_input": {"command": "echo hi"}}, led)) for _ in range(12)]
@@ -4776,7 +4776,7 @@ def main():
         en_ = ctx(run("edit", {"session_id": tl, "cwd": tp, "tool_name": "Edit", "tool_input": {"file_path": os.path.join(tp, "x.txt")}}, led))
         check("tasks: an edit counts too, and the note waits another 12 calls", "since the task list last moved" not in en_ and gstate(tl).get("plan_calls") == 13)
         run("plan", {"session_id": tl, "cwd": tp, "tool_name": UP, "tool_input": {"advance": True}}, led)
-        check("tasks: advance moves the mirror and starts the count over", gstate(tl).get("plan_steps") == ["completed", "in_progress"] and gstate(tl).get("plan_calls") == 0)
+        check("tasks: advance moves the mirror and starts the count over", [x["status"] for x in gstate(tl)["plan"]["items"]] == ["completed", "in_progress"] and gstate(tl).get("plan_calls") == 0)
         run("plan", {"session_id": tl, "cwd": tp, "tool_name": UP, "tool_input": {"advance": True}}, led)
         check("tasks: the last advance closes the list: no ask note", gstate(tl).get("plan_open") is False and "add it as its own step" not in ctx(run("prompt", {"session_id": tl, "cwd": tp, "prompt": "next"}, led)))
         run("plan", {"session_id": tl, "cwd": tp, "tool_name": "TodoWrite", "tool_input": {"todos": [{"content": "a", "status": "pending", "activeForm": "A"}]}}, led)
@@ -4785,6 +4785,29 @@ def main():
         put_md(tp, "- Tasks nudge = off\n")
         run("plan", {"session_id": tl, "cwd": tp, "tool_name": UP, "tool_input": {"items": [{"content": "a", "status": "in_progress"}]}}, led)
         check("tasks: Tasks nudge = off: no ask note", "add it as its own step" not in ctx(run("prompt", {"session_id": tl, "cwd": tp, "prompt": "more"}, led)))
+        # a list made before the hook saw it (reload, update, restart): rebuilt once from the transcript, sidechain and duplicate lines left out
+        ts_, tq = "taskseed1", tempfile.mkdtemp()
+        trp = os.path.join(tq, "t.jsonl")
+        tu = lambda i, name, inp, side=False, kind="assistant": json.dumps({"type": kind, "isSidechain": side, "message": {"content": [{"type": "tool_use", "id": i, "name": name, "input": inp}]}})
+        with open(trp, "w") as f_:
+            f_.write("\n".join([
+                tu("u1", UP, {"items": [{"content": "one", "status": "in_progress"}, {"content": "two", "status": "pending"}, {"content": "three", "status": "pending"}]}),
+                tu("u1", UP, {"items": [{"content": "one", "status": "in_progress"}]}, kind="api-request-blob"),
+                tu("u2", UP, {"advance": True}),
+                tu("u2", UP, {"advance": True}),  # the same call logged twice: applied once
+                tu("s1", UP, {"items": [{"content": "sub", "status": "in_progress"}]}, side=True),
+                json.dumps({"type": "user", "message": {"content": "hi"}}),
+            ]) + "\n")
+        run("start", {"session_id": ts_, "cwd": tq}, led)
+        sp_ = ctx(run("prompt", {"session_id": ts_, "cwd": tq, "prompt": "go on", "transcript_path": trp}, led))
+        it_ = (gstate(ts_).get("plan") or {}).get("items") or []
+        check("tasks: a prompt rebuilds the list from the transcript: the newest main list, each call once", [(x["content"], x["status"]) for x in it_] == [("one", "completed"), ("two", "in_progress"), ("three", "pending")])
+        check("tasks: ... the pane payload carries it, and the rebuilt open list gets the ask note", (gstate(ts_)["pane"].get("plan") or {}).get("items") == it_ and "add it as its own step" in sp_)
+        with open(trp, "a") as f_:
+            f_.write(tu("u3", UP, {"items": [{"content": "new", "status": "in_progress"}]}) + "\n")
+        run("prompt", {"session_id": ts_, "cwd": tq, "prompt": "more", "transcript_path": trp}, led)
+        check("tasks: the rebuild runs once per session (the live calls keep it after)", [x["content"] for x in gstate(ts_)["plan"]["items"]] == ["one", "two", "three"])
+        check("tasks: no transcript: no list, no error", HG.plan_from_transcript(os.path.join(tq, "none.jsonl")) is None)
         check("tasks: a subagent's list call is not the session's", run("plan", {"session_id": tl, "cwd": tp, "agent_id": "sub1", "tool_name": UP, "tool_input": {"items": []}}, led) is None and gstate(tl).get("plan_open") is True)
         rs_ = pn_["resume"] or {}
         check("pane: resume has head, now, left, next, needs (n + text), needs_open, last", set(rs_) == {"head", "now", "left", "next", "needs", "needs_open", "needs_fill", "others", "others_items", "last"} and rs_["now"] == ["write the pane"] and rs_["left"] == ["tests", "docs"]

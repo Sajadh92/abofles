@@ -86,6 +86,7 @@ export async function notePlan($: EngineInterface, e: { tool: string; agentId?: 
   try {
     if (e.agentId) return
     if (isObj(ran) && (ran.deny || ran.isError)) return
+    await seedPlan($) // a tick on a list made before the mod loaded: start from the hook's copy
     const at = await $.clock.now()
     const cur = await read($, plan)
     const next = applyPlan(cur, e.tool, e as unknown as Record<string, unknown>, ran, at)
@@ -96,8 +97,21 @@ export async function notePlan($: EngineInterface, e: { tool: string; agentId?: 
 }
 
 export async function getPlan($: EngineInterface): Promise<Plan | null> {
+  await seedPlan($)
   const p = await read($, plan)
   return isObj(p) && Array.isArray(p.items) && p.items.length > 0 && !p.hidden ? p : null
+}
+
+// No list call seen by the mod yet (it loaded after the session made its list: a reload, an update, a restart): start from the hook's
+// mirror, which it rebuilds from the transcript. Once the mod holds a list, its own notes keep it.
+export async function seedPlan($: EngineInterface) {
+  try {
+    if ((await read($, plan)) !== null) return
+    const from = (await getPane($))?.plan
+    if (from && from.items.length > 0) await update($, plan, cur => cur ?? { items: from.items.map(x => ({ ...x })), ts: from.ts, closed: from.closed })
+  } catch {
+    // no card yet
+  }
 }
 
 // A finished list taken off Home: its Hide button, or `Tasks hide`. An unfinished list never hides; the next list shows again.

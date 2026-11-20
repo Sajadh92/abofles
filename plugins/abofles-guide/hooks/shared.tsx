@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface } from 'claude-code'
 
-import type { Guide, GuideItem, Pane, PaneDecision, PaneDecisions, PaneHealth, PaneLive, PaneModel, PaneOverrideKey, PaneOverrides, PanePlaces, PaneResume, PaneRow, PaneSpawns, PaneTotals } from '../types'
+import type { Guide, GuideItem, Pane, PaneDecision, PaneDecisions, PaneHealth, PaneLive, PaneModel, PaneOverrideKey, PaneOverrides, PanePlaces, PaneResume, PaneRow, PaneSpawns, PaneTotals, Plan, PlanStatus } from '../types'
 import { ICONS, emptyCard, headerBlock, headerWidth, paneWidth, svgOf, textOf, tileSvg } from './html'
 import type { Block, IconName, Tone } from './html'
 
@@ -779,6 +779,18 @@ function cleanOverrides(raw: unknown): PaneOverrides | null {
 
 // The pane payload from the state file with every part type-checked, or null (no payload, or one of another version).
 // A malformed part is dropped and the rest kept; it never throws.
+// The hook's task list: steps with a text and a known status; anything else is dropped (no steps: null).
+function cleanPlan(raw: unknown): Plan | null {
+  if (!isObj(raw) || !Array.isArray(raw.items)) return null
+  const items = raw.items
+    .filter(isObj)
+    .map(x => ({ content: strOr(x.content, '').slice(0, 300), status: (x.status === 'completed' || x.status === 'in_progress' ? x.status : 'pending') as PlanStatus }))
+    .filter(x => x.content)
+    .slice(0, 200)
+  if (items.length === 0) return null
+  return { items, ts: isNum(raw.ts) ? raw.ts : 0, closed: items.every(x => x.status === 'completed') }
+}
+
 export function cleanPane(raw: unknown): Pane | null {
   try {
     if (!isObj(raw) || raw.v !== 1) return null
@@ -794,6 +806,7 @@ export function cleanPane(raw: unknown): Pane | null {
       overrides: cleanOverrides(raw.overrides),
       decisions: cleanDecisions(raw.decisions),
       memo_health: cleanHealth(raw.memo_health),
+      plan: cleanPlan(raw.plan),
       tasks_hide: raw.tasks_hide === 'auto' || raw.tasks_hide === 'next' ? raw.tasks_hide : 'manual',
       cmd: { overrides: scriptArgv(cmd.overrides, ['overrides.py']) },
     }
