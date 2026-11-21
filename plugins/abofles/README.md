@@ -4,6 +4,8 @@ In Iraqi slang, Abo Fles is the stingy guy who counts every fils. This plugin co
 
 A Claude Code plugin that picks the right model and effort for every subagent, so multi-agent sessions stop running cheap jobs on expensive settings.
 
+Website: **[abofles.com](https://abofles.com)**: install, auto-update, a tour of the pane with real screenshots, the full changelog and every override key.
+
 - **1,300+ topics in 31 domains, for developers, designers and marketers** (security, money, business rules, databases and SQL dialects, search/cache/messaging, backend, frontend, UI/UX, mobile, testing, QA, performance and benchmarks, debugging and incidents, code health and patterns, architecture, AWS, Azure and GCP, edge/CDN/Cloudflare/networking, servers and hosting and localhost, DevOps and release, observability and logging, data engineering and BI, AI/LLM, integrations, docs, product, languages and runtimes — and graphic design and branding, video, motion and audio, 3D, spatial and product design, and social media, ads and marketing on Meta, TikTok, YouTube, LinkedIn, X, Snapchat, Telegram, Google and more), each with a risk tier (T1–T4). The model never reads the list: `scripts/topic.py find "<ask>"` returns the 3 best matches with tier, cells, reviewers, workflow and `💡 suggest` lines (packages fit for the topic and the project's stack — DynamicWhere.ex on .NET dynamic filtering, for a start) in one Bash call, project overrides applied.
 - 5 sides per topic: Read & Collect, Analyse & Find Gaps, Plan & Design, Act & Work, Verify & Review.
 - Each topic/side cell maps to a model (`haiku`, `sonnet`, `opus`, `fable` — always the latest version) and an effort (`low` … `max`).

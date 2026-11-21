@@ -4,16 +4,23 @@
   "version": "0.15.0",
   "description": "Abo Fles guide and pane: the 🧭 next line above the prompt box, and a pane with the guide, resume, agents and an overrides editor (Save writes the CLAUDE.md block), from the state the abofles hooks keep. Needs the abofles plugin.",
   "author": {
-    "name": "Sajadh92"
+    "name": "Sajadh92",
+    "url": "https://github.com/Sajadh92"
   },
   "keywords": [
     "abofles",
     "guide",
     "band",
-    "next-step"
+    "next-step",
+    "claude-code",
+    "claude-code-plugin",
+    "pane"
   ],
   "license": "MIT",
-  "homepage": "https://github.com/Sajadh92/abofles",
+  "homepage": "https://abofles.com",
   "repository": "https://github.com/Sajadh92/abofles",
-  "types": "./types/index.d.ts"
+  "types": "./types/index.d.ts",
+  "icon": "./.claude-plugin/icon.png",
+  "documentationUrl": "https://abofles.com/install/",
+  "supportUrl": "https://github.com/Sajadh92/abofles/issues"
 }
