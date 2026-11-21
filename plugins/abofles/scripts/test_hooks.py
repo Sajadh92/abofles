@@ -5600,6 +5600,16 @@ def main():
         stx_ = {"task_started": now_ - 10}
         SR.apply_gate_reply(stx_, "VERDICT: ASK\nQUESTION: a?\nVERDICT: ASK\nQUESTION: b?\n", "judge")
         check("gate reply (review): a judge reply with two ASK blocks unlocks two (one box may carry both)", stx_.get("judge_ok") == 2)
+        j4_ = "STATUS: done\nCONFIDENCE: high\nVERDICT: ASK\n" + "".join(f"Q{i}\nQUESTION: Setup question number {i} about the site?\nEVIDENCE:\n- a.md:{i} — x\nOPTIONS:\n- A — m\nRECOMMEND: A\n" for i in range(1, 5))
+        check("judge_blocks: one VERDICT over Q1..Q4 (a QUESTION line each) is four blocks", len(SR.judge_blocks(j4_)) == 4 and {b[0] for b in SR.judge_blocks(j4_)} == {"ASK"})
+        stx_ = {"task_started": now_ - 10}
+        SR.apply_gate_reply(stx_, j4_, "judge", tier=2, agent="j4")
+        check("gate reply: a Judge reply with one VERDICT and 4 judged questions unlocks 4", stx_.get("judge_ok") == 4 and SR.gate_remaining(stx_) == 4)
+        q4_ = [f"Setup question number {i} about the site?" for i in range(1, 5)]
+        qsess("sr4a", judge_ok=4, judge_ok_ts=now_, gate_wait_ts=0, task_started=now_ - 10)
+        check("qgate: 4 unlocks from one reply -> one box with all 4 passes", run("qgate", qbox("sr4a", *q4_), led) is None)
+        qsess("sr4b", judge_ok=4, judge_ok_ts=now_, gate_wait_ts=0, task_started=now_ - 10)
+        check("qgate: ... or 4 boxes in a row, one question each, all pass", all(run("qgate", qbox("sr4b", q_), led) is None for q_ in q4_))
         stx_ = {"task_started": now_ - 10}
         j3_ = "VERDICT: HANDOFF\nQUESTION: a?\nVERDICT: HANDOFF\nQUESTION: b?\nVERDICT: HANDOFF\nQUESTION: c?\n"
         SR.apply_gate_reply(stx_, j3_, "judge", tier=3, agent="j1")

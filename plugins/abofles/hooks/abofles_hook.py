@@ -4997,7 +4997,13 @@ def judge_blocks(text):
     starts = [m.start() for m in re.finditer(r"^\s*VERDICT:", text, re.M)]
     if len(starts) <= 1:
         v, q, a, e = judge_fields(text)
-        return [(v, q, a, e)] if v else []
+        if not v:
+            return []
+        qs = [m for m in re.finditer(QUESTION_RE, text, re.M) if "QUESTION_" not in m.group(0)[:20]]
+        if len(qs) > 1:  # one VERDICT for several judged questions (Q1..Q4, each with its own QUESTION line): one block per QUESTION, all under that verdict
+            cuts = [m.start() for m in qs]
+            return [(v,) + judge_fields(text[c: cuts[i + 1] if i + 1 < len(cuts) else len(text)])[1:] for i, c in enumerate(cuts)]
+        return [(v, q, a, e)]
     out = []
     for i, st_ in enumerate(starts):
         chunk = text[st_: starts[i + 1] if i + 1 < len(starts) else len(text)]
