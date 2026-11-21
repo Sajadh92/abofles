@@ -2,6 +2,12 @@
 
 All notable changes to the plugins in this marketplace.
 
+## abofles 2.13.1 · abofles-guide 0.15.1 — 2026-11-21
+
+- abofles: **the question gate unlocks every question one Judge reply judged.** A Judge reply with one `VERDICT` over several questions (Q1, Q2, … each with its own `QUESTION` line) unlocked only the first, so the others were refused and never reached you. Now each `QUESTION` counts: one box with all of them passes, and so do one box per question in a row.
+- abofles, abofles-guide: **listing fields.** `plugin.json` now has `homepage` (https://abofles.com), the author's URL, `icon` (the uncle), `documentationUrl` and `supportUrl`, read by the plugin directory listing; `claude plugin validate --strict` passes for both. The marketplace names its owner's URL.
+- Website: **[abofles.com](https://abofles.com)** — install and auto-update, a tour of the pane with real screenshots, the agents and the matrix, every override key, and this changelog, built from the repo by `site/build.py`.
+
 ## abofles 2.13.0 · abofles-guide 0.15.0 — 2026-11-21
 
 - abofles: **Prompt checkup.** Before an agent starts, the hook checks its prompt: the `abofles: <Topic> / <Side> · T<n>` header on line 1, `Line cap: <N>` as the last line, 15 words at least, a file or command for Work and Verify, and a stated end state for Work ("Done when …", a test or command that passes, acceptance criteria — a bare "test" or "verify" does not count). `Prompt checkup = warn | deny | off` (default `warn`: a note to Claude; `deny`: the agent is refused until the prompt is fixed). `abofles:skip` prompts and the memo agent are left alone; an error in the check never blocks an agent.
