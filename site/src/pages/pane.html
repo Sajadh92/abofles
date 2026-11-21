@@ -1,0 +1,125 @@
+<!-- {
+  "path": "/pane/",
+  "title": "The Abo Fles pane — real screenshots of every page",
+  "description": "Real screenshots of every page of the Abo Fles pane for the Claude desktop app: Home, Tasks, Running, Guide, Resume, Decisions, Agents, Overrides.",
+  "crumbs": [["Home", "/"], ["The pane", "/pane/"]]
+} -->
+<section class="page-hero"><div class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Home</a><span aria-hidden="true">/</span><span>The pane</span></nav>
+  <h1>The uncle's <span class="gold">ledger.</span></h1>
+  <p class="lede">The abofles-guide mod puts a pane beside your chat in the Claude desktop app. One page at a time, a row of icon tiles on top. Every screen below is real.</p>
+  <div class="callout" style="max-width:760px"><p><strong>How these were made.</strong> The first image is a screen capture of the Claude app. The rest are drawn by the pane's own code from a real session's state — the session that built this website — exported at 2×. No mockups, no invented numbers.</p></div>
+  <nav class="pane-nav" aria-label="Pane pages">
+    <a href="#home">🏠 Home</a><a href="#tasks">☑️ All tasks</a><a href="#running">📈 Running</a><a href="#guide">🧭 Guide</a><a href="#resume">🔖 Resume</a><a href="#decisions">⚖️ Decisions</a><a href="#agents">🧾 Agents</a><a href="#overrides">🎛️ Overrides</a><a href="#editor">✏️ Editor</a>
+  </nav>
+</div></section>
+
+<section style="padding-top:0"><div class="wrap gallery">
+
+  <div class="gal-item" id="app">
+    <div class="shot"><img src="/assets/pane/app-pane-real.webp" width="918" height="2158" alt="Screen capture of the Claude desktop app's right side: the Abo Fles pane on its Home page with Next up, Use button, At a glance context 152K of 500K, Tasks 1 of 7 Working, and Agents 24% saved." loading="lazy"></div>
+    <div class="gal-copy reveal">
+      <span class="eyebrow">In the app</span>
+      <h2>It lives on the right.</h2>
+      <p>This is the pane in the Claude desktop app, captured mid-work while this site was being built. The tiles on top switch pages; the ⤢ button gives it more room.</p>
+      {{cmd:/plugin install abofles-guide@sajadh92}}
+      <p class="small">Then <code>/abofles-pane</code> to open or close it.</p>
+    </div>
+  </div>
+
+  <div class="gal-item" id="home">
+    <div class="shot"><img src="/assets/pane/pane-home.webp" width="900" height="2828" alt="Pane Home page: Home 1 open; Next up, high: a judged question is unasked; Use button; At a glance Context 152K / 500K; Tasks 1 / 7 Paused, step 2 of 7; Agents 24% saved; Now; Last decision; footer Abo Fles 2.13.0 up to date." loading="lazy"></div>
+    <div class="gal-copy reveal">
+      <span class="eyebrow">Home</span>
+      <h2>One thing to do next.</h2>
+      <ul>
+        <li><strong>Next up</strong> — the highest-priority item, with a <strong>Use</strong> button that puts the right prompt in your box.</li>
+        <li><strong>At a glance</strong> — how full the context is against your mark.</li>
+        <li><strong>Tasks</strong> — Claude's task list, kept after the turn ends: Working, Waiting, Paused or Done.</li>
+        <li><strong>Agents, Now, Last decision</strong> — the short version of every other page.</li>
+        <li>The footer says which version runs and whether it's current.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="gal-item" id="tasks">
+    <div class="shot"><img src="/assets/pane/pane-tasks.webp" width="900" height="840" alt="Pane All tasks page: the 7 steps of building this website, step 1 done, step 2 Capture real screenshots of every pane card in progress." loading="lazy"></div>
+    <div class="gal-copy reveal">
+      <span class="eyebrow">All tasks</span>
+      <h2>The plan, out loud.</h2>
+      <p>Every step of the session's task list with its state. Yes — that's the actual plan for building this page, caught at step 2. The uncle documents everything.</p>
+    </div>
+  </div>
+
+  <div class="gal-item" id="running">
+    <div class="shot"><img src="/assets/pane/pane-running.webp" width="900" height="490" alt="Pane Running page: Nothing running. Agents and commands show here." loading="lazy"></div>
+    <div class="gal-copy reveal">
+      <span class="eyebrow">Running</span>
+      <h2>Who's on the clock.</h2>
+      <p>Live agents, background commands and scheduled wake-ups, each with its side, model, elapsed time and what it's doing now — and a Stop button where one can be stopped. Captured on a quiet moment: nobody's spending.</p>
+    </div>
+  </div>
+
+  <div class="gal-item" id="guide">
+    <div class="shot"><img src="/assets/pane/pane-guide.webp" width="900" height="770" alt="Pane Guide page: Next up, high priority: a judged question is unasked, with Use and the context numbers." loading="lazy"></div>
+    <div class="gal-copy reveal">
+      <span class="eyebrow">Guide</span>
+      <h2>What now, by priority.</h2>
+      <p>Open FAILs first, then unasked questions, owner decisions, things to escalate, background agents, memo and context hygiene, budget. Advice only — settled by Claude after a re-check with the evidence traced, never on a bare claim.</p>
+    </div>
+  </div>
+
+  <div class="gal-item" id="resume">
+    <div class="shot"><img src="/assets/pane/pane-resume.webp" width="900" height="2790" alt="Pane Resume page: Now none between tasks, Next wait for the user's next ask, Left none, and the last three receipts including Shipped abofles 2.13.0 at $0.06 with 49% saved." loading="lazy"></div>
+    <div class="gal-copy reveal">
+      <span class="eyebrow">Resume</span>
+      <h2>Where was I?</h2>
+      <p>Now, Next, what's Left and what Needs you, from the project's work memo — plus the last receipts with their check and open lines. After a break or a <code>/compact</code> this is all you need. The top receipt is the real 2.13.0 release.</p>
+    </div>
+  </div>
+
+  <div class="gal-item" id="decisions">
+    <div class="shot"><img src="/assets/pane/pane-decisions.webp" width="900" height="1340" alt="Pane Decisions page: 4 by you, 0 by Judge. Newest: Where should the public abofles website live? Answer: abofles.com on Cloudflare." loading="lazy"></div>
+    <div class="gal-copy reveal">
+      <span class="eyebrow">Decisions</span>
+      <h2>Who decided what.</h2>
+      <p><strong>By you</strong> — every question you answered. <strong>By Judge</strong> — every question the repo could answer without bothering you, with its evidence. Nothing gets asked twice.</p>
+    </div>
+  </div>
+
+  <div class="gal-item" id="agents">
+    <div class="shot"><img src="/assets/pane/pane-spawns.webp" width="900" height="1970" alt="Pane Agents page: 10 agents, $3.27; 24% saved, $3.27 of $4.30 on Opus 5.5; Haiku 600K tokens $0.02, Sonnet 141K $0.19, Opus 4.9M $3.06; history: Judge, Memo upkeep, Git commit tag release 2.13.0, Work fix TS errors." loading="lazy"></div>
+    <div class="gal-copy reveal">
+      <span class="eyebrow">Agents</span>
+      <h2>The bill, itemised.</h2>
+      <p>What was saved against your main model, the spend by model, and one row per agent: side, model, effort, tokens, dollars, verdict. This session: <strong>24% saved — $3.27 instead of $4.30.</strong> Opus did the heavy work; the reading cost two cents.</p>
+    </div>
+  </div>
+
+  <div class="gal-item" id="overrides">
+    <div class="shot"><img src="/assets/pane/pane-overrides.webp" width="900" height="2090" alt="Pane Overrides page: 13 set for all projects: Main session opus.medium, Break 15, Agents auto, Parallel 5, Git guard deny, Review memory 1, Tasks nudge 10, Update check off, Tasks hide auto, Memo agent every 1, Archive items 10, Archive sessions 10, Memo repair auto." loading="lazy"></div>
+    <div class="gal-copy reveal">
+      <span class="eyebrow">Overrides</span>
+      <h2>House rules.</h2>
+      <p>Everything you changed from the defaults, for this project and for all projects. Here: Git guard on <strong>deny</strong>, five agents at once, Opus · Medium for the main session. <a class="gold" href="/config/">Every key</a>.</p>
+    </div>
+  </div>
+
+  <div class="gal-item" id="editor">
+    <div class="shot"><img src="/assets/pane/pane-editor.webp" width="900" height="2200" alt="Pane Overrides editor: Session group with Main session opus.medium set for all projects, Sub session, Session cap, Context marks, Context stop 500, Break 15, Pace default normal, Continue after compact default auto." loading="lazy"></div>
+    <div class="gal-copy reveal">
+      <span class="eyebrow">Editor</span>
+      <h2>Click, don't type.</h2>
+      <p>Every simple key as a field or a menu, grouped, with a one-line hint. Choose <strong>This project</strong> or <strong>All projects</strong>, then Save — it writes the <code>## abofles overrides</code> block for you. Reset puts a key back.</p>
+    </div>
+  </div>
+
+</div></section>
+
+<section class="final" style="padding-top:0">
+  <div class="wrap"><div class="box reveal">
+    <h2>Want the ledger? <span class="gold">One line.</span></h2>
+    {{cmd:/plugin install abofles-guide@sajadh92}}
+    <a class="btn btn-gold" href="/install/#pane">Install guide {{icon:arrow}}</a>
+  </div></div>
+</section>

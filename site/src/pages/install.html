@@ -1,0 +1,107 @@
+<!-- {
+  "path": "/install/",
+  "title": "Install Abo Fles in Claude Code — and turn on auto-update",
+  "description": "Install the free Abo Fles plugin for Claude Code in two commands, add the pane and turn on auto-update. Plus manual updates, checks and uninstall.",
+  "crumbs": [["Home", "/"], ["Install", "/install/"]],
+  "ld": [{
+    "@context": "https://schema.org",
+    "@type": "HowTo",
+    "name": "Install Abo Fles in Claude Code",
+    "totalTime": "PT2M",
+    "tool": [{"@type": "HowToTool", "name": "Claude Code"}, {"@type": "HowToTool", "name": "Python 3.8 or newer"}],
+    "step": [
+      {"@type": "HowToStep", "name": "Add the marketplace", "text": "In Claude Code run: /plugin marketplace add Sajadh92/abofles"},
+      {"@type": "HowToStep", "name": "Install the plugin", "text": "Run: /plugin install abofles@sajadh92"},
+      {"@type": "HowToStep", "name": "Add the pane (optional)", "text": "Run: /plugin install abofles-guide@sajadh92"},
+      {"@type": "HowToStep", "name": "Add one line to CLAUDE.md", "text": "Add to ~/.claude/CLAUDE.md: - Use the abofles skill once per session, before the first coding, design or marketing task or subagent (never re-invoke it per task: it stays in context), and tier every task with it."},
+      {"@type": "HowToStep", "name": "Turn on auto-update", "text": "Run /plugin, open Marketplaces, pick sajadh92, choose Enable auto-update."}
+    ]
+  }]
+} -->
+<section class="page-hero"><div class="wrap narrow">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Home</a><span aria-hidden="true">/</span><span>Install</span></nav>
+  <h1>Two lines. <span class="gold">Zero fils.</span></h1>
+  <p class="lede">Everything happens inside Claude Code. It takes about a minute — less time than the uncle spends checking a restaurant bill.</p>
+</div></section>
+
+<div class="wrap doc">
+  <nav class="toc" aria-label="On this page">
+    <a href="#install">Install</a>
+    <a href="#pane">Add the pane</a>
+    <a href="#claude-md">One line in CLAUDE.md</a>
+    <a href="#auto-update">Auto-update</a>
+    <a href="#update">Update by hand</a>
+    <a href="#check">Check it works</a>
+    <a href="#requirements">Requirements</a>
+    <a href="#uninstall">Uninstall</a>
+    <a href="#trouble">Troubleshooting</a>
+  </nav>
+  <div class="prose">
+    <h2 id="install">Install</h2>
+    <ol class="steps-v">
+      <li><b>Add the marketplace</b><span>Type this in the Claude Code prompt box.</span>{{cmd:/plugin marketplace add Sajadh92/abofles}}</li>
+      <li><b>Install the plugin</b><span>The router, the hooks, the {{agents}} agents and the commands.</span>{{cmd:/plugin install abofles@sajadh92}}</li>
+      <li><b>Restart Claude Code</b><span>Or run <code>/reload-plugins</code> in an open session.</span></li>
+    </ol>
+    <div class="callout"><p><strong>From the terminal instead?</strong> The same works with the CLI:</p>
+      {{cmd:claude plugin marketplace add Sajadh92/abofles}}
+      {{cmd:claude plugin install abofles@sajadh92}}
+    </div>
+
+    <h2 id="pane">Add the pane <span class="muted" style="font-size:.6em">(optional, recommended)</span></h2>
+    <p>The <strong>abofles-guide</strong> mod draws the Abo Fles pane on the right of the Claude desktop app: Home, Running, Guide, Resume, Decisions, Agents and an Overrides editor. <a href="/pane/">See every screen</a>.</p>
+    {{cmd:/plugin install abofles-guide@sajadh92}}
+    <p><code>/abofles-pane</code> opens or closes it. It also opens by itself once per session when it has something to show.</p>
+
+    <h2 id="claude-md">One line in CLAUDE.md</h2>
+    <p>Add this to <code>~/.claude/CLAUDE.md</code> so every session routes before it starts agents:</p>
+    <pre class="block"><code>- Use the abofles skill once per session, before the first coding, design or marketing task or subagent (never re-invoke it per task: it stays in context), and tier every task with it.</code>{{copy}}</pre>
+    <p>Want different settings for one project? Add an <code>## abofles overrides</code> block to that project's <code>CLAUDE.md</code> — or run <code>/abofles:init</code> and let it suggest one. <a href="/config/">All keys</a>.</p>
+
+    <h2 id="auto-update">Turn on auto-update</h2>
+    <p>Claude Code keeps auto-update <strong>off</strong> for marketplaces that aren't Anthropic's own. Turn it on once and every new version installs itself when Claude Code starts:</p>
+    <ol class="steps-v">
+      <li><b>Open the plugin manager</b>{{cmd:/plugin}}</li>
+      <li><b>Open Marketplaces</b><span>Pick <code>sajadh92</code>.</span></li>
+      <li><b>Choose Enable auto-update</b><span>Done. New versions arrive at startup — the uncle delivers, free of charge.</span></li>
+    </ol>
+    <div class="callout"><p><strong>The pane tells you too.</strong> With the pane installed, Home shows the version you run. When a newer one is installed but not loaded it offers <strong>Reload</strong>; when GitHub has a newer release it offers <strong>Update</strong> and a <strong>What's new</strong> link. <code>Update check = off</code> stops the GitHub check.</p></div>
+
+    <h2 id="update">Update by hand</h2>
+    <p>Prefer to choose when? Refresh the marketplace, then restart Claude Code:</p>
+    {{cmd:/plugin marketplace update sajadh92}}
+    <p>Open sessions keep the old version until they reload: <code>/reload-plugins</code>. What changed is always in the <a href="/changelog/">changelog</a>.</p>
+
+    <h2 id="check">Check it works</h2>
+    <p>A dry run prints the route lines and a cost estimate without starting anything:</p>
+    {{cmd:/abofles:route "fix refund rounding in payments"}}
+    <p>You should see a <span class="t4">🔴 Critical</span> workflow with Plan and Work on Opus 5.5 · Extra and the Finance, Security and Tester reviewers. Then just work as usual: the first agent of a session asks the agent-gate question once, and every task that started agents ends with a receipt.</p>
+    <ul>
+      <li><code>/abofles:bill</code> — what this session's agents cost, and what was saved</li>
+      <li><code>/abofles:status</code> — agents per model and the open follow-ups</li>
+      <li><code>/abofles:resume</code> — where was I?</li>
+      <li><code>/abofles:guide</code> — the one thing to do next</li>
+    </ul>
+
+    <h2 id="requirements">Requirements</h2>
+    <ul>
+      <li><strong>Claude Code</strong> — CLI, desktop app or IDE extension. The pane needs the desktop app.</li>
+      <li><strong>Python 3.8+</strong> on the PATH as <code>python3</code>, <code>python</code> or <code>py</code>. Without Python the hooks step aside quietly and the skill still routes — nothing is enforced or logged.</li>
+      <li><strong>macOS, Linux or Windows.</strong> On Windows, Claude Code uses Git Bash; the hooks lock files with <code>msvcrt</code> there.</li>
+    </ul>
+
+    <h2 id="uninstall">Uninstall</h2>
+    <p>No hard feelings. He'll only ask who's paying now.</p>
+    {{cmd:claude plugin uninstall abofles@sajadh92}}
+    {{cmd:claude plugin uninstall abofles-guide@sajadh92}}
+    <p>Your ledgers live in <code>~/.abofles/</code> and the memo in each project's <code>.claude/abofles-memo*</code>; delete them if you want a clean slate.</p>
+
+    <h2 id="trouble">Troubleshooting</h2>
+    <ul>
+      <li><strong>Agents start without a route line.</strong> Check the CLAUDE.md line above, then start a new session.</li>
+      <li><strong>An agent was refused.</strong> That's the hook doing its job: the message names the model and effort to pass. A missing <code>model</code> or <code>effort</code>, or Fable on a Read/Work/Verify agent, is always refused.</li>
+      <li><strong>The pane shows an old version.</strong> Run <code>/reload-plugins</code> or press <strong>Reload</strong> on Home.</li>
+      <li><strong>Still stuck?</strong> <a href="{{repo}}/issues" rel="noopener">Open an issue on GitHub</a> or send a DM to <a href="{{insta}}" rel="noopener">@abofles</a>.</li>
+    </ul>
+  </div>
+</div>

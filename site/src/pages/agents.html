@@ -1,0 +1,75 @@
+<!-- {
+  "path": "/agents/",
+  "title": "Meet the agents — the Abo Fles family and its model matrix",
+  "description": "The 23 Abo Fles agents for Claude Code — sides, helpers and 13 specialist reviewers — and the model and effort each gets per risk tier.",
+  "crumbs": [["Home", "/"], ["Agents", "/agents/"]]
+} -->
+<section class="page-hero"><div class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Home</a><span aria-hidden="true">/</span><span>Agents</span></nav>
+  <h1>Meet the <span class="gold">family.</span></h1>
+  <p class="lede">{{agents}} agents, one job each, a fixed reply format each. Every one opens with <code>STATUS</code> and <code>CONFIDENCE</code>, so a weak answer escalates instead of slipping through. The uncle pays each by the task — never by the hour.</p>
+</div></section>
+
+<section style="padding-top:0"><div class="wrap" style="display:grid;gap:56px">
+
+  <div style="display:grid;gap:20px">
+    <div class="sec-head" style="margin:0"><span class="eyebrow">The five sides + the question gate</span><h2>Each task, split by side.</h2>
+      <p class="lede">One agent per side, small and cheap. Results flow forward as short summaries — no agent re-reads what the last one found.</p></div>
+    <div class="family">
+      <article class="agent"><header><span class="e" aria-hidden="true">🔍</span><div><h3>Reader</h3><code>abofles-reader</code></div></header><p>Finds files, maps code, collects facts. No opinions, no fixes. Usually Haiku · Low.</p></article>
+      <article class="agent"><header><span class="e" aria-hidden="true">🧠</span><div><h3>Analyst</h3><code>abofles-analyst</code></div></header><p>Finds bugs, gaps and risks, compares options, ranks findings with a fix for each.</p></article>
+      <article class="agent"><header><span class="e" aria-hidden="true">📐</span><div><h3>Planner</h3><code>abofles-planner</code></div></header><p>Writes the plan before code changes: numbered steps, files, risks, a verify step.</p></article>
+      <article class="agent"><header><span class="e" aria-hidden="true">🛠️</span><div><h3>Worker</h3><code>abofles-worker</code></div></header><p>Writes and edits code, tests, docs and configs. On Opus at every tier by default.</p></article>
+      <article class="agent"><header><span class="e" aria-hidden="true">✅</span><div><h3>Verifier</h3><code>abofles-verifier</code></div></header><p>Runs the tests, reviews the diff, checks docs against code. PASS or FAIL with evidence.</p></article>
+      <article class="agent"><header><span class="e" aria-hidden="true">⚖️</span><div><h3>Judge</h3><code>abofles-judge</code></div></header><p>Sees every question before you do. Answers it from the repo — or explains why it's truly yours.</p></article>
+      <article class="agent"><header><span class="e" aria-hidden="true">💬</span><div><h3>Explainer</h3><code>abofles-explainer</code></div></header><p>Turns a hard 🟠/🔴 decision into plain words: options, consequences, a recommendation, a table when it helps.</p></article>
+    </div>
+  </div>
+
+  <div style="display:grid;gap:20px">
+    <div class="sec-head" style="margin:0"><span class="eyebrow">The helpers</span><h2>The ones who keep the house in order.</h2></div>
+    <div class="family">
+      <article class="agent"><header><span class="e" aria-hidden="true">🌿</span><div><h3>Git</h3><code>abofles-git</code></div></header><p>Owns every git and GitHub write: branches, worktrees, commits, merges, conflicts, PRs, tags, releases. Pushes only on your quoted words.</p></article>
+      <article class="agent"><header><span class="e" aria-hidden="true">📋</span><div><h3>Scrum</h3><code>abofles-scrum</code></div></header><p>Scrum master for Jira, Linear, ClickUp, Asana, monday.com, Trello and GitHub Issues. Drafts first, writes only when you said so.</p></article>
+      <article class="agent"><header><span class="e" aria-hidden="true">🗂️</span><div><h3>Memo</h3><code>abofles-memo</code></div></header><p>Tidies the work memo in the background on Haiku · Low: merges duplicate decisions, archives closed sessions. Never asks questions.</p></article>
+    </div>
+  </div>
+
+  <div style="display:grid;gap:20px">
+    <div class="sec-head" style="margin:0"><span class="eyebrow">13 specialist reviewers</span><h2>The cousins with opinions.</h2>
+      <p class="lede">Picked by the topic's domain, started in parallel after Verify passes. A FAIL goes back to Work, then only that reviewer runs again.</p></div>
+    <div class="family">
+      <article class="agent"><header><span class="e" aria-hidden="true">🛡️</span><div><h3>Security</h3><code>abofles-security</code></div></header><p>OWASP classes, broken authorization, secrets, injection, crypto misuse, sessions.</p></article>
+      <article class="agent"><header><span class="e" aria-hidden="true">💰</span><div><h3>Finance</h3><code>abofles-finance</code></div></header><p>Rounding and precision, currencies, ledger invariants, idempotency, fees. The uncle's favourite.</p></article>
+      <article class="agent"><header><span class="e" aria-hidden="true">📜</span><div><h3>Compliance</h3><code>abofles-compliance</code></div></header><p>PII exposure, consent, retention and deletion, audit trails, legal text.</p></article>
+      <article class="agent"><header><span class="e" aria-hidden="true">🧪</span><div><h3>Tester</h3><code>abofles-tester</code></div></header><p>Runs the suite and writes the missing edge cases. The only reviewer that edits — test files only.</p></article>
+      <article class="agent"><header><span class="e" aria-hidden="true">🎯</span><div><h3>QA</h3><code>abofles-qa</code></div></header><p>Acceptance criteria as a user would check them: flows end to end, regressions, empty and error states.</p></article>
+      <article class="agent"><header><span class="e" aria-hidden="true">🎨</span><div><h3>UI/UX</h3><code>abofles-uiux</code></div></header><p>Accessibility, RTL, responsive layout, design tokens and copy — with Better Design and UX Pilot when connected.</p></article>
+      <article class="agent"><header><span class="e" aria-hidden="true">🧹</span><div><h3>Clean code</h3><code>abofles-cleancoder</code></div></header><p>Naming, duplication, dead code, function size and module boundaries — no behaviour changes.</p></article>
+      <article class="agent"><header><span class="e" aria-hidden="true">🗄️</span><div><h3>DBA</h3><code>abofles-dba</code></div></header><p>Migrations, schema, queries, indexes, locking and reversibility under production data.</p></article>
+      <article class="agent"><header><span class="e" aria-hidden="true">⚙️</span><div><h3>Ops</h3><code>abofles-ops</code></div></header><p>Blast radius, rollback path, secrets exposure, drift and environment parity.</p></article>
+      <article class="agent"><header><span class="e" aria-hidden="true">⚡</span><div><h3>Perf</h3><code>abofles-perf</code></div></header><p>Hot paths, N+1, allocations, blocking calls, caching, and benchmarks before and after.</p></article>
+      <article class="agent"><header><span class="e" aria-hidden="true">📊</span><div><h3>Data</h3><code>abofles-data</code></div></header><p>Idempotent loads, metric definitions, joins, double counting, freshness, data contracts.</p></article>
+      <article class="agent"><header><span class="e" aria-hidden="true">🖌️</span><div><h3>Design</h3><code>abofles-design</code></div></header><p>Brand, type, layout, print and video specs, 3D output, and the licence of every asset.</p></article>
+      <article class="agent"><header><span class="e" aria-hidden="true">📣</span><div><h3>Marketing</h3><code>abofles-marketing</code></div></header><p>Platform specs, ad policy, honest claims, hook and call to action, budget sanity. Never posts.</p></article>
+    </div>
+  </div>
+
+  <div style="display:grid;gap:20px" id="matrix">
+    <div class="sec-head" style="margin:0"><span class="eyebrow">The matrix</span><h2>Who gets which model.</h2>
+      <p class="lede">The tier is what a mistake costs. Each cell is model · effort / reply cap — the default <code>Matrix = quality</code>. Effort “Extra” is <code>xhigh</code>.</p></div>
+    <div class="tbl-wrap"><table class="matrix">
+      <thead><tr><th scope="col">Tier</th><th scope="col">🔍 Read</th><th scope="col">🧠 Analyse</th><th scope="col">📐 Plan</th><th scope="col">🛠️ Work</th><th scope="col">✅ Verify</th><th scope="col">Reviewers</th></tr></thead>
+      <tbody>
+        <tr><td><span class="t1">🟢 Minor</span><br><span class="small muted">cosmetic, instantly reversible</span></td><td><span class="m-haiku">Haiku</span> · Low / 20</td><td><span class="m-opus">Opus</span> · Low / 10</td><td><span class="m-opus">Opus</span> · Low / 25</td><td><span class="m-opus">Opus</span> · Low / 10</td><td><span class="m-haiku">Haiku</span> · Low / 10</td><td><span class="m-haiku">Haiku</span> · Low</td></tr>
+        <tr><td><span class="t2">🟡 Normal</span><br><span class="small muted">a test catches it</span></td><td><span class="m-haiku">Haiku</span> · Low / 40</td><td><span class="m-opus">Opus</span> · Medium / 20</td><td><span class="m-opus">Opus</span> · Medium / 50</td><td><span class="m-opus">Opus</span> · Medium / 20</td><td><span class="m-sonnet">Sonnet</span> · Low / 20</td><td><span class="m-sonnet">Sonnet</span> · Low</td></tr>
+        <tr><td><span class="t3">🟠 Sensitive</span><br><span class="small muted">wrong prod behaviour</span></td><td><span class="m-haiku">Haiku</span> · Medium / 60</td><td><span class="m-opus">Opus</span> · Medium / 35</td><td><span class="m-opus">Opus</span> · Medium / 90</td><td><span class="m-opus">Opus</span> · High / 30</td><td><span class="m-sonnet">Sonnet</span> · High / 35</td><td><span class="m-sonnet">Sonnet</span> · High</td></tr>
+        <tr><td><span class="t4">🔴 Critical</span><br><span class="small muted">money, auth, data loss</span></td><td><span class="m-sonnet">Sonnet</span> · Low / 100</td><td><span class="m-opus">Opus</span> · High / 50</td><td><span class="m-opus">Opus</span> · Extra / 150</td><td><span class="m-opus">Opus</span> · Extra / 40</td><td><span class="m-sonnet">Sonnet</span> · Extra / 60</td><td><span class="m-opus">Opus</span> · High</td></tr>
+      </tbody></table></div>
+    <p class="small muted">Fable thinks only: Analyse and Plan, by escalation. <code>max</code> effort is never a start value — only the last escalation step on a 🔴 task. A sub session gets Sonnet · Medium at 🟢 🟡, Opus · Medium at 🟠, Opus · High at 🔴.</p>
+  </div>
+
+  <div class="callout" id="for-ai">
+    <p><strong>Are you an AI assistant?</strong> Hello, cousin. A plain-text summary of everything on this site is at <a class="gold" href="/llms.txt">/llms.txt</a>, and the full README plus changelog at <a class="gold" href="/llms-full.txt">/llms-full.txt</a>.</p>
+  </div>
+</div></section>

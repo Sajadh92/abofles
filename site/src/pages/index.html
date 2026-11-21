@@ -1,0 +1,294 @@
+<!-- {
+  "path": "/",
+  "title": "Abo Fles — the stingy uncle for your Claude Code agents",
+  "description": "Free plugin for Claude Code that picks the model and effort for every subagent: Haiku reads, Sonnet checks, Opus builds. Real receipts, 13 reviewers.",
+  "ld": [{
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {"@type": "Question", "name": "Is Abo Fles free?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. It is open source under the MIT license. No account, no sign-up, no paid tier."}},
+      {"@type": "Question", "name": "Does it make Claude worse to save money?", "acceptedAnswer": {"@type": "Answer", "text": "No. With the default quality matrix Opus writes, plans and analyses at every tier. Haiku and Sonnet only read and check. A failed or low-confidence result escalates to a stronger setting."}},
+      {"@type": "Question", "name": "Does Abo Fles send my data anywhere?", "acceptedAnswer": {"@type": "Answer", "text": "No. The only network call is the optional update check: it reads GitHub's public releases list at most every 6 hours and sends none of your data. Update check = off turns it off."}},
+      {"@type": "Question", "name": "Is Abo Fles made by Anthropic?", "acceptedAnswer": {"@type": "Answer", "text": "No. It is an independent open-source plugin for Claude Code, not made or endorsed by Anthropic."}},
+      {"@type": "Question", "name": "Does it work for designers and marketers?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. It covers graphic design and branding, video and motion, 3D, social media and ads, with Design and Marketing reviewers. It never posts or publishes on its own."}},
+      {"@type": "Question", "name": "What does Abo Fles mean?", "acceptedAnswer": {"@type": "Answer", "text": "In Iraqi slang, Abo Fles is the stingy uncle who counts every fils, the smallest coin. This plugin counts every token."}}
+    ]
+  }]
+} -->
+<section class="hero">
+  <div class="wrap">
+    <div class="hero-copy">
+      <a class="pill" href="/changelog/"><b>NEW {{version}}</b> Prompt checkup: vague agent briefs get sent back</a>
+      <h1>Your agents spend like it's a <span class="gold">wedding.</span></h1>
+      <p class="lede">Abo Fles is a free plugin for Claude Code that picks the model and effort for every subagent. Haiku reads, Sonnet checks, Opus builds — and you get the receipt.</p>
+      <div style="display:grid;gap:12px;width:min(560px,100%)">
+        {{cmd:/plugin marketplace add Sajadh92/abofles}}
+        <div class="ctas">
+          <a class="btn btn-gold" href="/install/">Install in a minute {{icon:arrow}}</a>
+          <a class="btn btn-ghost" href="/pane/">See the real pane</a>
+        </div>
+      </div>
+      <div class="trust"><span>Free &amp; MIT</span><span>{{versions}} versions since Oct 2026</span><span>No account, no data sent</span></div>
+    </div>
+    <div class="hero-art">
+      <div class="shot"><img src="/assets/pane/app-pane-real.webp" width="918" height="2158" alt="The real Abo Fles pane in the Claude desktop app: Home page with Next up, Context 152K of 500K, a task list at step 2 of 7, and Agents 24% saved." fetchpriority="high" style="max-height:600px;object-fit:cover;object-position:top"></div>
+      <div class="chip chip-1 float" aria-hidden="true"><i>🔍</i> Read · <span class="m m-haiku">Haiku 5.5</span> · Low</div>
+      <div class="chip chip-2 float d2" aria-hidden="true"><i>🛠️</i> Work · <span class="m m-opus">Opus 5.5</span> · Extra</div>
+      <img class="mascot" src="/assets/mascot.webp" width="640" height="640" alt="" aria-hidden="true">
+    </div>
+  </div>
+</section>
+
+<div class="marquee" aria-hidden="true">
+  <div class="marquee-track">
+    <p>“Opus to read a README? Not in this house.”</p><p>“Haiku can grep. Haiku is cheap. Haiku is family.”</p><p>“Show me the receipt.”</p><p>“Ten agents at once? Who's paying for this wedding?”</p><p>“Ask the code first. Then ask the boss.”</p><p>“push --force? I hid the car keys.”</p>
+    <p>“Opus to read a README? Not in this house.”</p><p>“Haiku can grep. Haiku is cheap. Haiku is family.”</p><p>“Show me the receipt.”</p><p>“Ten agents at once? Who's paying for this wedding?”</p><p>“Ask the code first. Then ask the boss.”</p><p>“push --force? I hid the car keys.”</p>
+  </div>
+</div>
+
+<section id="problem">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow">The problem</span>
+      <h2>Every subagent inherits your <span class="gold">most expensive</span> setting.</h2>
+      <p class="lede">Run your main session on Opus · High and every agent it starts does too — the one that writes your payment code, and the one that just looks for a file. The uncle sorts them.</p>
+    </div>
+    <div class="vs">
+      <div class="vs-card bad reveal">
+        <span class="tag red">Without the uncle</span>
+        <div class="lines">
+          <div class="line"><span>Where is login called?</span><span class="m-opus">Opus · High</span></div>
+          <div class="line"><span>Fix refund rounding</span><span class="m-opus">Opus · High</span></div>
+          <div class="line"><span>Instagram reel caption</span><span class="m-opus">Opus · High</span></div>
+        </div>
+        <p class="note">Same price for a grep and a ledger change. No reviewer on the money. No receipt, so nobody knows.</p>
+      </div>
+      <div class="vs-card good reveal">
+        <span class="tag gold">With Abo Fles</span>
+        <div class="lines">
+          <div class="line"><span>🟢 Where is login called?</span><span class="m-haiku">Haiku · Low</span></div>
+          <div class="line"><span>🔴 Fix refund rounding</span><span class="m-opus">Opus · Extra + 3 reviewers</span></div>
+          <div class="line"><span>🟢 Instagram reel caption</span><span class="m-opus">Opus · Low</span></div>
+        </div>
+        <p class="note">Cheap where a mistake is cheap, careful where it costs money. The same 1M-token read: <b class="gold">$0.03 on Haiku 5.5, $0.90 on Opus 5.5.</b></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="who" style="padding-top:0">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow">Who it's for</span>
+      <h2>Devs, designers, marketers. <span class="gold">One uncle.</span></h2>
+      <p class="lede">{{topics_fmt}} topics in {{domains}} domains — from SQL migrations to TikTok ads. Each one knows how risky it is and who should check it. These are real lookups.</p>
+    </div>
+    <div class="tabs" role="tablist" aria-label="Audience">
+      <button class="tab" role="tab" id="tab-dev" aria-controls="p-dev" aria-selected="true">💻 Developers</button>
+      <button class="tab" role="tab" id="tab-des" aria-controls="p-des" aria-selected="false" tabindex="-1">🎨 Designers</button>
+      <button class="tab" role="tab" id="tab-mkt" aria-controls="p-mkt" aria-selected="false" tabindex="-1">📣 Marketers</button>
+    </div>
+
+    <div class="panel" id="p-dev" role="tabpanel" aria-labelledby="tab-dev">
+      <div class="panel-copy">
+        <h3>Money code gets the whole family. A grep gets Haiku.</h3>
+        <ul>
+          <li>Payments, auth, secrets and data loss route to 🔴 Critical: plan, work and verify on the strongest settings.</li>
+          <li>Finance, Security and Tester review the change after Verify passes, in parallel.</li>
+          <li>Reading questions — “where is X”, “what calls Y” — stay on Haiku · Low, even in money code.</li>
+          <li>A Git agent owns every commit and push. Force pushes need your words.</li>
+        </ul>
+      </div>
+      <div class="term" role="img" aria-label="Terminal: the ask 'fix refund rounding in payments' routes to Refunds, Chargebacks and Reversals, Critical tier, with Plan on Opus Extra, Work on Opus Extra, Verify on Sonnet Extra and Finance, Security and Tester reviewers.">
+        <div class="term-bar"><i></i><i></i><i></i><span>claude — abofles</span></div>
+        <div class="term-body">
+          <div class="ask">fix refund rounding in payments</div>
+          <div class="out">🔎 #96 Refunds, Chargebacks &amp; Reversals · <span class="t4">🔴 Critical (T4)</span></div>
+          <div class="out">🧭 Workflow · change · 🔴 → Read → Analyse → Plan → Work → Verify → Review</div>
+          <div class="route">📐 <b>Plan</b>   → <span class="m-opus">Opus 5.5</span> · Extra  · Cap 150</div>
+          <div class="route">🛠️ <b>Work</b>   → <span class="m-opus">Opus 5.5</span> · Extra  · Cap 40</div>
+          <div class="route">✅ <b>Verify</b> → <span class="m-sonnet">Sonnet 5.5</span> · Extra · Cap 60</div>
+          <div class="route">💰 <b>Finance</b> · 🛡️ <b>Security</b> · 🧪 <b>Tester</b> → <span class="m-opus">Opus 5.5</span> · High</div>
+          <div class="out" style="margin-top:8px"> </div>
+          <div class="ask">where is the login handler called</div>
+          <div class="out">🔎 #1234 Codebase Exploration &amp; Onboarding · <span class="t1">🟢 Minor (T1)</span></div>
+          <div class="route">🔍 <b>Read</b>   → <span class="m-haiku">Haiku 5.5</span> · Low · Cap 120</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" id="p-des" role="tabpanel" aria-labelledby="tab-des" hidden>
+      <div class="panel-copy">
+        <h3>Logos, layouts, motion, 3D — with a picky reviewer.</h3>
+        <ul>
+          <li>Graphic design and branding, video, motion and audio, 3D and product design: 102 topics of their own.</li>
+          <li>The 🖌️ Design reviewer checks brand, type, export specs and the licence of every font, image and track.</li>
+          <li>The 🎨 UI/UX reviewer checks accessibility, RTL, responsive layout and copy — with Better Design and UX Pilot when connected.</li>
+          <li>Opus does the making. Cheap models only collect references and check.</li>
+        </ul>
+      </div>
+      <div class="term" role="img" aria-label="Terminal: the ask 'design launch logo brand identity' routes to Brand Identity Systems and Guidelines, Normal tier, Read on Haiku Low, Work on Opus Medium, Verify on Sonnet Low.">
+        <div class="term-bar"><i></i><i></i><i></i><span>claude — abofles</span></div>
+        <div class="term-body">
+          <div class="ask">design the launch logo and brand identity</div>
+          <div class="out">🔎 #438 Brand Identity Systems &amp; Guidelines · <span class="t2">🟡 Normal (T2)</span></div>
+          <div class="out">🧭 Workflow · change · 🟡 → Read → Work → Verify</div>
+          <div class="route">🔍 <b>Read</b>   → <span class="m-haiku">Haiku 5.5</span> · Low    · Cap 40</div>
+          <div class="route">🛠️ <b>Work</b>   → <span class="m-opus">Opus 5.5</span> · Medium · Cap 20</div>
+          <div class="route">✅ <b>Verify</b> → <span class="m-sonnet">Sonnet 5.5</span> · Low  · Cap 20</div>
+          <div class="out">   at 🟠 and 🔴: 🖌️ <b>Design</b> reviewer (+ 📜 Compliance)</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" id="p-mkt" role="tabpanel" aria-labelledby="tab-mkt" hidden>
+      <div class="panel-copy">
+        <h3>Ads spend real money. He treats them like it.</h3>
+        <ul>
+          <li>80 social and ads topics: Meta, TikTok, YouTube, LinkedIn, X, Snapchat, Telegram, Google and more.</li>
+          <li>A caption is 🟢 Minor. A campaign with a budget is 🟠 Sensitive, with the 📣 Marketing reviewer on platform specs, ad policy and honest claims.</li>
+          <li>It never posts, schedules or spends on its own — you press the button.</li>
+          <li>Scrum agent for your board: Jira, Linear, ClickUp, Asana, monday.com, Trello.</li>
+        </ul>
+      </div>
+      <div class="term" role="img" aria-label="Terminal: the ask 'meta ads campaign budget audience' routes to Meta Ads Manager Campaigns, Sensitive tier, Plan on Opus Medium, Work on Opus High, Verify on Sonnet High, Marketing reviewer.">
+        <div class="term-bar"><i></i><i></i><i></i><span>claude — abofles</span></div>
+        <div class="term-body">
+          <div class="ask">set up the Meta ads campaign: budget and audience</div>
+          <div class="out">🔎 #568 Meta Ads Manager Campaigns · <span class="t3">🟠 Sensitive (T3)</span></div>
+          <div class="out">🧭 Workflow · change · 🟠 → Read → Analyse → Plan → Work → Verify → Review</div>
+          <div class="route">📐 <b>Plan</b>   → <span class="m-opus">Opus 5.5</span> · Medium · Cap 90</div>
+          <div class="route">🛠️ <b>Work</b>   → <span class="m-opus">Opus 5.5</span> · High   · Cap 30</div>
+          <div class="route">✅ <b>Verify</b> → <span class="m-sonnet">Sonnet 5.5</span> · High · Cap 35</div>
+          <div class="route">📣 <b>Marketing</b> reviewer → <span class="m-sonnet">Sonnet 5.5</span> · High</div>
+          <div class="out" style="margin-top:8px"> </div>
+          <div class="ask">instagram reel caption with a hook</div>
+          <div class="out">🔎 #583 Instagram Posts, Reels &amp; Features · <span class="t1">🟢 Minor (T1)</span></div>
+          <div class="route">🛠️ <b>Work</b>   → <span class="m-opus">Opus 5.5</span> · Low · Cap 10</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="how" style="padding-top:0">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow">How it works</span>
+      <h2>You ask. He <span class="gold">haggles.</span> The work gets done.</h2>
+    </div>
+    <div class="steps">
+      <div class="step reveal"><h3>You ask, like always</h3><p>No new commands to learn. Type the task in Claude Code the way you already do.</p></div>
+      <div class="step reveal"><h3>He looks it up</h3><p>One lookup finds the topic and its risk tier — 🟢 Minor to 🔴 Critical — and picks a model, effort and reply cap for each step: Read, Analyse, Plan, Work, Verify.</p></div>
+      <div class="step reveal"><h3>Agents run, you get the receipt</h3><p>Hooks refuse any agent without a model and effort. At the end: agents, real tokens, real dollars, and what was saved.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="features" style="padding-top:0">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow">Features</span>
+      <h2>Everything a stingy uncle <span class="gold">would</span> build.</h2>
+      <p class="lede">Strict about money, generous with checks. All of it on by default, all of it one line to change.</p>
+    </div>
+    <div class="grid">
+      <article class="card reveal"><div class="ico" aria-hidden="true">🧭</div><h3>Model router</h3><p>Every subagent gets a model and effort from a topic × side matrix. Opus writes, plans and analyses; Haiku and Sonnet read and verify. Fable only thinks.</p><p class="joke">“Opus to grep? Habibi, no.”</p></article>
+      <article class="card reveal"><div class="ico" aria-hidden="true">🗂️</div><h3>{{topics_fmt}} topics, 4 tiers</h3><p>{{domains}} domains for code, design and marketing, each topic tiered by what a mistake costs. A one-call lookup — the model never reads the list.</p><p class="joke">Knows a little about everything. Like every uncle.</p></article>
+      <article class="card reveal"><div class="ico" aria-hidden="true">🧾</div><h3>Receipts</h3><p>Every task that started agents ends with one: agents, real tokens, real dollars and the saving versus your main model. <code>/abofles:bill</code> for the whole session.</p><p class="joke">He asks for the receipt. Every. Single. Time.</p></article>
+      <article class="card reveal"><div class="ico" aria-hidden="true">🚪</div><h3>Agent gate</h3><p>Asks once per session how many agents a task may start, sized by tier. Caps background agents, so a session never runs ten without you knowing.</p><p class="joke">“Ten agents at once? Who's paying for this wedding?”</p></article>
+      <article class="card reveal"><div class="ico" aria-hidden="true">⚖️</div><h3>Judge before questions</h3><p>No question reaches you before a Judge tried to answer it from the code, tests, docs and tickets. If it's truly your call, you get plain words and a recommendation.</p><p class="joke">Don't bother the boss with what the code already says.</p></article>
+      <article class="card reveal"><div class="ico" aria-hidden="true">🛡️</div><h3>13 specialist reviewers</h3><p>Security, Finance, Compliance, Tester, QA, UI/UX, Clean code, DBA, Ops, Perf, Data, Design, Marketing — picked by the topic, in parallel, after Verify passes.</p><p class="joke">Thirteen cousins with opinions. Useful ones, for once.</p></article>
+      <article class="card reveal"><div class="ico" aria-hidden="true">🌿</div><h3>Git agent + Git guard</h3><p>One agent owns every commit, merge, PR and tag. Force pushes, hard resets and history rewrites outside it get a warning — or a hard no.</p><p class="joke">“push --force? I hid the car keys.”</p></article>
+      <article class="card reveal"><div class="ico" aria-hidden="true">📍</div><h3>Work memo &amp; resume</h3><p>A small memo per project: now, next, what needs you. After a break or a <code>/compact</code> you get a short resume block, not a re-read of everything.</p><p class="joke">He remembers who owes what. Forever.</p></article>
+      <article class="card reveal"><div class="ico" aria-hidden="true">🧠</div><h3>Context watch</h3><p>Warns at 500K, 600K … 950K tokens of context and stops the work once at your mark, so you compact at a task boundary, not mid-thought.</p><p class="joke">A full house costs more. He'll tell you when to tidy.</p></article>
+      <article class="card new reveal"><span class="badge">New in {{version}}</span><div class="ico" aria-hidden="true">🩺</div><h3>Prompt checkup</h3><p>Checks every agent brief before it starts: header, files, a real “done when”. Flags risky asks — money, auth, prod — that name no file or end state.</p><p class="joke">A vague brief costs money. He sends it back.</p></article>
+      <article class="card reveal"><div class="ico" aria-hidden="true">🪟</div><h3>Sub-session routing</h3><p>Side sessions started from the desktop app get a model and effort by tier too — and a cap on how many stay open.</p><p class="joke">Even the kids get a budget.</p></article>
+      <article class="card reveal"><div class="ico" aria-hidden="true">📋</div><h3>Scrum agent</h3><p>Refines stories, splits epics, plans sprints and keeps tickets in step with the code in Jira, Linear, ClickUp and more. Writes only when you said so.</p><p class="joke">Runs the standup. Doesn't let it run long.</p></article>
+    </div>
+  </div>
+</section>
+
+<section id="receipt" style="padding-top:0">
+  <div class="wrap receipt-wrap">
+    <div class="sec-head reveal" style="margin:0">
+      <span class="eyebrow">Real receipt</span>
+      <h2>Not a guess. <span class="gold">The bill.</span></h2>
+      <p class="lede">The hook reads each subagent's own transcript and prices every billed token at list prices. This is the actual receipt from shipping version {{version}} — the uncle shipped himself.</p>
+      <a class="btn btn-ghost" href="/pane/#resume" style="justify-self:start">Where receipts live in the pane {{icon:arrow}}</a>
+    </div>
+    <div class="receipt reveal" role="img" aria-label="A paper receipt: Abo Fles, November 21 2026 02:37. 1 agent, 31K tokens, total $0.06, saved 49% ($0.05) versus Opus 5.5. Done: shipped abofles 2.13.0 and abofles-guide 0.15.0.">
+      <h3>ABO FLES</h3>
+      <p class="ar-name" lang="ar">ابو فليس</p>
+      <div class="row"><span>Date</span><span>2026-11-21 02:37</span></div>
+      <div class="row"><span>Task</span><span>Ship 2.13.0</span></div>
+      <div class="dash"></div>
+      <div class="row"><span>🌿 Git · Sonnet 5.5</span><span>1 agent</span></div>
+      <div class="row"><span>Tokens</span><span>31K</span></div>
+      <div class="row"><span>Same on Opus 5.5</span><span>$0.11</span></div>
+      <div class="dash"></div>
+      <div class="row total"><span>TOTAL</span><span>$0.06</span></div>
+      <div class="row" style="color:var(--saved);font-weight:700"><span>Saved</span><span>49% ($0.05)</span></div>
+      <div class="dash"></div>
+      <p class="done">done → commit b7d4e46 on main, tags abofles--v2.13.0 and abofles-guide--v0.15.0, both GitHub releases up.</p>
+      <p class="thanks">Thank you. Come again. Bring receipts.</p>
+      <span class="stamp" aria-hidden="true">Saved</span>
+    </div>
+  </div>
+</section>
+
+<section id="pane" style="padding-top:0">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow">The pane</span>
+      <h2>His ledger, <span class="gold">beside your chat.</span></h2>
+      <p class="lede">The optional abofles-guide mod adds a pane to the Claude desktop app: what to do next, what's running, where you left off, what every agent cost, and an editor for every setting. Real screens — nothing mocked.</p>
+    </div>
+    <div class="strip">
+      <figure class="reveal"><div class="shot"><img src="/assets/pane/pane-home.webp" width="900" height="2828" loading="lazy" alt="Pane Home page: Next up, At a glance context meter, Tasks card at step 2 of 7, Agents 24% saved." style="object-fit:cover;object-position:top;max-height:560px"></div><figcaption><b>Home</b>The one thing to do next, the context meter and your task list.</figcaption></figure>
+      <figure class="reveal"><div class="shot"><img src="/assets/pane/pane-spawns.webp" width="900" height="1970" loading="lazy" alt="Pane Agents page: 24% saved, $3.27 of $4.30 on Opus 5.5, split by Haiku, Sonnet and Opus, and the agent history." style="object-fit:cover;object-position:top;max-height:560px"></div><figcaption><b>Agents</b>What was saved, the spend by model, and every agent's cost.</figcaption></figure>
+      <figure class="reveal"><div class="shot"><img src="/assets/pane/pane-overrides.webp" width="900" height="2090" loading="lazy" alt="Pane Overrides page: 13 settings set for all projects, like Main session opus.medium and Git guard deny." style="object-fit:cover;object-position:top;max-height:560px"></div><figcaption><b>Overrides</b>Every setting you changed, and an editor for the rest.</figcaption></figure>
+    </div>
+    <div class="ctas" style="margin-top:32px;justify-content:center"><a class="btn btn-ghost" href="/pane/">Tour all 9 pane screens {{icon:arrow}}</a></div>
+  </div>
+</section>
+
+<section id="numbers" style="padding-top:0">
+  <div class="wrap">
+    <div class="nums reveal">
+      <div class="num"><b class="gold">{{topics_fmt}}</b><span>topics he knows</span></div>
+      <div class="num"><b>{{domains}}</b><span>domains, code to ads</span></div>
+      <div class="num"><b>{{agents}}</b><span>agents in the family</span></div>
+      <div class="num"><b>{{reviewers}}</b><span>specialist reviewers</span></div>
+      <div class="num"><b>{{versions}}</b><span>versions shipped</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="faq" style="padding-top:0">
+  <div class="wrap narrow">
+    <div class="sec-head center reveal"><span class="eyebrow">FAQ</span><h2>Questions the uncle <span class="gold">gets</span> at dinner.</h2></div>
+    <div class="faq">
+      <details><summary>Is it free?</summary><div class="a"><p>Yes. Open source under MIT. No account, no sign-up, no “pro” tier. He'd never charge family.</p></div></details>
+      <details><summary>Does it make Claude worse to save money?</summary><div class="a"><p>No. With the default <code>Matrix = quality</code>, Opus writes, plans and analyses at every tier. Haiku and Sonnet only read and check. A FAIL or low confidence escalates one step at a time to a stronger setting.</p></div></details>
+      <details><summary>Does it send my data anywhere?</summary><div class="a"><p>No. The only network call is the optional update check: GitHub's public releases list, at most every 6 hours, none of your data. <code>Update check = off</code> turns it off. Ledgers and the memo stay on your machine.</p></div></details>
+      <details><summary>I'm a designer / marketer. Is this for me?</summary><div class="a"><p>Yes. Graphic design, video and motion, 3D and social and ads have their own topics and reviewers. It never posts, schedules or spends on its own — you press the button.</p></div></details>
+      <details><summary>Which systems does it run on?</summary><div class="a"><p>macOS, Linux and Windows (with Git Bash, which Claude Code uses there). It needs Python 3.8+ on the PATH. Without Python the hooks step aside and the skill still routes.</p></div></details>
+      <details><summary>Is it made by Anthropic?</summary><div class="a"><p>No. It's an independent open-source plugin for Claude Code, not made or endorsed by Anthropic.</p></div></details>
+      <details><summary>What does “Abo Fles” even mean?</summary><div class="a"><p>In Iraqi slang, <span lang="ar">ابو فليس</span> is the stingy uncle who counts every fils — a thousandth of a dinar. You know the one. This plugin counts every token.</p></div></details>
+    </div>
+  </div>
+</section>
+
+<section class="final" style="padding-top:0">
+  <div class="wrap">
+    <div class="box reveal">
+      <img src="/assets/mascot.webp" width="640" height="640" alt="" loading="lazy">
+      <h2>Let the uncle <span class="gold">hold the wallet.</span></h2>
+      <p class="lede">Two lines in Claude Code. Free forever. He's already counting.</p>
+      {{cmd:/plugin marketplace add Sajadh92/abofles}}
+      {{cmd:/plugin install abofles@sajadh92}}
+      <div class="ctas" style="justify-content:center"><a class="btn btn-gold" href="/install/">Full install guide {{icon:arrow}}</a><a class="btn btn-ghost" href="{{insta}}" rel="noopener">{{icon:insta}} Follow @abofles</a></div>
+    </div>
+  </div>
+</section>

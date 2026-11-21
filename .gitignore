@@ -6,3 +6,7 @@ marketing/
 .claude/abofles-memo.*
 __pycache__/
 *.pyc
+
+# abofles.com build output and Cloudflare cache
+site/dist/
+.wrangler/
