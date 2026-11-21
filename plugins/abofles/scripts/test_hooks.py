@@ -5567,6 +5567,13 @@ def main():
         check("poll guard: an unbounded background poll is a note naming timeout and a counter", "unbounded background poll" in ctx(o_) and "timeout <N>" in ctx(o_) and "permissionDecision" not in json.dumps(o_))
         check("poll guard: a counted, a seq-limited or a foreground poll is no unbounded poll", all(pg(c, bg) is None for c, bg in (("i=0; until [ -f d ] || [ $i -ge 60 ]; do i=$((i+1)); sleep 5; done", True),
               ("for i in $(seq 1 60); do [ -f d ] && break; sleep 5; done", True), ("until [ -f done ]; do sleep 5; done", False))))
+        check("poll guard: a timeout on an earlier command or inside the loop body bounds no loop: still warned",
+              all("self-matching wait" in ctx(pg(c)) for c in ("timeout 5 curl x; until ! pgrep -f myjob; do sleep 1; done", "while pgrep -f myjob; do timeout 5 foo; sleep 1; done",
+                                                               "until ! pgrep -f myjob; do sleep 1; done; timeout 5 curl x")))
+        check("poll guard: `timeout 60 bash -c '…'` and `gtimeout -k 5 60 sh -c \"…\"` wrapping the loop pass",
+              pg("timeout 60 bash -c 'until ! pgrep -f myjob; do sleep 1; done'", True) is None and pg('gtimeout -k 5 60 sh -c "while pgrep -f myjob; do sleep 1; done"', True) is None)
+        check("poll guard: an unbounded background poll after an unrelated `timeout 5 x;` still gets the note",
+              "unbounded background poll" in ctx(pg("timeout 5 x; until [ -f done ]; do sleep 5; done", True)))
         Path(cwd, "CLAUDE.md").write_text("## abofles overrides\n- Poll guard = deny\n")
         o_ = pg(loop_, True)
         check("poll guard: Poll guard = deny blocks the self-matching wait with the same text", o_["hookSpecificOutput"]["permissionDecision"] == "deny" and "`pgrep -f test_hooks_dbg`" in reason(o_))
@@ -5583,6 +5590,8 @@ def main():
         check("poll guard (deny): a probe in a sleeping loop's body and a loop under bash -c are still denied",
               all(pg(c)["hookSpecificOutput"].get("permissionDecision") == "deny" for c in ('while true; do n=$(pgrep -f myjob | wc -l); [ "$n" = 0 ] && break; sleep 3; done', "bash -c 'until ! pgrep -f myjob; do sleep 5; done'")))
         check("poll guard (deny): the 2026-11-18 loop is still denied", pg(loop_, True)["hookSpecificOutput"].get("permissionDecision") == "deny")
+        check("poll guard (deny): a self-matching loop after an unrelated `timeout 5 curl x;` is denied",
+              pg("timeout 5 curl x; until ! pgrep -f myjob; do sleep 1; done")["hookSpecificOutput"].get("permissionDecision") == "deny")
         Path(cwd, "CLAUDE.md").write_text("## abofles overrides\n- Poll guard = off\n")
         check("poll guard: Poll guard = off is silent", pg(loop_, True) is None and pg("until [ -f done ]; do sleep 5; done", True) is None)
         Path(cwd, "CLAUDE.md").unlink()

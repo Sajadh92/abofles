@@ -2,6 +2,10 @@
 
 All notable changes to the plugins in this marketplace.
 
+## abofles 2.14.1 — 2026-11-21
+
+- abofles: **Poll guard: a `timeout` counts only when it wraps the loop.** Any `timeout N` anywhere in the command used to silence the check, so `timeout 5 curl x; until pgrep -f y; do sleep 1; done` passed although the timeout bounds only `curl`. Now a `timeout` (or `gtimeout`, with `-s KILL`, `-k 5` or a `$T` duration) exempts a loop only when the loop follows it in the same command, as in `timeout 60 bash -c 'until …'`. A timeout on an earlier or later command, or inside the loop body, no longer hides it. The background-loop note uses the same rule.
+
 ## abofles 2.14.0 · abofles-guide 0.16.0 — 2026-11-21
 
 - abofles: **Poll guard.** A wait loop that can never end is caught before it runs. `until`/`while` around `pgrep -f <name>` or `ps … | grep <name>`, where `<name>` is in the same command, matches its own shell, so the count never reaches zero (on 2026-11-18 such a loop kept an agent in Running for 12 hours). The note gives the fix: bracket the first letter (`pgrep -f '[n]ame'`), wait on a PID (`wait $PID`, `while kill -0 $PID`), or wrap it in `timeout N`. A background poll loop with no limit (no `timeout`, no counter) gets a note too. Loop text inside quotes, heredocs, comments and commit messages is ignored. `Poll guard = warn | deny | off` (default `warn`; `deny` blocks only the self-matching loop; an error in the check never blocks).

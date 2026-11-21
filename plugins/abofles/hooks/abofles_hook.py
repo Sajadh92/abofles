@@ -7539,6 +7539,16 @@ def poll_loops(code):
     return loops
 
 
+def poll_timed(code):
+    """True when a `timeout [opts] N` (or `gtimeout`) of a code text (poll_code) wraps a loop: an `until` / `while` keyword follows it in the same
+    simple command (no `;`, `&`, `|` or newline in between), as in `timeout 60 bash -c 'until …'`. A timeout on an earlier or later command, or
+    inside the loop body, bounds no loop."""
+    for m in re.finditer(r"\bg?timeout\s+(?:-[sk]\s+[^\s;&|]+\s+|-\S+\s+)*(?:\d[\w.]*|\$\{?\w+\}?)", code):  # `-s KILL` / `-k 5` take an argument; `$T` is a duration
+        if POLL_LOOP.search(re.split(r"[;&|\n]", code[m.end():], maxsplit=1)[0] + " "):
+            return True
+    return False
+
+
 def poll_self_match(cmd):
     """The `pgrep -f` / `ps | grep` pattern of a wait loop that matches the loop's own command line (so the count is never 0 and the loop never ends):
     (tool, pattern) or None. Read on the code text (poll_code: quoted text, heredoc bodies and comments are no loop); the probe must sit in an `until` /
@@ -7547,7 +7557,7 @@ def poll_self_match(cmd):
     words = []
     code = poll_code(cmd, words)
     loops = poll_loops(code)
-    if not loops or re.search(r"\bg?timeout\s+(?:-\S+\s+)*\d", code):
+    if not loops or poll_timed(code):
         return None
     for g in re.finditer(r"\bgrep\s+(?:-\w+\s+)*-\w*v\w*\s+([^\s;&|)]+)", code):
         t = POLL_TOKEN.fullmatch(g.group(1))
@@ -7579,7 +7589,7 @@ def poll_unbounded(data):
         return False
     code = poll_code(ti.get("command") or "", [])
     return bool(any(re.search(r"\bsleep\b", body) for _, body in poll_loops(code))
-                and not re.search(r"\bg?timeout\s", code) and not re.search(r"\bkill\s+-0\s|\bwait\b", code) and not POLL_COUNTER.search(code))
+                and not poll_timed(code) and not re.search(r"\bkill\s+-0\s|\bwait\b", code) and not POLL_COUNTER.search(code))
 
 
 def poll_guard_mode(cwd):
