@@ -5225,7 +5225,7 @@ def main():
         check("README: ... and every COMPLEX_FORMS form (one row each)", len(form_marks) == len(HG.COMPLEX_FORMS) and all(re.search(r"^\| `" + re.escape(m), sec_, re.M) for m in form_marks))
         check("README: ... with defaults from the code, the pane editor, /abofles:pane and /abofles:history", all(f"| `{k}` |" in sec_ and (v["default"] in sec_ if v["default"] else True) for k, v in HG.OVERRIDE_KEYS.items()) and "/abofles:pane" in sec_ and "/abofles:history" in sec_ and "pane" in sec_.split("| `Main session`")[0])
         check("overrides.md: the six place forms are described and the form count matches the code", all(f"`{w} place = " in (HOOK.parent.parent / "skills/abofles/references/overrides.md").read_text() for w in ("Guide", "Resume", "Agents", "Receipt", "Running", "Tasks"))
-              and f"Fifty forms" in (HOOK.parent.parent / "skills/abofles/references/overrides.md").read_text() and len(HG.OVERRIDE_KEYS) + len(HG.COMPLEX_FORMS) == 50)
+              and f"Fifty-one forms" in (HOOK.parent.parent / "skills/abofles/references/overrides.md").read_text() and len(HG.OVERRIDE_KEYS) + len(HG.COMPLEX_FORMS) == 51)
 
         # a receipt's Journal line keeps every field, and reads back
         rc_ = HG.parse_receipt("🧾 **1 Agent · 63K Tokens · $0.03**\n- `done` → the page\n- `why` → asked\n- `workflow` → Read ✓ · Work ✓\n- `check` → 181 pass\n- `open` → none\n- `next` → run /compact")
@@ -5547,6 +5547,46 @@ def main():
         Path(cwd, "CLAUDE.md").write_text("## abofles overrides\n- Git guard = sometimes\n")
         check("git guard: an unknown value falls back to warn", "risky git" in ctx(gg("git push --force")))
         Path(cwd, "CLAUDE.md").unlink()
+
+        # Poll guard (2026-11-18: a background `pgrep -f` wait loop matched its own shell and ran 12+ hours)
+        pg = lambda cmd, bg=False, atype=None: run("guard", dict({"session_id": "pg", "cwd": cwd, "tool_name": "Bash", "tool_input": dict({"command": cmd}, **({"run_in_background": True} if bg else {}))}, **({"agent_type": atype} if atype else {})), led)
+        loop_ = 'until [ "$(pgrep -f test_hooks_dbg | wc -l)" = "0" ]; do sleep 5; done'
+        o_ = pg(loop_, True, "abofles:abofles-worker")
+        check("poll guard: the 2026-11-18 loop (an agent, background) is warned, naming the pattern and the fixes", "self-matching wait" in ctx(o_) and "`pgrep -f test_hooks_dbg`" in ctx(o_)
+              and "'[t]est_hooks_dbg'" in ctx(o_) and "wait $PID" in ctx(o_) and "timeout N" in ctx(o_) and "permissionDecision" not in json.dumps(o_))
+        check("poll guard: the main session's foreground loop is warned too", "self-matching wait" in ctx(pg(loop_)))
+        check("poll guard: pgrep -fl, pkill -0 -f and ps aux | grep -c in a loop are self-matching too",
+              all("self-matching wait" in ctx(pg(c)) for c in ("while pgrep -fl myjob >/dev/null; do sleep 2; done", "while pkill -0 -f myjob; do sleep 2; done", "while [ $(ps aux | grep -c myjob) -gt 0 ]; do sleep 2; done")))
+        check("poll guard: a bracketed pattern, a grep -v grep, a PID wait (also in background), a one-shot pgrep and a pattern in a variable pass",
+              all(pg(c) is None for c in ("until [ \"$(pgrep -f '[t]est_hooks_dbg' | wc -l)\" = \"0\" ]; do sleep 5; done", "while ps aux | grep myjob | grep -v grep; do sleep 2; done",
+                                                "while kill -0 $PID; do sleep 5; done", "pgrep -f x", "pgrep -f test_hooks_dbg | wc -l")) and pg("while pgrep -f \"$NAME\"; do sleep 1; done") is None
+              and pg("while kill -0 $PID; do sleep 5; done", True) is None)
+        check("poll guard: a background loop inside `timeout 600 bash -c '…'` passes", pg("timeout 600 bash -c 'until [ \"$(pgrep -f test_hooks_dbg | wc -l)\" = 0 ]; do sleep 5; done'", True) is None
+              and pg("timeout 600 bash -c 'until [ -f done ]; do sleep 5; done'", True) is None)
+        o_ = pg("until [ -f done ]; do sleep 5; done", True)
+        check("poll guard: an unbounded background poll is a note naming timeout and a counter", "unbounded background poll" in ctx(o_) and "timeout <N>" in ctx(o_) and "permissionDecision" not in json.dumps(o_))
+        check("poll guard: a counted, a seq-limited or a foreground poll is no unbounded poll", all(pg(c, bg) is None for c, bg in (("i=0; until [ -f d ] || [ $i -ge 60 ]; do i=$((i+1)); sleep 5; done", True),
+              ("for i in $(seq 1 60); do [ -f d ] && break; sleep 5; done", True), ("until [ -f done ]; do sleep 5; done", False))))
+        Path(cwd, "CLAUDE.md").write_text("## abofles overrides\n- Poll guard = deny\n")
+        o_ = pg(loop_, True)
+        check("poll guard: Poll guard = deny blocks the self-matching wait with the same text", o_["hookSpecificOutput"]["permissionDecision"] == "deny" and "`pgrep -f test_hooks_dbg`" in reason(o_))
+        o_ = pg("until [ -f done ]; do sleep 5; done", True)
+        check("poll guard: Poll guard = deny still only notes an unbounded background poll", "unbounded background poll" in ctx(o_) and "permissionDecision" not in json.dumps(o_))
+        nodeny_ = lambda o: "permissionDecision" not in json.dumps(o or {})
+        check("poll guard (deny): a loop in quoted text (echo \"…\", echo '…') is no loop: not denied",
+              all(nodeny_(pg(c)) and pg(c) is None for c in ('echo "we use until pgrep -f foo as loop"', "echo 'wait until pgrep -f foo; do sleep 1; done'")))
+        check("poll guard (deny): a commit message naming the loop is not denied", pg("git commit -m 'fix until pgrep -f loop; do sleep 1; done'") is None)
+        check("poll guard (deny): a grep for the loop text is not denied", pg("grep 'x; until [ $(pgrep -f foo) ]; do sleep 1; done' file") is None)
+        check("poll guard (deny): a read loop with ps | grep and no sleep is no wait loop: not denied", pg("while read l; do ps aux | grep foo; done < f") is None)
+        check("poll guard (deny): a heredoc that writes the loop to a file is not denied", all(nodeny_(pg(c, bg)) for c in (
+              "cat > x.sh <<'EOF'\nuntil [ \"$(pgrep -f foo | wc -l)\" = 0 ]; do sleep 5; done\nEOF\nchmod +x x.sh", "cat > x.sh <<EOF\nwhile pgrep -f foo; do sleep 5; done\nEOF") for bg in (False, True)))
+        check("poll guard (deny): a probe in a sleeping loop's body and a loop under bash -c are still denied",
+              all(pg(c)["hookSpecificOutput"].get("permissionDecision") == "deny" for c in ('while true; do n=$(pgrep -f myjob | wc -l); [ "$n" = 0 ] && break; sleep 3; done', "bash -c 'until ! pgrep -f myjob; do sleep 5; done'")))
+        check("poll guard (deny): the 2026-11-18 loop is still denied", pg(loop_, True)["hookSpecificOutput"].get("permissionDecision") == "deny")
+        Path(cwd, "CLAUDE.md").write_text("## abofles overrides\n- Poll guard = off\n")
+        check("poll guard: Poll guard = off is silent", pg(loop_, True) is None and pg("until [ -f done ]; do sleep 5; done", True) is None)
+        Path(cwd, "CLAUDE.md").unlink()
+        check("poll guard: a pattern that is no valid regex is matched as text, no crash", "`pgrep -f job(`" in ctx(pg("while pgrep -f 'job(' >/dev/null; do sleep 2; done")))
 
         # security review (T4): git guard forms, question gate, memo, repo root
         for cmd_, op_ in (("g\\it reset --hard", "reset --hard"), ('gi""t reset --hard', "reset --hard"), ("GIT reset --hard", "reset --hard"),

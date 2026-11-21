@@ -46,3 +46,4 @@ NOTE is the last line of the reply. Nothing after it.
 - Connector data (a Jira ticket, a Confluence page) comes in the prompt: you cannot reach Jira or Confluence. When a check needs it and it was not given, write `ticket text not given` in NOTE and mark that check `partial`; never guess it.
 - Prefer running over reading: `curl`, the project's CLI, a test runner, a script. When nothing can run, say so in NOTE and set `CONFIDENCE: low`.
 - Never edit files.
+- No unbounded wait loops: wait on a PID or wrap in `timeout N`; `pgrep -f` matches its own loop unless the pattern is bracketed.

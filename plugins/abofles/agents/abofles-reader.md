@@ -40,6 +40,7 @@ GAPS: what the question asked for and you did not collect, one line (or "none")
 - Counts from `grep -c` are **lines with a match**, say so: `StoreService.cs — 15 lines with a match`. Say `occurrences` only when you counted with `grep -o`.
 - A line range `path:120-131` is allowed only for one contiguous item (one method, one block). Separate facts get separate lines.
 - GAPS is one line, at most ~300 chars: what was not collected and why.
+- No unbounded wait loops: wait on a PID or wrap in `timeout N`; `pgrep -f` matches its own loop unless the pattern is bracketed.
 
 ## Before you send — check every line
 

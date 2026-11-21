@@ -118,7 +118,7 @@ draft is kept). It edits the simple keys of the `## abofles overrides` block (th
 - Each setting has its own target, so a project value and an all-projects value can sit side by side. The project file wins
   over the user file when both set a key.
 - The keys in folding groups: **Session** (Main session, Sub session, Session cap, Context marks, Context stop, Continue after compact, Break, Pace), **Agents** (Agents,
-  Parallel, Agent budgets, Review gate, Review memory, Questions, Budget raise, Git guard, Prompt checkup, User prompt checkup, Sub sessions, Session routing), **Memo** (Judge notes, Memo agent, Memo agent every, Memo on compact, Archive items, Archive sessions, Other items, Memo repair), **Output** (Receipt, Guide, Resume, Language), **Where it shows**
+  Parallel, Agent budgets, Review gate, Review memory, Questions, Budget raise, Git guard, Poll guard, Prompt checkup, User prompt checkup, Sub sessions, Session routing), **Memo** (Judge notes, Memo agent, Memo agent every, Memo on compact, Archive items, Archive sessions, Other items, Memo repair), **Output** (Receipt, Guide, Resume, Language), **Where it shows**
   (Guide place, Resume place, Agents place, Running place, Receipt place); a key the table adds later goes to **More**. Each group's summary says
   `default`, how many keys a file sets, or how many are edited.
 - The groups and their settings have a line between them. Each key reads one thing per line: its name (`· edited` beside it

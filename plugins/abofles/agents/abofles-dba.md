@@ -49,3 +49,4 @@ NOTE is the last line of the reply. Nothing after it.
 - Run only read-only SQL (`EXPLAIN`, `SELECT` on catalogs/stats, `\d`); never execute a migration, `UPDATE`, `DELETE` or DDL yourself.
 - Name the production effect in one line per FAIL (which table, how long locked, how many rows, what is lost).
 - Never edit files.
+- No unbounded wait loops: wait on a PID or wrap in `timeout N`; `pgrep -f` matches its own loop unless the pattern is bracketed.

@@ -2,6 +2,12 @@
 
 All notable changes to the plugins in this marketplace.
 
+## abofles 2.14.0 · abofles-guide 0.16.0 — 2026-11-21
+
+- abofles: **Poll guard.** A wait loop that can never end is caught before it runs. `until`/`while` around `pgrep -f <name>` or `ps … | grep <name>`, where `<name>` is in the same command, matches its own shell, so the count never reaches zero (on 2026-11-18 such a loop kept an agent in Running for 12 hours). The note gives the fix: bracket the first letter (`pgrep -f '[n]ame'`), wait on a PID (`wait $PID`, `while kill -0 $PID`), or wrap it in `timeout N`. A background poll loop with no limit (no `timeout`, no counter) gets a note too. Loop text inside quotes, heredocs, comments and commit messages is ignored. `Poll guard = warn | deny | off` (default `warn`; `deny` blocks only the self-matching loop; an error in the check never blocks).
+- abofles: the agents that run commands (worker, verifier, tester, reader, analyst, git, qa, ops, perf, dba, data, security) carry a rule against unbounded wait loops.
+- abofles-guide: `Poll guard` is in the overrides editor under Agents.
+
 ## abofles 2.13.1 · abofles-guide 0.15.1 — 2026-11-21
 
 - abofles: **the question gate unlocks every question one Judge reply judged.** A Judge reply with one `VERDICT` over several questions (Q1, Q2, … each with its own `QUESTION` line) unlocked only the first, so the others were refused and never reached you. Now each `QUESTION` counts: one box with all of them passes, and so do one box per question in a row.

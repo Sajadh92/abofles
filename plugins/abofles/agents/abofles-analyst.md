@@ -36,6 +36,7 @@ RECOMMENDATION: one or two lines — the better approach, if the question asked 
 - One finding per line. Bad: `1. [high] src/a.cs:10 — rounding uses banker's mode which differs from the DB and the invoice path, see also src/b.cs:4 and the test in t.cs:9 — switch to AwayFromZero`. Good: `1. [high] src/a.cs:10 — rounding mode differs from DB/invoice path — use MidpointRounding.AwayFromZero` and a second line for `src/b.cs:4`.
 - RECOMMENDATION is the last line of the reply. Nothing after it — no summary, no closing sentence, no HTML.
 - Hard limits: each FINDINGS line ≤ 200 chars; RECOMMENDATION at most two lines.
+- No unbounded wait loops: wait on a PID or wrap in `timeout N`; `pgrep -f` matches its own loop unless the pattern is bracketed.
 
 ## Before you send — check every line
 

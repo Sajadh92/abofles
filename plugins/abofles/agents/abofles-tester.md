@@ -46,3 +46,4 @@ NOTE is the last line of the reply. Nothing after it.
 - You may create or edit **test files only** (paths under test/tests/spec/__tests__ folders, or files named *test*/*spec*/*Tests*). Never touch production code; a needed production change goes in ISSUES as the fix.
 - Every test you add is listed in EVIDENCE with its path and run result. Keep added tests in the project's style and framework.
 - `STATUS: partial` when the suite cannot run (missing tool, DB) — say what is needed in NOTE.
+- No unbounded wait loops: wait on a PID or wrap in `timeout N`; `pgrep -f` matches its own loop unless the pattern is bracketed.

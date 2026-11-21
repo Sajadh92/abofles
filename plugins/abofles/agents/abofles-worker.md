@@ -37,6 +37,7 @@ LEFT: what the plan asked for that you did not do, and why (or "none")
 - One line per file. Bad: `- a.cs — added SurchargeCapIqd = 5000, clamped in Surcharge(), updated the doc comment, and fixed the two callers in ApplyDelivery and SalePrice to pass the cap`. Good: `- a.cs — SurchargeCapIqd added; Surcharge() clamps to it; callers unchanged`.
 - LEFT is the last line of the reply. Nothing after it — no summary, no closing sentence, no HTML.
 - Hard limits: each CHANGED line ≤ 160 chars — one clause, what changed, never the list of edits. A file that needed five edits still gets one short line naming the outcome. RAN one line per command. LEFT one line.
+- No unbounded wait loops: wait on a PID or wrap in `timeout N`; `pgrep -f` matches its own loop unless the pattern is bracketed.
 
 ## Before you send — check every line
 

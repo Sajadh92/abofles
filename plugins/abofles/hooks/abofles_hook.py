@@ -494,6 +494,7 @@ OVERRIDE_KEYS = {
     "Budget raise": {"kind": "select", "options": ["auto", "ask"], "default": "auto"},  # auto: an over-budget spawn under an auto budget raises it (twice a task); ask: it is denied
     "Loop guard": {"kind": "number", "options": [], "default": "3"},  # rounds with no word from the user: the Nth FAIL of one check on one topic, or N Judges/Explainers with no question asked, stops the loop and opens the question gate; off = never
     "Git guard": {"kind": "select", "options": ["warn", "deny", "off"], "default": "warn"},  # a risky git command outside abofles-git: warn is a note, deny blocks it
+    "Poll guard": {"kind": "select", "options": ["warn", "deny", "off"], "default": "warn"},  # a wait loop that can never end (pgrep -f matching its own loop; an unbounded background poll): warn is a note, deny blocks the self-matching one
     "Prompt checkup": {"kind": "select", "options": ["warn", "deny", "off"], "default": "warn"},  # lint of each agent prompt (header, Line cap, files, done): warn is a note, deny blocks it
     "User prompt checkup": {"kind": "select", "options": ["warn", "off"], "default": "warn"},  # a risky change ask of the user's with no file or no end state: warn is a note to Claude (no deny: a block erases the user's message)
     "Agent budgets": {"kind": "list", "options": [], "default": "2, 3, 7, 12"},
@@ -7421,6 +7422,207 @@ def git_guard(data):
     return True
 
 
+POLL_LOOP = re.compile(r"(?:^|[\s;&|(!{])(until|while)\s")  # an `until` / `while` loop keyword at a word start (of the code text: poll_code)
+POLL_ARG = r"""(?:'([^']*)'|"([^"]*)"|([^\s'"|;&)`<>]+))"""  # the pattern word: single-quoted, double-quoted or bare (a `\x00n\x00` token of poll_code)
+POLL_PGREP = re.compile(r"\bp(?:grep|kill)((?:\s+-[-\w]*)*)\s+" + POLL_ARG)  # pgrep / pkill, their options, the pattern
+POLL_PSGREP = re.compile(r"\bps\b[^|\n]*\|\s*grep((?:\s+-[-\w]*)*)\s+" + POLL_ARG)  # ps … | grep [opts] pattern
+POLL_COUNTER = re.compile(r"\$\(\(\s*\w+\s*[-+]|\(\(\s*\w+\s*(?:\+\+|--|[-+]=)|\w(?:\+\+|--)|\blet\s|\$\{?\w+\}?\s+-(?:lt|le|gt|ge|eq)\s+\$?\w|\bseq\b|\bfor\b|\bSECONDS\b")
+POLL_SHELL_C = re.compile(r"\b(?:ba|z|k|da)?sh\s+(?:-\w+\s+)*-\w*c\s*$")  # `bash -c` / `sh -lc` right before a quoted string: that string is code
+POLL_TOKEN = re.compile(r"\x00(\d+)\x00")
+
+
+def poll_close(cmd, i):
+    """The index after the `)` that closes the `$(` whose `(` is at cmd[i] (quotes inside skipped), or len(cmd)."""
+    depth, q = 0, ""
+    while i < len(cmd):
+        c = cmd[i]
+        if q:
+            if c == "\\" and q == '"':
+                i += 1
+            elif c == q:
+                q = ""
+        elif c in "'\"":
+            q = c
+        elif c == "\\":
+            i += 1
+        elif c == "(":
+            depth += 1
+        elif c == ")":
+            depth -= 1
+            if depth == 0:
+                return i + 1
+        i += 1
+    return len(cmd)
+
+
+def poll_code(cmd, words, depth=0):
+    """The code text of a command line: every quoted string is a `\x00n\x00` token (its text in `words[n]`), heredoc bodies and `#` comments are
+    dropped, while a `$(…)` inside double quotes and the string after `bash -c` stay code. So `echo "until pgrep -f x"`, a commit message or a
+    heredoc that writes a loop to a file holds no loop."""
+    out, i, n, heredocs = [], 0, len(cmd), []
+    while i < n:
+        c = cmd[i]
+        if c == "\\":
+            out.append(cmd[i:i + 2])
+            i += 2
+        elif c in "'\"":
+            j, buf = i + 1, []
+            while j < n and cmd[j] != c:
+                if c == '"' and cmd[j] == "\\" and j + 1 < n:
+                    buf.append(cmd[j:j + 2])
+                    j += 2
+                    continue
+                buf.append(cmd[j])
+                j += 1
+            text = "".join(buf)
+            if depth < SHELL_DEPTH and POLL_SHELL_C.search("".join(out)):
+                out.append(" " + poll_code(text, words, depth + 1) + " ")
+            else:
+                words.append(text)
+                out.append("\x00%d\x00" % (len(words) - 1))
+                if c == '"':
+                    k = 0
+                    while depth < SHELL_DEPTH and k < len(text):
+                        k = text.find("$(", k)
+                        if k < 0:
+                            break
+                        e = poll_close(text, k + 1)
+                        out.append(" " + poll_code(text[k:e], words, depth + 1) + " ")
+                        k = e
+            i = j + 1
+        elif c == "#" and (i == 0 or cmd[i - 1] in " \t\n;&|("):
+            while i < n and cmd[i] != "\n":
+                i += 1
+        elif cmd.startswith("<<", i) and not cmd.startswith("<<<", i):
+            m = re.match(r"<<-?\s*(['\"]?)(\w+)\1", cmd[i:])
+            if m:
+                heredocs.append(m.group(2))
+                out.append(" ")
+                i += m.end()
+            else:
+                out.append(c)
+                i += 1
+        elif c == "\n" and heredocs:
+            out.append("\n")
+            rest = cmd[i + 1:].split("\n")
+            skip = 0
+            while heredocs and skip < len(rest):
+                if rest[skip].strip() == heredocs[0]:
+                    heredocs.pop(0)
+                skip += 1
+            i += 1 + sum(len(l) + 1 for l in rest[:skip])
+            heredocs = []
+        else:
+            out.append(c)
+            i += 1
+    return "".join(out)
+
+
+def poll_word(g, words):
+    """The pattern word of a POLL_PGREP / POLL_PSGREP match, its quote token resolved."""
+    pat = next((x for x in g.groups()[1:] if x is not None), "")
+    t = POLL_TOKEN.fullmatch(pat)
+    return words[int(t.group(1))] if t else pat
+
+
+def poll_loops(code):
+    """(condition, body) of every `until` / `while` loop of a code text: the text between the keyword and its `do`, and from `do` to the next `done`."""
+    loops = []
+    for m in POLL_LOOP.finditer(code):
+        d = re.search(r"(?:^|[\s;&|)])do(?=\s|$)", code[m.end():])
+        if not d:
+            continue
+        cond_end = m.end() + d.start()
+        rest = code[m.end() + d.end():]
+        e = re.search(r"(?:^|[\s;&|)])done(?=[\s;&|)]|$)", rest)
+        loops.append((code[m.end():cond_end], rest[:e.start()] if e else rest))
+    return loops
+
+
+def poll_self_match(cmd):
+    """The `pgrep -f` / `ps | grep` pattern of a wait loop that matches the loop's own command line (so the count is never 0 and the loop never ends):
+    (tool, pattern) or None. Read on the code text (poll_code: quoted text, heredoc bodies and comments are no loop); the probe must sit in an `until` /
+    `while` condition, or in the body of a loop that sleeps. No `timeout N` wrapper and no `grep -v grep`; the pattern is tried as a regex against
+    the command line itself (what `pgrep -f` sees), so a bracketed `[t]est` (which does not match its own text) passes."""
+    words = []
+    code = poll_code(cmd, words)
+    loops = poll_loops(code)
+    if not loops or re.search(r"\bg?timeout\s+(?:-\S+\s+)*\d", code):
+        return None
+    for g in re.finditer(r"\bgrep\s+(?:-\w+\s+)*-\w*v\w*\s+([^\s;&|)]+)", code):
+        t = POLL_TOKEN.fullmatch(g.group(1))
+        if (words[int(t.group(1))] if t else g.group(1)) == "grep":
+            return None
+    for cond, body in loops:
+        for part in (cond, body) if re.search(r"\bsleep\b", body) else (cond,):
+            found = [("pgrep -f" if g.group(0).startswith("pgrep") else "pkill -f", g) for g in POLL_PGREP.finditer(part)
+                     if re.search(r"(?:^|\s)(?:-[a-zA-Z0-9]*f[a-zA-Z0-9]*|--full)(?=\s|$)", g.group(1))]
+            found += [("ps | grep", g) for g in POLL_PSGREP.finditer(part)]
+            for tool, g in found:
+                pat = poll_word(g, words)
+                if not pat or "$" in pat or "\x00" in pat:
+                    continue  # a variable: its value is not in the text
+                try:
+                    hit = re.search(pat, cmd) is not None
+                except re.error:
+                    hit = pat in cmd
+                if hit:
+                    return tool, pat
+    return None
+
+
+def poll_unbounded(data):
+    """A background Bash call whose command (its code text: poll_code) is an `until` / `while` loop with `sleep` and no bound (no `timeout N`, no
+    counter, no `seq` / `for` limit, no `kill -0` / `wait` on a PID): it runs until killed when its condition never turns."""
+    ti = data.get("tool_input") or {}
+    if ti.get("run_in_background") is not True:
+        return False
+    code = poll_code(ti.get("command") or "", [])
+    return bool(any(re.search(r"\bsleep\b", body) for _, body in poll_loops(code))
+                and not re.search(r"\bg?timeout\s", code) and not re.search(r"\bkill\s+-0\s|\bwait\b", code) and not POLL_COUNTER.search(code))
+
+
+def poll_guard_mode(cwd):
+    """`- Poll guard = warn | deny | off` (default warn)."""
+    return select_override(cwd, "Poll guard")
+
+
+def poll_guard(data):
+    """PreToolUse on Bash, the main session and agents: a wait loop that never ends. A self-matching wait (poll_self_match: `pgrep -f x` in a
+    loop that has `x` in its own command line) is warned, or denied under `Poll guard = deny`; an unbounded background poll (poll_unbounded) is
+    a note only. Prints the note (or the denial) and returns True when it did. Fails open: a parse error says nothing."""
+    if data.get("tool_name") != "Bash":
+        return False
+    try:
+        cmd = (data.get("tool_input") or {}).get("command") or ""
+        hit = poll_self_match(cmd)
+        loose = not hit and poll_unbounded(data)
+        if not hit and not loose:
+            return False
+        sid = data.get("session_id", "")
+        try:
+            st = load_state(sid) if sid else {}
+        except Exception:
+            st = {}
+        mode = poll_guard_mode(project_root(data, st))
+    except Exception:
+        return False
+    if mode == "off":
+        return False
+    if hit:
+        tool, pat = hit
+        fix = ("[" + pat[0] + "]" + pat[1:]) if pat[0].isalnum() else "[x]" + pat
+        msg = (f"abofles: self-matching wait — `{tool} {pat}` matches this loop's own command line, so the count never reaches 0 and the loop never ends. "
+               f"Bracket the first character (`{'ps aux | grep' if tool == 'ps | grep' else tool} '{fix}'`), wait on a PID (`wait $PID`, `while kill -0 $PID`), or wrap it in `timeout N`")
+        if mode == "deny":
+            deny(msg)
+    else:
+        msg = ("abofles: unbounded background poll — this `until` / `while` loop with `sleep` has no bound, so it runs until killed if its condition never turns. "
+               "Wrap it in `timeout <N> bash -c '…'` or count the rounds (`i=$((i+1)); [ $i -ge N ] && break`)")
+    print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": msg}}))  # context only: the permission flow (the user's prompt) stays untouched
+    return True
+
+
 MEMO_AGENT_CMDS = ("list", "merge-decisions", "move-item", "drop-item", "drop-decision", "archive-session", "rewrite-now")  # the memo.py subcommands the memo agent may call (not show or path: `show --scope all` reads other projects)
 MEMO_AGENT_BAD = re.compile(r"[;&|<>`\r\n]|\$[({]")  # a chained command, a pipe, a redirect, a substitution: none of them in the command line of the memo agent
 MEMO_AGENT_HEREDOC = re.compile(r"\s<<-?\s*(['\"])([A-Za-z_]\w*)\1\s*$")  # the one allowed `<`: a quoted heredoc (rewrite-now's text), whose body the shell never expands
@@ -7507,6 +7709,8 @@ def guard(data):
         pass
     if git_guard(data):
         return  # a risky git command: its note (or denial) is this call's output; it is no read either
+    if poll_guard(data):
+        return  # a wait loop that never ends: its note (or denial) is this call's output; it is no read either
     if in_subagent(data):
         return
     if tool.startswith("mcp__"):

@@ -53,6 +53,7 @@ const KEY_INFO: Record<string, { group: (typeof GROUPS)[number]; help: string }>
   Questions: { group: 'Agents', help: 'A Judge answers first' },
   'Budget raise': { group: 'Agents', help: 'auto: +half the start budget, twice at most, then asks; ask: always asks' },
   'Git guard': { group: 'Agents', help: 'Warn or deny git writes outside the git agent, or off' },
+  'Poll guard': { group: 'Agents', help: 'Warn or deny a wait loop that never ends (pgrep -f matching itself, no timeout), or off' },
   'Prompt checkup': { group: 'Agents', help: 'Check each agent prompt: header, Line cap, files, done — warn, deny or off' },
   'Loop guard': { group: 'Agents', help: 'Rounds with no word from you before a fix or Judge loop stops and asks you; off = never' },
   'Sub sessions': { group: 'Agents', help: 'Open sub sessions one session may start; 0 = none allowed; off = no cap' },

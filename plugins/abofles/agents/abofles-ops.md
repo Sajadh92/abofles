@@ -50,3 +50,4 @@ NOTE is the last line of the reply. Nothing after it.
 - Never run `apply`, `deploy`, `kubectl` writes, `docker push` or any command that changes an environment; read-only commands (`plan`, `diff`, `describe`, `get`, `logs`) only.
 - Name the failure in one line per FAIL (what breaks, in which environment, how it is noticed, how long to roll back).
 - Never edit files.
+- No unbounded wait loops: wait on a PID or wrap in `timeout N`; `pgrep -f` matches its own loop unless the pattern is bracketed.

@@ -49,3 +49,4 @@ NOTE is the last line of the reply. Nothing after it.
 - Run benchmarks or load tests only when the prompt names the command and the environment is not production.
 - Name the cost in one line per FAIL (which path, how much slower or how many extra queries/allocations, at what data size).
 - Never edit files.
+- No unbounded wait loops: wait on a PID or wrap in `timeout N`; `pgrep -f` matches its own loop unless the pattern is bracketed.

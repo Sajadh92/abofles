@@ -81,3 +81,4 @@ LEFT: what the prompt asked for that you did not do, and why (or "none")
 - `CONFIDENCE: high` when you read the state after the last action and it matches the goal. `medium` when something you could have checked was left unchecked. `low` when you had to guess the base branch, the remote or the intent of a conflict side.
 - Paths relative to the repo root; never `/Users/…`. Never wrap the reply in a code fence.
 - LEFT is the last line of the reply. Nothing after it.
+- No unbounded wait loops: wait on a PID or wrap in `timeout N`; `pgrep -f` matches its own loop unless the pattern is bracketed.

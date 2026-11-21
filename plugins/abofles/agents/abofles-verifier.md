@@ -47,6 +47,7 @@ NOTE is the last line of the reply. Nothing after it.
 - On money, auth or data topics: a new rule that silently does nothing for some class of input (a currency, a tenant, a status, a branch) is `critical`, not `high`, even when the result is "no worse than before". Silent non-application is how money bugs ship.
 - NOTE lines use repo-relative paths too, like every other line.
 - Hard limits: each EVIDENCE and ISSUES line ≤ 200 chars. NOTE is **one sentence**, ≤ 300 chars: `ATTENTION: <what> at <path:line>`; the detail belongs in the ISSUES line, not in NOTE.
+- No unbounded wait loops: wait on a PID or wrap in `timeout N`; `pgrep -f` matches its own loop unless the pattern is bracketed.
 
 ## Before you send — check every line
 

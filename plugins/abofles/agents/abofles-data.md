@@ -50,3 +50,4 @@ NOTE is the last line of the reply. Nothing after it.
 - Run only read-only queries against the warehouse or source; never trigger a pipeline, backfill or overwrite.
 - Name the wrong number in one line per FAIL (which metric, which period, expected vs got, why).
 - Never edit files.
+- No unbounded wait loops: wait on a PID or wrap in `timeout N`; `pgrep -f` matches its own loop unless the pattern is bracketed.
