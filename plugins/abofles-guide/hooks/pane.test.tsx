@@ -2456,6 +2456,10 @@ test('the task list follows update_plan: items, advance, done/start, wrap_up; To
   p = applyPlan(p, UP, { done: [2], start: 3 }, {}, 3)
   expect(p?.items.map(x => x.status)).toEqual(['completed', 'completed', 'in_progress'])
   expect(p?.closed).toBe(false)
+  // a wrap-up with two or more steps open leaves the list as it is (the app's goes on next turn); with one open it ticks it off
+  const mid = applyPlan(null, UP, { items: [{ content: 'a', status: 'completed' }, { content: 'b', status: 'in_progress' }, { content: 'c', status: 'pending' }] }, {}, 3)
+  expect(applyPlan(mid, 'mcp__ccd_turn__wrap_up', { recap: 'x' }, {}, 4)).toBeNull()
+  expect(applyPlan(mid, UP, { advance: true }, {}, 5)?.items.map(x => x.status)).toEqual(['completed', 'completed', 'in_progress'])
   p = applyPlan(p, 'mcp__ccd_turn__wrap_up', { recap: 'x' }, {}, 4)
   expect(p?.items.every(x => x.status === 'completed')).toBe(true)
   expect(p?.closed).toBe(true)

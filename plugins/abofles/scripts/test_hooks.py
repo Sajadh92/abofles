@@ -4962,7 +4962,13 @@ def main():
         now_ = HG.sess_read(pm_, "planmemo1")["Now"]
         check("memo Now: a list call writes it, marked from task list", "· from task list" in now_.splitlines()[0] and "Task      step 2 of 4 — B" in now_)
         run("plan", {"session_id": "planmemo1", "cwd": pm_, "tool_name": "mcp__ccd_turn__wrap_up", "tool_input": {"recap": "r"}}, led)
-        check("memo Now: wrap_up closes the list and takes the step out of Now", "step " not in HG.sess_read(pm_, "planmemo1")["Now"] and "none — between tasks" in HG.sess_read(pm_, "planmemo1")["Now"])
+        check("tasks: wrap_up with 3 steps open leaves the list open, as the app does: Now keeps the step", gstate("planmemo1").get("plan_open") is True
+              and [x["status"] for x in gstate("planmemo1")["plan"]["items"]] == ["completed", "in_progress", "pending", "pending"] and "step 2 of 4" in HG.sess_read(pm_, "planmemo1")["Now"])
+        run("plan", {"session_id": "planmemo1", "cwd": pm_, "tool_name": UP, "tool_input": {"advance": True}}, led)
+        check("tasks: the next turn's advance goes on from there", [x["status"] for x in gstate("planmemo1")["plan"]["items"]] == ["completed", "completed", "in_progress", "pending"])
+        run("plan", {"session_id": "planmemo1", "cwd": pm_, "tool_name": UP, "tool_input": {"done": [3], "start": 4}}, led)
+        run("plan", {"session_id": "planmemo1", "cwd": pm_, "tool_name": "mcp__ccd_turn__wrap_up", "tool_input": {"recap": "r"}}, led)
+        check("memo Now: wrap_up with one step open closes the list and takes the step out of Now", gstate("planmemo1").get("plan_open") is False and "step " not in HG.sess_read(pm_, "planmemo1")["Now"] and "none — between tasks" in HG.sess_read(pm_, "planmemo1")["Now"])
         run("plan", {"session_id": "planmemo1", "cwd": pm_, "tool_name": UP, "tool_input": {"items": its_}}, led)
         HG.memo_now(pm_, "Task      my own words\nNext      mine", "planmemo1")
         run("plan", {"session_id": "planmemo1", "cwd": pm_, "tool_name": UP, "tool_input": {"advance": True}}, led)

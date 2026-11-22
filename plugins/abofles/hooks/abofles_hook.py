@@ -1545,7 +1545,9 @@ def plan_apply(prev, tool, ti):
     (its id is in the result, not in the hook's mirror) leaves the list as it is."""
     s = [dict(x) for x in prev or []]
     if tool == "mcp__ccd_turn__wrap_up":
-        return [{**x, "status": "completed"} for x in s]
+        # The app checks its list off at the wrap-up only when one step is left open: with two or more open the list goes on, and the
+        # next turn's `advance` picks it up where it stands (a session wrapped up at step 2 of 6, then advance said "step 3 of 6").
+        return [{**x, "status": "completed"} for x in s] if sum(x["status"] != "completed" for x in s) <= 1 else s
     if tool == "TodoWrite":
         return [y for y in (plan_step(x) for x in ti.get("todos") or []) if y][:PLAN_STEP_MAX]
     if tool == "TaskCreate":

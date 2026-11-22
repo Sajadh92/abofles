@@ -51,8 +51,9 @@ export function applyPlan(p: Plan | null, tool: string, a: Record<string, unknow
       return { items: next, ts: at, closed: next.length > 0 && next.every(x => x.status === 'completed') }
     }
     case 'mcp__ccd_turn__wrap_up':
-      // the app checks its list off at the wrap-up: the pane does too
-      if (!p || items.length === 0) return null
+      // The app checks its list off at the wrap-up only when one step is left open: with two or more open the list goes on, and the
+      // next turn's `advance` picks it up where it stands (a session wrapped up at step 2 of 6, then advance said "step 3 of 6").
+      if (!p || items.length === 0 || items.filter(x => x.status !== 'completed').length > 1) return null
       return { items: items.map(x => ({ ...x, status: 'completed' as const })), ts: at, closed: true }
     case 'TodoWrite': {
       if (!Array.isArray(a.todos)) return null

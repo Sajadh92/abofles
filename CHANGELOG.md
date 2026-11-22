@@ -2,6 +2,10 @@
 
 All notable changes to the plugins in this marketplace.
 
+## abofles 2.14.2 · abofles-guide 0.16.1 — 2026-11-22
+
+- abofles-guide, abofles: **the Tasks card follows the app's list after a wrap-up.** A `wrap_up` used to mark every step done and close the list, so when the next turn went on with `advance` (the app said "step 3 of 6"), the pane had nothing left to move, and `Tasks hide = auto` hid the card at each turn end. Now a `wrap_up` ticks the list off only when one step is left open; with two or more open the list stays as it is, the card shows it Paused, and the next `advance` moves it on. The hook's copy of the list follows the same rule, so the add-a-step and tick notes keep working while the list is open.
+
 ## abofles 2.14.1 — 2026-11-21
 
 - abofles: **Poll guard: a `timeout` counts only when it wraps the loop.** Any `timeout N` anywhere in the command used to silence the check, so `timeout 5 curl x; until pgrep -f y; do sleep 1; done` passed although the timeout bounds only `curl`. Now a `timeout` (or `gtimeout`, with `-s KILL`, `-k 5` or a `$T` duration) exempts a loop only when the loop follows it in the same command, as in `timeout 60 bash -c 'until …'`. A timeout on an earlier or later command, or inside the loop body, no longer hides it. The background-loop note uses the same rule.
