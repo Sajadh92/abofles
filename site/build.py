@@ -51,7 +51,16 @@ def facts():
         'versions': len(versions),
         'first_release': versions[-1][1] if versions else '',
         'latest_date': versions[0][1] if versions else '',
+        'news': news(),
     }
+
+
+def news():
+    """The home page's NEW pill: the newest version's first bold phrase, so the pill never names an older feature than its version."""
+    sec = re.split(r'^## ', CHANGELOG, flags=re.M)
+    m = re.search(r'\*\*(.+?)\*\*', sec[1]) if len(sec) > 1 else None
+    t = m.group(1).strip().rstrip('.') if m else 'See what changed'
+    return t[:1].upper() + t[1:]
 
 
 F = facts()
@@ -64,24 +73,23 @@ def fmt_int(n):
 
 # ---------------------------------------------------------------- inline markdown (the subset CHANGELOG / README use)
 def inline(md):
-    parts = re.split(r'(`[^`]+`)', md)
-    out = []
-    for p in parts:
-        if p.startswith('`') and p.endswith('`') and len(p) > 1:
-            out.append(f'<code>{esc(p[1:-1])}</code>')
-            continue
-        t = esc(p, quote=False)
-        t = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', t)
-        t = re.sub(r'(?<![\w*])\*(?!\s)(.+?)(?<!\s)\*(?![\w*])', r'<em>\1</em>', t)
+    # Code spans are set aside first, so bold, italics and links may wrap them: `**a `b` c**` is one <strong> with a <code> inside.
+    codes = []
 
-        def link(m):
-            text, url = m.group(1), m.group(2)
-            if not re.match(r'https?://', url):
-                url = f'{REPO}/blob/main/{url.lstrip("./")}'
-            return f'<a href="{esc(url)}" rel="noopener">{text}</a>'
-        t = re.sub(r'\[([^\]]+)\]\(([^)\s]+)\)', link, t)
-        out.append(t)
-    return ''.join(out)
+    def keep(m):
+        codes.append(f'<code>{esc(m.group(1))}</code>')
+        return f'\x00{len(codes) - 1}\x00'
+    t = esc(re.sub(r'`([^`]+)`', keep, md), quote=False)
+    t = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', t)
+    t = re.sub(r'(?<![\w*])\*(?!\s)(.+?)(?<!\s)\*(?![\w*])', r'<em>\1</em>', t)
+
+    def link(m):
+        text, url = m.group(1), m.group(2)
+        if not re.match(r'https?://', url):
+            url = f'{REPO}/blob/main/{url.lstrip("./")}'
+        return f'<a href="{esc(url)}" rel="noopener">{text}</a>'
+    t = re.sub(r'\[([^\]]+)\]\(([^)\s]+)\)', link, t)
+    return re.sub(r'\x00(\d+)\x00', lambda m: codes[int(m.group(1))], t)
 
 
 def md_block(md):
@@ -296,7 +304,7 @@ def page(path, title, desc, body, lang='en', ld=None, crumbs=None, extra_head=''
 
 def sub(text):
     """{{fact}} placeholders in hand-written pages."""
-    vals = {**{k: str(v) for k, v in F.items()}, 'topics_fmt': fmt_int(F['topics']), 'repo': REPO, 'insta': INSTA}
+    vals = {**{k: str(v) for k, v in F.items()}, 'news': inline(F['news']), 'topics_fmt': fmt_int(F['topics']), 'repo': REPO, 'insta': INSTA}
 
     def rep(m):
         key = m.group(1)
