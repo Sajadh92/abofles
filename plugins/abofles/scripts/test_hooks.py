@@ -4166,6 +4166,11 @@ def close_8a_tests(check):
         check("8A.10: the guard refuses sort -o, uniq's output file, sed w/e, tree -o, rg --pre, git grep -O, --ext-diff, git remote writes, an escaped-quote redirect, `$(` in double quotes, memo show (any scope: 8D drops it)",
               all(g(c) for c in bad))
         check("8A.10: ... and still lets the reads through (a quoted `>`, `2>/dev/null`, git remote -v / get-url)", not any(g(c) for c in ok))
+        gh_ok = ["gh release list -R Sajadh92/abofles -L 3", "gh release view abofles--v2.15.2 -R Sajadh92/abofles", "gh -R o/r release view v1 --json name,body -q .name"]
+        gh_bad = ["gh release create v9 -R o/r --notes x", "gh release delete v1 -R o/r", "gh release edit v1 --latest", "gh release upload v1 f", "gh release download v1",
+                  "gh release view v1 --web", "gh pr create --fill", "gh api repos/o/r/releases", "gh -R release create v1", "gh"]
+        check("close agent: gh release list / view pass (read-only, -R before or after); every other gh call, a release write and --web are refused",
+              not any(g(c) for c in gh_ok) and all(g(c) for c in gh_bad))
 
         # ── 8A.11 staleness: Bash PostToolUse, SubagentStop, actions in the fingerprint, the launch root, worktrees ──
         R11 = repo("e11_stale", overrides=["Close agent = off"]); S11 = "e11stal1-aaaa-bbbb-cccc"; mk(S11, R11, work={str(R11): 1})

@@ -9025,7 +9025,7 @@ def memo_agent_guard(data):
 
 
 CLOSE_AGENT_READS = {"grep", "rg", "cat", "head", "tail", "wc", "ls", "tree", "jq", "sort", "uniq", "cut", "stat", "file", "basename", "dirname", "realpath",
-                     "pwd", "echo", "printf", "diff", "cd", "test", "true", "date", "comm", "nl", "tr", "sed", "find", "git"}  # the close agent's Bash commands (read-only)
+                     "pwd", "echo", "printf", "diff", "cd", "test", "true", "date", "comm", "nl", "tr", "sed", "find", "git", "gh"}  # the close agent's Bash commands (read-only; gh: release list / view only)
 CLOSE_AGENT_GIT = {"status", "log", "show", "diff", "blame", "grep", "rev-parse", "rev-list", "ls-files", "merge-base", "describe", "cat-file", "for-each-ref",
                    "show-ref", "shortlog", "name-rev", "branch", "stash", "worktree", "remote", "config"}
 CLOSE_AGENT_MEMO = ("path", "list", "close-digest")  # memo.py subcommands that only read (no `show`: the digest holds what the agent judges with)
@@ -9192,6 +9192,28 @@ def close_agent_cmd_problem(cmd):
             bad = close_agent_git_problem(a)
             if bad:
                 return bad
+        if head == "gh":
+            bad = close_agent_gh_problem(a)
+            if bad:
+                return bad
+    return None
+
+
+def close_agent_gh_problem(a):
+    """Why a `gh` call of the close agent is refused, or None: only `gh release list` and `gh release view` (a ship's release and its notes,
+    read-only), never with --web / -w (opens a browser)."""
+    w, j = [], 0
+    while j < len(a):
+        if a[j] in ("-R", "--repo"):
+            j += 2  # its value names the repository, not a subcommand
+            continue
+        if not a[j].startswith("-"):
+            w.append(a[j])
+        j += 1
+    if w[:1] != ["release"] or len(w) < 2 or w[1] not in ("list", "view"):
+        return "gh " + " ".join(w[:2]) + " (allowed: gh release list, gh release view)"
+    if any(x in ("--web", "-w") or x.startswith("--web=") for x in a):
+        return "gh release view --web (opens a browser)"
     return None
 
 
