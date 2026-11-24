@@ -2,6 +2,10 @@
 
 All notable changes to the plugins in this marketplace.
 
+## abofles 2.15.4 — 2026-11-24
+
+- abofles: **a new close agent run replaces the earlier run's lines.** A re-check kept the close agent's lines from the run before, and a new run could only add lines, so an old `not checked` (for example a release the agent could not see then) stayed even after the new run judged it ✓, and the verdict could not reach ✅. Now a re-check marks the earlier run's lines, the digest lists them apart for the agent to judge again, and the new run's first `close-add` (a line or `--none`) replaces them. A line you accepted in your own words stays.
+
 ## abofles 2.15.3 — 2026-11-24
 
 - abofles: **the close agent can check a ship's GitHub release.** It may now run `gh release list` and `gh release view` (read-only, with `-R <owner/repo>`), so a rule or memory that asks for a release on every ship is judged ✓ or ⛔ instead of `not checked` after each ship. Every other `gh` call, any release write (create, edit, delete, upload, download) and `--web` stay refused.

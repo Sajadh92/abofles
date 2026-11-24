@@ -4030,6 +4030,28 @@ def close_8a_tests(check):
               rn.returncode == 0 and rec(S1)["agent"] == "yes" and len(rec(S1)["lines"]) == len(r4["lines"]) and "found nothing" in rn.stdout)
         check("8A.3: the fingerprint's ledger count leaves the close agent's own rows out", HM.close_ledger_n(S1) == 0 and len(HM.ledger_rows(S1)) == 2)
         check("8A.2: close-add --none with other arguments is a usage error", cli(R1, S1, "close-add", "--none", "--text", "x").returncode == 2)
+        # ── a new close agent run replaces the earlier run's lines (they no longer stick as `not checked`); a line the owner accepted stays ──
+        Rr = repo("e1_rerun"); Sr = "e1rerun1-aaaa-bbbb-cccc"
+        mk(Sr, Rr, work={str(Rr): 1}, transcript_path=owner_transcript(Path(F.hh, "er.jsonl"), "Leave the chat note as it is for now."))
+        cli(Rr, Sr, "close-check"); agent_ran(Sr, Rr)
+        cli(Rr, Sr, "close-add", "not checked", "--src", "git", "--text", "release not seen", "--evidence", "gh refused")
+        cli(Rr, Sr, "close-add", "⚠", "--src", "chat", "--text", "a note only in chat", "--evidence", "digest ask")
+        lw = next(l["id"] for l in rec(Sr)["lines"] if l.get("src") == "chat")
+        cli(Rr, Sr, "close-waive", lw, "--trace", "Leave the chat note")
+        tx = cli(Rr, Sr, "close-check").stdout; rr1 = rec(Sr)
+        dj = json.loads(cli(Rr, Sr, "close-digest", "--json").stdout)
+        check("close rerun: a re-check marks the earlier run's agent lines carried; the digest lists the unaccepted one under earlier, not open; the text says earlier run",
+              all(l.get("carried") for l in rr1["lines"] if l.get("by") == "agent") and [l["text"] for l in dj["earlier"]] == ["release not seen"]
+              and not any(l["text"] == "release not seen" for l in dj["open"]) and "(earlier run)" in tx and rr1["verdict"] == "not checked")
+        agent_ran(Sr, Rr)
+        ra2 = cli(Rr, Sr, "close-add", "✓", "--src", "git", "--text", "release seen: Latest with notes", "--evidence", "gh release view v1")
+        rr2 = rec(Sr); ag2 = [(l["text"], bool(l.get("carried"))) for l in rr2["lines"] if l.get("by") == "agent"]
+        check("close rerun: the new run's first close-add drops the earlier run's unaccepted lines; the owner-accepted one stays; the verdict is ✅",
+              ra2.returncode == 0 and ("release not seen", True) not in ag2 and ("a note only in chat", True) in ag2
+              and ("release seen: Latest with notes", False) in ag2 and rr2["verdict"] == "✅")
+        cli(Rr, Sr, "close-check"); agent_ran(Sr, Rr); cli(Rr, Sr, "close-add", "--none")
+        check("close rerun: a new run's `- none` drops the earlier run's unaccepted lines too (only the accepted one is left)",
+              [l["text"] for l in rec(Sr)["lines"] if l.get("by") == "agent"] == ["a note only in chat"] and rec(Sr)["verdict"] == "✅")
         # auto at Stop keeps them too
         Ra = repo("e1_auto", overrides=["Close check = auto"]); Sa = "e1auto01-aaaa-bbbb-cccc"; mk(Sa, Ra, work={str(Ra): 1}); F.put_main(Ra)
         cli(Ra, Sa, "close-check"); agent_ran(Sa, Ra)

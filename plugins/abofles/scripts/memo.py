@@ -928,7 +928,8 @@ def close_agent_target(root, st, sid, cap=None):
 
 def close_record_of(lines, root, st, sid, fp=True, cap=None):
     """The st["close"] record of an inventory: lines (a waive of the stored check kept on a line of the same id and content — wkey; the close
-    agent's lines of the stored check kept while their target is unchanged — close_agent_target, the rule a line judges still worded the same),
+    agent's lines of the stored check kept while their target is unchanged — close_agent_target, the rule a line judges still worded the same —
+    and marked `carried`: the next close agent run's first close-add replaces them),
     verdict (close_verdict with `agent`), ts, fp (close_fp; `fp=False`: '' — the caller sets it after its own writes), turn_ts, stale (False),
     git_rule, agent: off (Close agent = off), yes (the stored check's agent run still holds), no (the close agent has not run for this check)."""
     old = st.get("close") if isinstance(st.get("close"), dict) else {}
@@ -939,7 +940,7 @@ def close_record_of(lines, root, st, sid, fp=True, cap=None):
         if w and l["state"] != "✓":
             l["waived"] = w
     agent = "off" if H.close_agent_mode(root) == "off" else "no"
-    ag = [dict(l) for l in oldl if l.get("by") == "agent"]
+    ag = [dict(l, carried=True) for l in oldl if l.get("by") == "agent"]  # an earlier run's: kept until a new close agent run replaces it (close-add)
     tgt = None
     if agent == "no" and (ag or old.get("agent") == "yes"):
         tgt = close_agent_target(root, st, sid, cap)
@@ -963,7 +964,7 @@ def close_text(rec, root, sid):
     judged = H.close_judged(lines)
     out = [f"Close check · {Path(root).name} · session {sid[:8]} · {time.strftime('%Y-%m-%d %H:%M', time.localtime(rec.get('ts') or time.time()))}"]
     for l in lines:
-        out.append(f"{l['state']:<11} {l['src']:<8} {l['text']}" + (" · by the close agent" if l.get("by") == "agent" else "")
+        out.append(f"{l['state']:<11} {l['src']:<8} {l['text']}" + (" · by the close agent" + (" (earlier run)" if l.get("carried") else "") if l.get("by") == "agent" else "")
                    + (" · judged by the close agent" if l["src"] == "rule" and l.get("by") != "agent" and l["id"] in judged else "") + f"  [{l['id']}]")
         if l.get("evidence"):
             out.append(f"{'':<20} evidence: {l['evidence']}")
@@ -1037,7 +1038,8 @@ def uniq_id(lines, want):
 def close_add_cmd(rest, root, st, sid):
     """`memo.py close-add <state> --text "<finding>" --evidence "<proof>" [--rule <name> | --src <word>] [--fix "<next step>"]` or
     `memo.py close-add --none`: the main session records one line the close agent returned (`--none`: its `- none`, no line). Only after a close
-    agent ran for the stored check (its ledger row is dated after the check). It only appends: a script line is never edited or removed.
+    agent ran for the stored check (its ledger row is dated after the check). It only appends: a script line is never edited or removed. The
+    first call of a new run (a line or --none) drops the earlier run's lines (`carried`) that the owner did not accept: the new run replaces them.
     `--rule <name>` judges the stored `Close:` rule line `rule:<name>` (⛔, ⚠ or ✓ settles it in the verdict; the rule line itself stays). Each
     line keeps its target (close_agent_target): a later check keeps it while that is unchanged. The record's `agent` turns yes; the verdict is
     counted again. The fingerprint is counted again after the write (the close agent's own row is never in it): a changed tree, HEAD or turn makes
@@ -1070,7 +1072,9 @@ def close_add_cmd(rest, root, st, sid):
             print("abofles: no close agent ran for the stored check — start abofles-close (header `abofles: Close Check / Verify · T2`) after "
                   "close-check, then record its lines")
             sys.exit(5)
-        lines = rec.get("lines") or []
+        # a new close agent run judges again what an earlier run said: its lines replace the earlier run's (`carried`), but one the owner accepted
+        # (waived) stays — the owner's words stand
+        lines = [l for l in rec.get("lines") or [] if not (l.get("by") == "agent" and l.get("carried") and not l.get("waived"))]
         if rule and not any(l.get("id") == f"rule:{rule}" and l.get("by") != "agent" for l in lines):
             print(f"abofles: no rule line rule:{rule} in the stored check (rules: " + ", ".join(l["id"][5:] for l in lines if l.get("src") == "rule" and l.get("by") != "agent") + ")")
             sys.exit(1)
@@ -1091,7 +1095,8 @@ def close_add_cmd(rest, root, st, sid):
             lines.append(line)
         if rec.get("agent") != "off":
             rec["agent"], rec["agent_target"] = "yes", tgt
-        rec["lines"], rec["verdict"] = lines, H.close_verdict_of(rec)
+        rec["lines"] = lines  # a new list (the earlier run's lines left out): set it before the verdict is counted from it
+        rec["verdict"] = H.close_verdict_of(rec)
         if not fresh:
             rec["stale"] = True
         stx["close"] = rec
@@ -1193,7 +1198,9 @@ def close_digest_cmd(rest, root, st, sid):
     out = {"session": sid, "project": root, "memo": str(memo_path(root)), "session_file": str(session_memo_path(root, sid)), "memory": str(memory_dir(st)),
            "verdict": rec.get("verdict") or "", "stale": bool(rec.get("stale")),
            "rules": [{"id": l["id"], "text": l.get("text") or ""} for l in lines if l.get("src") == "rule" and l.get("by") != "agent"],
-           "open": [{k: l.get(k) for k in ("id", "state", "src", "text")} for l in lines if l.get("state") != "✓" and not l.get("waived") and l.get("src") != "rule"],
+           "open": [{k: l.get(k) for k in ("id", "state", "src", "text")} for l in lines if l.get("state") != "✓" and not l.get("waived") and l.get("src") != "rule"
+                    and not (l.get("by") == "agent" and l.get("carried"))],
+           "earlier": [{k: l.get(k) for k in ("id", "state", "src", "text", "evidence")} for l in lines if l.get("by") == "agent" and l.get("carried") and not l.get("waived")],
            "transcript": "read" if dg is not None else "not readable", **(dg or {"asks": [], "replies": [], "answers": [], "tools": {}, "cut": {"asks": 0, "replies": 0, "answers": 0}})}
     if "--json" in rest:
         print(json.dumps(out, ensure_ascii=False, indent=1))
@@ -1203,6 +1210,8 @@ def close_digest_cmd(rest, root, st, sid):
          f"Stored check: Verdict {out['verdict']}" + (" (stale)" if out["stale"] else "") if rec else "Stored check: none — run memo.py close-check first",
          "", "## Close rules"] + [f"- {r['id']} — {r['text']}" for r in out["rules"]] + ([] if out["rules"] else ["- none"])
     p += ["", "## Open lines"] + [f"- {l['state']} {l['src']} · {l['text']}" for l in out["open"]] + ([] if out["open"] else ["- none"])
+    p += ["", "## Earlier close agent lines (judge each again: your lines replace these)"] + [f"- {l['state']} {l['src']} · {l['text']} · evidence then: {l.get('evidence') or '—'}"
+                                                                                             for l in out["earlier"]] + ([] if out["earlier"] else ["- none"])
     if dg is None:
         p += ["", "## Transcript", "- not readable: judge from the memo, the auto-memory and git only; a rule that needs the chat stays `not checked`"]
     else:
