@@ -38,6 +38,7 @@ import re
 import shlex
 import shutil
 import subprocess
+import tempfile
 import sys
 import threading
 import time
@@ -9266,9 +9267,33 @@ def close_verdict_of(rec):
     return close_verdict((rec or {}).get("lines") or [], (rec or {}).get("agent"))
 
 
+def close_scratch():
+    """The folders whose writes are scratch, never work: the system temp folders (ABOFLES_SCRATCH_DIRS, os.pathsep-separated, replaces them)."""
+    env = os.environ.get("ABOFLES_SCRATCH_DIRS")
+    dirs = env.split(os.pathsep) if env is not None else [tempfile.gettempdir(), "/tmp", "/private/tmp", "/var/folders", "/private/var/folders"]
+    return [os.path.realpath(d) for d in dirs if d]
+
+
+def close_work_keys(root, st):
+    """The work keys the close check looks at: every key but one in a scratch folder (close_scratch: a test repository in a temp folder or a
+    session's scratchpad, live or deleted since) outside the project root and the launch root. A project that itself lives in a temp folder
+    keeps its keys."""
+    homes = [os.path.realpath(x) for x in (root, st.get("root")) if x]
+    scratch = close_scratch()
+    def inside(p, top):
+        return p == top or p.startswith(top.rstrip(os.sep) + os.sep)
+    out = []
+    for k in st.get("work") or {}:
+        rk = os.path.realpath(k)
+        if any(inside(rk, d) for d in scratch) and not any(inside(rk, h) or inside(h, rk) for h in homes):
+            continue
+        out.append(k)
+    return out
+
+
 def close_repos(root, st):
-    """The repositories the fingerprint looks at: the top of every work key, else the project root; and the launch root (st root) always."""
-    tops = {os.path.realpath(repo_top(k) or k) for k in (st.get("work") or {})} or {os.path.realpath(root or os.getcwd())}
+    """The repositories the fingerprint looks at: the top of every work key (close_work_keys), else the project root; and the launch root (st root) always."""
+    tops = {os.path.realpath(repo_top(k) or k) for k in close_work_keys(root, st)} or {os.path.realpath(root or os.getcwd())}
     if st.get("root"):
         tops.add(os.path.realpath(repo_top(st["root"]) or st["root"]))
     return sorted(tops)
@@ -9466,7 +9491,7 @@ def bash_edit_scan(data):
     st = load_state(sid)
     if "started" not in st or not st.get("root"):
         return
-    roots = [k for k in (st.get("work") or {}) if isinstance(k, str) and os.path.isdir(k)][:5]
+    roots = [k for k in close_work_keys(project_root(data, st), st) if isinstance(k, str) and os.path.isdir(k)][:5]
     if not roots:
         return
     seen, changed = {}, []

@@ -2,6 +2,10 @@
 
 All notable changes to the plugins in this marketplace.
 
+## abofles 2.15.2 — 2026-11-24
+
+- abofles: **the close check leaves out test repositories in temp folders.** A git repository Claude made in a temp folder or a session's scratchpad (outside the project) counted as work, so its uncommitted files read as a blocker, and once the folder was deleted (a resumed session gets a new scratchpad) it stayed as `not checked: folder gone`, and the check could not reach ✅. Now such a repository is left out of the check, its fingerprint and the Bash edit scan. A project that itself lives in a temp folder keeps its own repository.
+
 ## abofles 2.15.1 · abofles-guide 0.17.1 — 2026-11-24
 
 - abofles-guide: **Ready to archive? is the last card on Home.** It matters at the end of a session, so the cards used all day (At a glance, Tasks, Running, Agents, Now, Last decision) stay above it.

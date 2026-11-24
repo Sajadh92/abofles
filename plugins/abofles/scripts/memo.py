@@ -267,9 +267,7 @@ GH = "gh"  # the GitHub CLI `Close PR check = on` asks (read-only: `gh pr list`)
 
 def close_scratch():
     """The folders whose writes are scratch, never work left outside: the system temp folders (ABOFLES_SCRATCH_DIRS, os.pathsep-separated, replaces them)."""
-    env = os.environ.get("ABOFLES_SCRATCH_DIRS")
-    dirs = env.split(os.pathsep) if env is not None else [tempfile.gettempdir(), "/tmp", "/private/tmp", "/var/folders", "/private/var/folders"]
-    return [os.path.realpath(d) for d in dirs if d]
+    return H.close_scratch()
 
 
 def under(path, top):
@@ -673,7 +671,7 @@ def close_inventory(root, st, sid, timeout=CLOSE_TIMEOUT, cap=None, pr=True):
         if rp and rp not in seen:
             seen.add(rp)
             repos.append((rp, name, wt))
-    for key in (st.get("work") or {}) or [root]:  # the fingerprint (close_repos) also reads the launch root
+    for key in H.close_work_keys(root, st) or [root]:  # the fingerprint (close_repos) also reads the launch root; scratch repositories are left out
         add(repo_top(key) or key, Path(repo_top(key) or key).name)
     try:
         subs = H.open_sub_sessions(sid, st, detail=True)

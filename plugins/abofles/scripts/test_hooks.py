@@ -3419,6 +3419,21 @@ def close_check_tests(check):
         subprocess.run(["git", "add", "-A"], cwd=R, capture_output=True); subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "c"], cwd=R, capture_output=True)
         F.hrun("post_bash", {"session_id": S, "cwd": str(R), "tool_name": "Bash", "tool_input": {"command": "git commit -m c"}, "tool_response": {"stdout": ""}})
         check("close record: a Bash command that changes no file (ls) or only commits stamps no edit", HM.load_state(S)["edit_ts"][str(R)] == e_b)
+        # a test repository in a scratch folder (a session's scratchpad, deleted since) is never this session's work to close
+        Scr = Path(F.hh, "scratchtop"); Gone = Scr / "rh"; Gone.mkdir(parents=True)
+        st_s = HM.load_state(S); st_s.setdefault("work", {})[str(Gone)] = 2; HM.save_state(S, st_s); shutil.rmtree(Gone)
+        os.environ["ABOFLES_SCRATCH_DIRS"] = str(Scr)
+        try:
+            keys_s = HM.close_work_keys(str(R), HM.load_state(S))
+            lines_s = json.loads(subprocess.run([sys.executable, F.memopy, "close-check", "--json", "--session", S], cwd=str(R), capture_output=True, text=True,
+                                                env=dict(env, ABOFLES_SCRATCH_DIRS=str(Scr))).stdout or "{}").get("lines") or []
+        finally:
+            os.environ.pop("ABOFLES_SCRATCH_DIRS", None)
+            st_s = HM.load_state(S); st_s["work"].pop(str(Gone), None); HM.save_state(S, st_s)  # later checks run with no scratch folder set
+        check("close check: a work repository in a scratch folder outside the project (deleted since) is left out: no `folder gone` line, the project stays",
+              str(Gone) not in keys_s and str(R) in keys_s and not any("folder gone" in l["text"] for l in lines_s) and any(l["src"] == "git" for l in lines_s))
+        check("close check: a project that itself lives in a scratch folder keeps its own work keys",
+              HM.close_work_keys(str(R), {"root": str(R), "work": {str(R): 1}}) == [str(R)])
 
         # ── close-check end to end: Needs you, claims, sub sessions, actions, outside, memory, Close: rules ──
         HM.memo_needs(str(R), S, "owner decision: cap in IQD only?", str(R))
