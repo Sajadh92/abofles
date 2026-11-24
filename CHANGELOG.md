@@ -2,6 +2,12 @@
 
 All notable changes to the plugins in this marketplace.
 
+## abofles 2.15.1 · abofles-guide 0.17.1 — 2026-11-24
+
+- abofles-guide: **Ready to archive? is the last card on Home.** It matters at the end of a session, so the cards used all day (At a glance, Tasks, Running, Agents, Now, Last decision) stay above it.
+- abofles: **the close check stays fresh when the close agent hands back.** The app runs agents in the background, so the close agent always returns in a new turn, and that turn marked the verdict out of date: a fresh ✅ was never reachable. Now only a turn you start (a message or a slash command) makes it stale. A hand-back turn does not, and any agent's real work still does, through the repositories and the ledger.
+- abofles: **a file written by a Bash command counts as an edit.** A `sed -i`, a heredoc or a script that changes a file in a work repository now moves the close check's "last edit", so its Verify line turns ⚠ until the Verify command runs again. Before, only Edit and Write calls counted, and a Verify line could read ✓ over code changed after the last test run. A command that only commits or reads stamps nothing.
+
 ## abofles 2.15.0 · abofles-guide 0.17.0 — 2026-11-24
 
 - abofles, abofles-guide: **Close check — "Ready to archive?" with proof.** `/abofles:close` runs `memo.py close-check`. It lists what is still open as evidence lines (⛔ blocker, ⚠ check, ✓ done, `not checked`). It checks git on every branch and worktree, unpushed or uncommitted work, open steps in Now and Left, sub sessions, background work, and actions done outside. A new read-only agent, `abofles-close` (Sonnet 5.5), then judges your own rules and what you decided in chat. The ✅ comes only after it judged. The verdict is stored with a fingerprint: an edit, a new message, a Bash command or an agent's end marks it out of date. A reply that says "ready to archive" (or "جاهز للأركايف", "safe to archive", "archivable", …) with no fresh ✅ is refused once at Stop. An archive with a ⛔ is refused. `close-waive` accepts a line only when the trace quotes your own message. New keys: `Close check = ask | auto` (default `ask`), `Close git = pushed | committed | local` (default `pushed`), `Close agent = on | off` (default `on`), `Close PR check = on | off` (default `off`), `Close place = pane | chat | off` (default `pane`), and your own rules as `Close: <name> = <rule>`.

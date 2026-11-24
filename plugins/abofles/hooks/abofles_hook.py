@@ -9299,10 +9299,21 @@ def close_ledger_n(sid):
     return n
 
 
+def close_turn(st):
+    """The turn the close check's fingerprint counts: st["close_turn"], moved at every turn start but an agent's or a background command's
+    hand-back (its work is in the repositories and the ledger already); turn_ts in a state from older hooks."""
+    return st["close_turn"] if "close_turn" in st else (st.get("turn_ts") or 0)
+
+
+def handback_prompt(ptxt):
+    """True for the harness's hand-back envelope (a `<task-notification>` of an agent or a background command), not a slash command nor a typed prompt."""
+    return prompt_envelope(ptxt) and "<task-notification>" in (ptxt or "")[:2000]
+
+
 def close_fp_tail(h, n, st):
     """The fingerprint from the repositories' hash `h` (close_fp_repos, left unchanged), a ledger length `n` and the state's turn_ts."""
     h = h.copy()
-    h.update(f"\0ledger {n}\0turn {st.get('turn_ts') or 0!r}".encode())
+    h.update(f"\0ledger {n}\0turn {close_turn(st)!r}".encode())
     acts = [[a.get("tool"), a.get("ts")] for a in st.get("actions") or [] if isinstance(a, dict)]  # a connector call or an outside write since the check moves it too
     h.update(b"\0actions " + json.dumps(acts).encode() + b"\0outside " + json.dumps(list(st.get("outside") or [])).encode())
     return h.hexdigest()
@@ -9411,11 +9422,82 @@ def post_bash(data):
     failed = isinstance(resp, dict) and (bool(resp.get("interrupted")) or any(isinstance(resp.get(k), int) and not isinstance(resp.get(k), bool) and resp.get(k) != 0
                                                                             for k in ("exitCode", "exit_code", "returnCode", "code")))
     try:
+        bash_edit_scan(data)  # a file the command wrote is an edit too: before the Verify stamp, so a Verify run after it still counts
+    except Exception:
+        pass
+    try:
         if not failed:
             verify_stamp(data)
     except Exception:
         pass
     close_touch(data)
+
+
+BASH_TREE_MAX = 200  # changed files kept per work root for bash_edit_scan
+
+
+def bash_tree(rp, timeout):
+    """The changed files of repository `rp` (its porcelain status) as {path: "size:mtime_ns"}; None when git cannot say."""
+    r = subprocess.run(["git", "--no-optional-locks", "status", "--porcelain=v1", "-z", "--untracked-files=all"], cwd=rp, capture_output=True, timeout=timeout)
+    if r.returncode != 0:
+        return None
+    d = {}
+    for e in r.stdout.split(b"\0"):
+        if not e:
+            continue
+        p = os.fsdecode(e[3:] if len(e) > 3 and e[2:3] == b" " else e)  # a rename's second piece (the old path) has no status: stat fails, skipped
+        try:
+            f = os.stat(os.path.join(rp, p))
+        except (OSError, ValueError):
+            continue
+        d[p] = f"{f.st_size}:{f.st_mtime_ns}"
+        if len(d) >= BASH_TREE_MAX:
+            break
+    return d
+
+
+def bash_edit_scan(data):
+    """PostToolUse Bash: a file written by a command (sed -i, a heredoc, a script) counts as an edit, the same as an Edit or Write call: per work
+    root, a changed file listed by git status whose size or mtime differs from the last look stamps st["edit_ts"][root]. Files that leave the
+    list (a commit, a checkout) stamp nothing. The first look of a root only records it. At most CLOSE_TIMEOUT per repository."""
+    sid = data.get("session_id", "")
+    if not sid:
+        return
+    st = load_state(sid)
+    if "started" not in st or not st.get("root"):
+        return
+    roots = [k for k in (st.get("work") or {}) if isinstance(k, str) and os.path.isdir(k)][:5]
+    if not roots:
+        return
+    seen, changed = {}, []
+    old = st.get("bash_tree") or {}
+    for rp in roots:
+        try:
+            d = bash_tree(rp, CLOSE_TIMEOUT)
+        except Exception:
+            d = None
+        if d is None:
+            continue
+        o = old.get(rp)
+        if isinstance(o, dict) and any(o.get(p) != v for p, v in d.items()):
+            changed.append(rp)
+        seen[rp] = d
+    if not seen:
+        return
+    with state_lock(sid):
+        st = load_state(sid)
+        if "started" not in st:
+            return
+        bt = st.setdefault("bash_tree", {})
+        bt.update(seen)
+        for k in [k for k in bt if k not in (st.get("work") or {})]:
+            del bt[k]
+        if changed:
+            now = int(time.time())
+            et = st.setdefault("edit_ts", {})
+            for rp in changed:
+                et[rp] = now
+        save_state(sid, st)
 
 
 def close_body(close):
@@ -9687,7 +9769,7 @@ def prompt(data):
     try:
         st0 = load_state(sid)
         c0 = st0.get("close")
-        if isinstance(c0, dict) and not c0.get("stale") and "started" in st0:
+        if isinstance(c0, dict) and not c0.get("stale") and "started" in st0 and not handback_prompt((data.get("prompt") or "").lstrip()):
             close_section_write(project_root(data, st0), sid, dict(c0, stale=True))  # the new turn makes it stale below: the session file says so too
     except Exception:
         pass
@@ -9708,11 +9790,18 @@ def prompt(data):
         except Exception:
             pass
         notification = prompt_envelope(ptxt)  # only the harness's own envelope: a typed prompt that mentions "hand-back" or "task-notification" is the user's
+        if "close_turn" not in st and handback_prompt(ptxt):
+            st["close_turn"] = st.get("turn_ts") or 0  # a state from older hooks: the turn the stored check counted stays its turn
         st["turn_ts"] = time.time()  # every turn start (a notification too): the Stop hook drops a last_resolved older than this
         st["turn_offset"] = transcript_size(data.get("transcript_path") or st.get("transcript_path") or "")  # where this turn's text starts (the close check's ready gate reads from here)
         cl = st.get("close")
-        if isinstance(cl, dict) and not cl.get("stale") and cl.get("turn_ts") != st["turn_ts"]:
-            cl["stale"] = True  # turn_ts is in the close check's fingerprint: a verdict holds for the turn it ran in only
+        if not handback_prompt(ptxt):
+            # close_turn is in the close check's fingerprint: a verdict holds until the next turn the user (or a slash command) starts. A
+            # hand-back turn leaves it: the close agent itself hands back in one (the app runs agents in the background), and any other
+            # agent's work moves the repositories or the ledger, which the fingerprint counts.
+            st["close_turn"] = st["turn_ts"]
+            if isinstance(cl, dict) and not cl.get("stale"):
+                cl["stale"] = True
         if not notification:
             st["last_prompt_ts"] = time.time()  # the session the user types in: scripts pick it among several of one project
             loop_reset(st)  # the user spoke: every loop count starts over

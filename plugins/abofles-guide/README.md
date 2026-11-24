@@ -60,7 +60,7 @@ first rows and `Show all N` (`Show fewer` to fold it back).
   Tasks card (the session's task list, step by step, kept after the turn ends), the Agents page's spend card, where the work stands
   (Now, Next), and the latest decision and receipt. Its header says `N open`, or `guide clear` (amber while the close check has a
   blocker): the guide has nothing open, which is not the same as ready to archive.
-- **Ready to archive?** (Home, `Close place = pane`): the close check that `memo.py close-check` stored, drawn from state and never
+- **Ready to archive?** (Home's last card, `Close place = pane`): the close check that `memo.py close-check` stored, drawn from state and never
   from a chat sentence. The head is the stored verdict in words (`2 blockers`, `1 to check`, `Not checked`, `Out of date`, `Not yet`,
   `Yes`); under it the check's time, a note while agents or commands still run, while task steps are open, or while the close agent
   has not judged the check. One row per line, blockers first: a dot, the line (two lines at most; whole on `Full details`), and under

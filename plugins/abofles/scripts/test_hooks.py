@@ -3406,6 +3406,19 @@ def close_check_tests(check):
         check("close check: an edit after the last Verify run is ⚠ naming the Verify command; after the run it is ✓",
               [l["state"] for l in lv if l["src"] == "verify"] == ["⚠"] and "check_cap.py" in [l for l in lv if l["src"] == "verify"][0]["fix"]
               and [l["state"] for l in json.loads(cc(R, S, "--json").stdout)["lines"] if l["src"] == "verify"] == ["✓"])
+        # a file written by a Bash command (sed -i, a heredoc) is an edit too: the Verify line turns ⚠ again
+        time.sleep(1.1)
+        R.joinpath("a.py").write_text("x = 3  # by sed\n")
+        F.hrun("post_bash", {"session_id": S, "cwd": str(R), "tool_name": "Bash", "tool_input": {"command": "sed -i '' s/2/3/ a.py"}, "tool_response": {"stdout": ""}})
+        st_b = HM.load_state(S)
+        check("close record: a Bash command that changes a file in a work root stamps edit_ts after the last Verify run; the check reads ⚠ again",
+              st_b["edit_ts"][str(R)] > vt and [l["state"] for l in json.loads(cc(R, S, "--json").stdout)["lines"] if l["src"] == "verify"] == ["⚠"])
+        e_b = st_b["edit_ts"][str(R)]
+        time.sleep(1.1)
+        F.hrun("post_bash", {"session_id": S, "cwd": str(R), "tool_name": "Bash", "tool_input": {"command": "ls"}, "tool_response": {"stdout": ""}})
+        subprocess.run(["git", "add", "-A"], cwd=R, capture_output=True); subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "c"], cwd=R, capture_output=True)
+        F.hrun("post_bash", {"session_id": S, "cwd": str(R), "tool_name": "Bash", "tool_input": {"command": "git commit -m c"}, "tool_response": {"stdout": ""}})
+        check("close record: a Bash command that changes no file (ls) or only commits stamps no edit", HM.load_state(S)["edit_ts"][str(R)] == e_b)
 
         # ── close-check end to end: Needs you, claims, sub sessions, actions, outside, memory, Close: rules ──
         HM.memo_needs(str(R), S, "owner decision: cap in IQD only?", str(R))
@@ -3603,6 +3616,14 @@ def close_verdict_tests(check):
         cli(Wc, S3, "close-check")
         hk("prompt", {"session_id": S3, "cwd": str(Wc), "prompt": "and now?"})
         check("close stale: a new turn makes the stored verdict stale (turn_ts is in the fingerprint)", HM.load_state(S3)["close"].get("stale") is True)
+        S3h = "cvhand01-aaaa-bbbb"; mk(S3h, Wc, work={str(Wc): 1}, actions=[], outside=[], turn_ts=time.time())
+        cli(Wc, S3h, "close-check"); fp3h = HM.load_state(S3h)["close"]["fp"]
+        hk("prompt", {"session_id": S3h, "cwd": str(Wc), "prompt": "<task-notification>\n<task-id>a1</task-id>\n<status>completed</status>\n</task-notification>"})
+        st3h = HM.load_state(S3h)
+        check("close fresh: an agent's hand-back turn (the close agent's own, run in the background) keeps the verdict and its fingerprint",
+              st3h["close"].get("stale") is False and HM.close_fp(str(Wc), st3h, S3h) == fp3h)
+        hk("prompt", {"session_id": S3h, "cwd": str(Wc), "prompt": "<command-name>/abofles:close</command-name>"})
+        check("close stale: a slash command turn (the user's) still makes it stale", HM.load_state(S3h)["close"].get("stale") is True)
         gitc(Wc, "add", "-A"); gitc(Wc, "commit", "-q", "-m", "c2")
         S4 = "cvhead01-aaaa-bbbb"; mk(S4, Wc, work={str(Wc): 1}, actions=[], outside=[], turn_ts=time.time())
         gitc(Wc, "push", "-q"); cli(Wc, S4, "close-check"); fp4 = HM.load_state(S4)["close"]["fp"]

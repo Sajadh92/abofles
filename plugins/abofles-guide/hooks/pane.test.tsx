@@ -2895,6 +2895,11 @@ test('desktop: Home says guide clear, shows the blocker chip and the Ready to ar
   expect(await said(ui, /^2 blockers$/)).toBe(true)
   expect(await said(ui, /^repo-a: 3 uncommitted files$/)).toBe(true)
   expect(await said(ui, /^Blocker · git · commit them, then push$/)).toBe(true)
+  // the last card on Home (owner's pick): every card used all day comes before it
+  const cards = (await ui.findAll({ type: 'Svg' })).map((x: any) => String(x.props.alt ?? '').split('\n')[0])
+  const home = cards.slice(cards.indexOf('Home'), cards.findIndex((t: string) => t.startsWith('Abo Fles')))
+  expect(home[home.length - 1]).toBe('Ready to archive?')
+  expect(home.indexOf('At a glance')).toBeGreaterThan(0)
   expect(await labelOf(ui, 'close-run')).toBe('Run close check')
   expect(await labelOf(ui, 'close-fix:git:/r/repo-a:dirty')).toBe('Fix git 1') // two git fixes: numbered
   expect(await labelOf(ui, 'close-fix:git:/r/repo-b:dirty')).toBe('Fix git 2')

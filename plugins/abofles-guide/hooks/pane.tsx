@@ -1075,14 +1075,15 @@ function homeHtml($: EngineInterface, ui: Ui, p: { resume: Pane['resume']; spawn
         ]),
   ]
   if (b.glance) body.push(pic(ui, look, b.glance, ['At a glance', ...glance.flatMap(f => [f.label, f.value])]))
-  const cc = closeHomeCard($, ui, look, cv, () => openDetail($, 'close'))
-  if (cc) body.push(cc)
   if (tasks) body.push(tasks) // where the work stands, step by step: under At a glance, above Running and the Agents spend
   if (running) body.push(running)
   if (b.spend && spend) body.push(pic(ui, look, b.spend, ['Agents', String(spend.spawns), ...spend.alt]))
   if (b.where) body.push(pic(ui, look, b.where, [nowT ? 'Now' : null, nowT, nextT ? 'Next' : null, nextT]))
   if (b.latest) body.push(pic(ui, look, b.latest, [decision ? 'Last decision' : null, decision?.when, decision && !decision.note ? decision.q : null, decision?.a, done ? 'Last receipt' : null, done ? plain(done) : null]))
-  if (version) body.push(version) // a newer version waits (Update or Reload): last on Home, above the footer's version line
+  if (version) body.push(version) // a newer version waits (Update or Reload): near the end of Home, above the close card
+  // Ready to archive? is the last card on Home (owner's pick, 2026-11-24): it matters at the end of a session, and the cards used all day stay on top
+  const cc = closeHomeCard($, ui, look, cv, () => openDetail($, 'close'))
+  if (cc) body.push(cc)
   if (body.length === 0) body.push(emptyPic(ui, look, 'Nothing to sum up yet'))
   return htmlSection(ui, look, { icon: 'house', tone: 'mint', title: 'Home', summary: g ? (open > 0 ? `${open} open` : 'guide clear') : null, summaryTone: g ? (open > 0 || (cv?.blockers ?? 0) > 0 ? 'amber' : 'green') : null }, body)
 }
