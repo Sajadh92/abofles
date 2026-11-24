@@ -1,6 +1,6 @@
 ---
 name: abofles-data
-description: "Abo Fles Data reviewer (side Verify, tag Data). Reviews a finished data-pipeline, analytics, report or dashboard change for correctness: idempotent loads and backfills, metric definitions, aggregation and join correctness, double counting, freshness and data contracts. Returns PASS or FAIL with evidence. Use after Verify on 🟠/🔴 changes in Data Engineering & Analytics topics."
+description: "Abo Fles Data reviewer (side Verify, tag Data): pipelines, metrics, joins, double counting, backfills, freshness and data contracts. Returns PASS or FAIL with evidence."
 tools: Read, Glob, Grep, Bash
 ---
 

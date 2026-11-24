@@ -13,6 +13,9 @@ import type { Folds, Look, Ui } from './shared'
 
 const plan = atom({ plugin: 'abofles-guide', key: 'plan' } as const, null as Plan | null)
 
+// the calls that change the list
+export const PLAN_TOOLS = new Set(['mcp__ccd_turn__update_plan', 'mcp__ccd_turn__wrap_up', 'TodoWrite', 'TaskCreate', 'TaskUpdate'])
+
 const HOME_ROWS = 6
 const TEXT_MAX = 300
 
@@ -38,10 +41,20 @@ export function applyPlan(p: Plan | null, tool: string, a: Record<string, unknow
   switch (tool) {
     case 'mcp__ccd_turn__update_plan': {
       if (!Array.isArray(a.items) && !p) return null
-      const next = Array.isArray(a.items) ? itemsOf(a.items, 'content') : items
-      if (Array.isArray(a.done)) for (const n of a.done) if (isNum(n) && next[n - 1]) next[n - 1]!.status = 'completed'
-      if (isNum(a.start) && next[a.start - 1]) next[a.start - 1]!.status = 'in_progress'
-      if (a.advance === true) {
+      // a call with `items` sets the whole list: the app ignores any advance/done/start sent beside it
+      if (Array.isArray(a.items)) {
+        const next = itemsOf(a.items, 'content')
+        return { items: next, ts: at, closed: next.length > 0 && next.every(x => x.status === 'completed') }
+      }
+      // a list the wrap-up hid comes back: the app kept its statuses, and its advance goes on from them ("step 2 of 5 is in progress")
+      if (p?.closed && !p.wrapped) return null
+      const next = items
+      const nums = (v: unknown): number[] => (Array.isArray(v) ? v : [v]).map(n => (isStr(n) && /^\d+$/.test(n.trim()) ? Number(n) : n)).filter(isNum)
+      for (const n of nums(a.done)) if (next[n - 1]) next[n - 1]!.status = 'completed'
+      const start = nums(a.start)[0]
+      // the app keeps a step already in progress when another starts ("steps 1, 3 of 4 are in progress")
+      if (start !== undefined && next[start - 1]) next[start - 1]!.status = 'in_progress'
+      if (a.advance === true || a.advance === 'true') {
         const cur = next.findIndex(x => x.status === 'in_progress')
         if (cur >= 0) next[cur]!.status = 'completed'
         const nx = next.findIndex((x, i) => i > cur && x.status === 'pending')
@@ -51,10 +64,10 @@ export function applyPlan(p: Plan | null, tool: string, a: Record<string, unknow
       return { items: next, ts: at, closed: next.length > 0 && next.every(x => x.status === 'completed') }
     }
     case 'mcp__ccd_turn__wrap_up':
-      // The app checks its list off at the wrap-up only when one step is left open: with two or more open the list goes on, and the
-      // next turn's `advance` picks it up where it stands (a session wrapped up at step 2 of 6, then advance said "step 3 of 6").
-      if (!p || items.length === 0 || items.filter(x => x.status !== 'completed').length > 1) return null
-      return { items: items.map(x => ({ ...x, status: 'completed' as const })), ts: at, closed: true }
+      // The app's wrap-up hides its list and changes no status (1070 of 1070 app results in 93 transcripts): a step left open stays
+      // open, and a later advance resumes the list. The card shows it wrapped, with what was done and what was left.
+      if (!p || items.length === 0 || p.closed) return null
+      return { items, ts: at, closed: true, wrapped: true }
     case 'TodoWrite': {
       if (!Array.isArray(a.todos)) return null
       const next = itemsOf(a.todos, 'content')
@@ -63,12 +76,14 @@ export function applyPlan(p: Plan | null, tool: string, a: Record<string, unknow
     case 'TaskCreate': {
       const content = textOf(a.subject ?? a.content ?? a.description)
       if (!content) return null
-      const base = p && !p.closed ? items : [] // a finished list makes room for the next one
+      const base = p && (!p.closed || p.wrapped) ? items : [] // a finished list makes room for the next one; a wrapped one still has its open steps
       return { items: [...base, { content, status: 'pending', id: createdId(ran) ?? String(base.length + 1) }], ts: at, closed: false }
     }
     case 'TaskUpdate': {
       const id = isStr(a.taskId) || isNum(a.taskId) ? String(a.taskId) : null
-      const i = id ? items.findIndex(x => x.id === id) : -1
+      let i = id ? items.findIndex(x => x.id === id) : -1
+      // a list seeded from an older hook copy has no ids: TaskCreate numbers its tasks from 1, so the number names the step
+      if (i < 0 && id && /^\d+$/.test(id) && !items.some(x => x.id) && items[Number(id) - 1]) i = Number(id) - 1
       if (i < 0) return null
       if (a.status === 'deleted') items.splice(i, 1)
       else {
@@ -83,17 +98,28 @@ export function applyPlan(p: Plan | null, tool: string, a: Record<string, unknow
 }
 
 // After a tool ran: a main-session call that changes the list (a subagent's own list is its own business). Never throws.
-export async function notePlan($: EngineInterface, e: { tool: string; agentId?: string }, ran: unknown) {
+export async function notePlan($: EngineInterface, e: { tool: string; agentId?: string }, ran: unknown, before?: Plan | null) {
   try {
     if (e.agentId) return
     if (isObj(ran) && (ran.deny || ran.isError)) return
-    await seedPlan($) // a tick on a list made before the mod loaded: start from the hook's copy
+    // the list as it stood when the call began: a PostToolUse refresh during the call may already have adopted the hook's copy, which
+    // holds this very call, and applying the call to that copy would count it twice (an advance moving two steps)
+    const cur = before !== undefined ? before : (await seedPlan($), await read($, plan))
     const at = await $.clock.now()
-    const cur = await read($, plan)
     const next = applyPlan(cur, e.tool, e as unknown as Record<string, unknown>, ran, at)
     if (next) await update($, plan, () => next)
   } catch {
     // the card keeps what it has
+  }
+}
+
+// The list before a tool call, for notePlan. A list made before the mod loaded starts from the hook's copy.
+export async function planBefore($: EngineInterface): Promise<Plan | null> {
+  try {
+    await seedPlan($)
+    return await read($, plan)
+  } catch {
+    return null
   }
 }
 
@@ -107,12 +133,25 @@ export async function getPlan($: EngineInterface): Promise<Plan | null> {
 // mirror, which it rebuilds from the transcript. Once the mod holds a list, its own notes keep it.
 export async function seedPlan($: EngineInterface) {
   try {
-    if ((await read($, plan)) !== null) return
+    const cur = await read($, plan)
     const from = (await getPane($))?.plan
-    if (from && from.items.length > 0) await update($, plan, cur => cur ?? { items: from.items.map(x => ({ ...x })), ts: from.ts, closed: from.closed })
+    if (!from || from.items.length === 0) return
+    const copy = (): Plan => ({ items: from.items.map(x => ({ ...x })), ts: from.ts, closed: from.closed, ...(from.wrapped ? { wrapped: true } : {}) })
+    if (cur === null) {
+      await update($, plan, c => c ?? copy())
+      return
+    }
+    // the hook rebuilds its copy from the transcript: one 2 s or more newer that reads differently saw calls the mod missed
+    if (adoptMirror(cur, from)) await update($, plan, c => (c && adoptMirror(c, from) ? { ...copy(), hidden: c.hidden && from.closed } : c))
   } catch {
     // no card yet
   }
+}
+
+export function adoptMirror(cur: Plan, from: Plan): boolean {
+  if (!isNum(from.ts) || !isNum(cur.ts) || from.ts - cur.ts < 2000) return false
+  const key = (p: Plan) => p.items.map(x => `${x.status}:${x.content}`).join('\n') + (p.closed ? '#closed' : '') + (p.wrapped ? '#wrapped' : '')
+  return key(cur) !== key(from)
 }
 
 // A finished list taken off Home: its Hide button, or `Tasks hide`. An unfinished list never hides; the next list shows again.
@@ -139,10 +178,10 @@ export async function notePlanTurn($: EngineInterface, phase: 'start' | 'end', a
 export async function planWhere($: EngineInterface): Promise<{ now: string; next: string | null; step: string; nextStep: string | null } | null> {
   const p = await getPlan($)
   if (!p || p.closed) return null
-  const i = p.items.findIndex(x => x.status === 'in_progress')
+  const i = nowIndex(p)
   const cur = i >= 0 ? i : p.items.findIndex(x => x.status === 'pending')
   if (cur < 0) return null
-  const after = p.items.slice(cur + 1).find(x => x.status !== 'completed')
+  const after = p.items.slice(cur + 1).find(x => x.status !== 'completed') ?? p.items.slice(0, cur).find(x => x.status !== 'completed')
   return { now: `Step ${cur + 1} of ${p.items.length} — ${p.items[cur]!.content}`, next: after ? after.content : 'The last step: then the receipt', step: p.items[cur]!.content, nextStep: after?.content ?? null }
 }
 
@@ -150,13 +189,21 @@ export async function planWhere($: EngineInterface): Promise<{ now: string; next
 export function planState(p: Plan, running: boolean, busy: number): { word: string; tone: Tone; line: string; done: number; cur: number } {
   const n = p.items.length
   const done = p.items.filter(x => x.status === 'completed').length
-  const now = p.items.findIndex(x => x.status === 'in_progress')
+  const now = nowIndex(p)
   const cur = now >= 0 ? now : p.items.findIndex(x => x.status === 'pending')
   if (done === n) return { word: 'Done', tone: 'green', line: `All ${n} ${n === 1 ? 'step' : 'steps'} done`, done, cur: -1 }
+  // wrapped with steps open: the app hid its list; the card says what was left, and the next advance picks it up
+  if (p.wrapped) return { word: 'Wrapped up', tone: 'grey', line: `${n - done} ${n - done === 1 ? 'step' : 'steps'} left open`, done, cur: -1 }
   const line = `Step ${cur + 1} of ${n}`
   if (running) return { word: 'Working', tone: 'blue', line, done, cur }
   if (busy > 0) return { word: busy === 1 ? 'Waiting on 1 job' : `Waiting on ${busy} jobs`, tone: 'blue', line, done, cur }
   return { word: 'Paused', tone: 'amber', line: `${line} · send a message to go on`, done, cur }
+}
+
+// Two steps in progress (a TodoWrite list, or a start with no done): the one further down is the newer one, so the header follows it.
+function nowIndex(p: Plan): number {
+  for (let i = p.items.length - 1; i >= 0; i--) if (p.items[i]!.status === 'in_progress') return i
+  return -1
 }
 
 const rowOf = (x: PlanItem): TaskRow => ({ text: x.content, state: x.status === 'completed' ? 'done' : x.status === 'in_progress' ? 'now' : 'todo' })
@@ -177,7 +224,8 @@ export function planBlock(p: Plan, running: boolean, busy: number, w: number, wh
     }
   }
   const shown = rows.slice(from, to)
-  const block = tasksCard({ paneW: w, rows: shown, done: s.done, total: rows.length, word: s.word, tone: s.tone, line: s.line, before: whole || to === 0 ? 0 : from, after: whole || to === 0 ? 0 : rows.length - to, max: whole ? WHOLE : 1, steps: rows.map(r => r.state) })
+  const doneAbove = rows.slice(0, from).filter(r => r.state === 'done').length
+  const block = tasksCard({ paneW: w, rows: shown, done: s.done, total: rows.length, word: s.word, tone: s.tone, line: s.line, before: whole || to === 0 ? 0 : doneAbove, after: whole || to === 0 ? 0 : rows.length - to + (from - doneAbove), max: whole ? WHOLE : 1, steps: rows.map(r => r.state) })
   return { block, alt: ['Tasks', `${s.done} / ${rows.length}`, s.word, s.line, `${pctOf({ done: s.done, total: rows.length })}%`, ...shown.map(altOf)], cut: shown.length < rows.length }
 }
 

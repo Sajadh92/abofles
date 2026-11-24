@@ -1,6 +1,6 @@
 ---
 name: abofles-security
-description: "Abo Fles Security reviewer (side Verify, tag Security). Reviews a finished change for OWASP top-10 classes, broken authorization and IDOR, secrets, injection, crypto misuse and session handling. Returns PASS or FAIL with evidence. Use after Verify on 🟠/🔴 changes in Security, Money, DevOps, Data and Integrations topics."
+description: "Abo Fles Security reviewer (side Verify, tag Security): OWASP classes, authorization and IDOR, secrets, injection, crypto and session handling. Returns PASS or FAIL with evidence."
 tools: Read, Glob, Grep, Bash
 ---
 

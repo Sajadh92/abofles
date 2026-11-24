@@ -2,7 +2,7 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { Guide } from '../types'
 import { renderPane } from './pane'
-import { notePlan, notePlanTurn, seedPlan } from './tasks'
+import { PLAN_TOOLS, notePlan, notePlanTurn, planBefore, seedPlan } from './tasks'
 import { checkRelease } from './version'
 import { noteBackground, noteNotified, noteStep, noteTool, noteToolDone, noteTurnEnd, noteTurnStart, startTick } from './running'
 import {
@@ -74,8 +74,11 @@ export const register: Register = on => {
 
   // What runs now, for the Running page (running.tsx). Each note catches its own failure: the tool or the model call goes on whatever happens there.
   on('turn.start', async ($, e, next) => {
+    startTick($) // after /reload-plugins no session.start runs again: the first turn restarts the tick (a second call does nothing)
     await noteTurnStart($, e.agentId)
     await notePlanTurn($, 'start', e.agentId)
+    // the prompt hook may have marked the close check stale: the main turn's start shows it before its first tool
+    if (!e.agentId) await refresh($).catch(() => {})
     return next(e)
   })
 
@@ -87,9 +90,10 @@ export const register: Register = on => {
 
   on('tool.call', async ($, e, next) => {
     await noteTool($, e)
+    const before = PLAN_TOOLS.has(e.tool) && !e.agentId ? await planBefore($) : undefined
     const ran = await next(e)
     await noteToolDone($, e, ran)
-    await notePlan($, e, ran)
+    await notePlan($, e, ran, before)
     return ran
   })
 

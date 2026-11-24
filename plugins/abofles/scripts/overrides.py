@@ -3,10 +3,14 @@
 
     overrides.py get --json [--session S] [--cwd D]
         prints the pane's overrides payload: {files, keys: [{key, kind, options, value, source, default}], raw: [{line, source, path}]}
-    overrides.py set --scope project|user [--session S] [--cwd D]      stdin: {"set": {"Key": "value" | ""}, "raw": ["Topic: X = T3", …]}
-        edits the block in place (a new key is appended, "" removes the key, in every project file for project scope), `raw` replaces the
-        block's lines that are no simple key (the complex forms; a typo or note left out of it is removed); everything outside the block and
-        the simple keys not in `set` stay byte for byte. Prints the new `get` JSON.
+    overrides.py set --scope project|user [--session S] [--cwd D]      stdin: {"set": {"Key": "value" | ""}, "raw": ["Topic: X = T3", …],
+                                                                               "close": {"<name>": "<rule>" | ""}}
+        edits the block in place (a new key is appended, "" removes the key, in every project file for project scope; a trailing `# comment`
+        on the key's line stays), `raw` replaces the
+        block's lines that are no simple key (the complex forms; a typo or note left out of it is removed), `close` edits the
+        `- Close: <name> = <rule>` lines by name (the name's case and spacing ignored): a new name is appended, a known one gets the new rule in
+        place (project scope: in the project file where it lives, a copy in the other one removed), "" removes it (in every project file for project scope); everything outside the block and the simple keys not in `set` stay
+        byte for byte. Prints the new `get` JSON.
 
 Project scope = the project's CLAUDE.md or .claude/CLAUDE.md, whichever already holds the block (else CLAUDE.md); user scope =
 ~/.claude/CLAUDE.md. Bad input: one line on stderr, exit 2. Acts on the session you type in (see agents.py).
@@ -102,15 +106,25 @@ def is_complex(content):
     return any(r.match(content) for r in H.COMPLEX_FORMS)
 
 
+CLOSE_LINE = re.compile(r"^(\s*(?:-\s*|[*+]\s+))Close:\s*([^=]+?)\s*=\s*(.+?)(\s*)$", re.I)  # `- Close: <name> = <rule>`: bullet, name, rule, trailing space
+
+
+def close_name(name):
+    """A Close rule's name as it is matched: spaces folded, case ignored."""
+    return " ".join(str(name).split()).lower()
+
+
 def same(a, b):
     """Two raw lines are one line whatever their spacing: the pane sends them with the spaces folded."""
     return " ".join(a.split()) == " ".join(b.split())
 
 
-def edit_text(txt, sets, raw):
+def edit_text(txt, sets, raw, close=None):
     """The new file text: `sets` {key: value | ""} edited in place, appended (first block) or removed; `raw` (None: untouched) replaces the
     lines of the blocks the pane lists as raw (every bullet that is no simple key: the complex forms, typos, notes) — a line already there and
-    still wanted stays where it is, one missing from `raw` is removed. No block yet and something to add: a new one."""
+    still wanted stays where it is, one missing from `raw` is removed; `close` {name: rule | ""} (after `raw`) edits the `Close:` rule of that
+    name in place (the first line of the name; a second one of the same name is removed), appends a new name, or removes every line of the
+    name. No block yet and something to add: a new one."""
     nl = "\r\n" if "\r\n" in txt else "\n"
     lines = txt.splitlines(True)
     spans = lambda: H.override_spans([l.rstrip("\r\n") for l in lines])
@@ -125,7 +139,8 @@ def edit_text(txt, sets, raw):
         elif hits:  # the first line wins when read; a line under the key's old name gets the new name
             body = lines[hits[0]].rstrip("\r\n")
             m = rx.match(body)
-            lines[hits[0]] = m.group(1) + key + m.group(3) + val + lines[hits[0]][len(body):]
+            note = re.search(r"\s+#.*$", m.group(4))  # a trailing `# comment` (the hooks read the first word) stays on the line
+            lines[hits[0]] = m.group(1) + key + m.group(3) + val + (note.group(0) if note else "") + lines[hits[0]][len(body):]
         else:
             adds.append(f"- {key} = {val}")
     if raw is not None:
@@ -149,6 +164,17 @@ def edit_text(txt, sets, raw):
             for i in reversed(drop):
                 del lines[i]
             adds = [f"- {c}" for c in want] + adds
+    for name, rule in (close or {}).items():
+        hits = [i for i in inside() if (m := CLOSE_LINE.match(lines[i].rstrip("\r\n"))) and close_name(m.group(2)) == close_name(name)]
+        keep = hits[:1] if rule != "" else []
+        if keep:
+            body = lines[keep[0]].rstrip("\r\n")
+            m = CLOSE_LINE.match(body)
+            lines[keep[0]] = f"{m.group(1)}Close: {m.group(2)} = {rule}" + lines[keep[0]][len(body):]
+        for i in reversed(hits[len(keep):]):
+            del lines[i]
+        if rule != "" and not hits:
+            adds.append(f"- Close: {name} = {rule}")
     if adds:
         sp = spans()
         if sp:
@@ -207,8 +233,9 @@ def read_request():
         req = json.loads(sys.stdin.read())
     except ValueError:
         raise Bad("stdin is not JSON")
-    if not isinstance(req, dict) or not isinstance(req.get("set", {}), dict) or not (req.get("raw") is None or isinstance(req["raw"], list)):
-        raise Bad('stdin must be {"set": {Key: value}, "raw": [lines]}')
+    if (not isinstance(req, dict) or not isinstance(req.get("set", {}), dict) or not (req.get("raw") is None or isinstance(req["raw"], list))
+            or not isinstance(req.get("close") or {}, dict)):
+        raise Bad('stdin must be {"set": {Key: value}, "raw": [lines], "close": {name: rule}}')
     sets = {}
     for k, v in (req.get("set") or {}).items():
         key = next((n for n in H.OVERRIDE_KEYS if n.lower() == str(k).strip().lower()), None)
@@ -229,7 +256,28 @@ def read_request():
             if H.simple_key(c) is not None:
                 raise Bad(f"'{c[:40]}' is a simple key; use its row")
             raw.append(c)
-    return sets, raw
+    return sets, raw, clean_close(req.get("close") or {})
+
+
+def clean_close(close):
+    """{name: rule | ""} of the request's `close`, each name and rule one line with its spaces folded (a leading `Close:` on the name is
+    dropped), or Bad: an empty name, a name with `=`, a rule that is not text, a value past MAX_VALUE."""
+    out = {}
+    for k, v in close.items():
+        name = re.sub(r"^\s*close:\s*", "", " ".join(str(k).split()), flags=re.I)
+        if not name or "=" in name:
+            raise Bad(f"Close rule: '{name[:40]}' is no rule name" + (" (no `=` in a name)" if name else ""))
+        if not isinstance(v, (str, int)):
+            raise Bad(f"Close: {name}: rule must be text")
+        if "\n" in str(v).strip() or "\r" in str(v).strip():
+            raise Bad(f"Close: {name}: one line only")
+        rule = " ".join(str(v).split())
+        if len(name) + len(rule) > MAX_VALUE:
+            raise Bad(f"Close: {name}: longer than {MAX_VALUE} characters")
+        if any(close_name(n) == close_name(name) for n in out):
+            raise Bad(f"Close: {name}: named twice")
+        out[name] = rule
+    return out
 
 
 def opt(args, name):
@@ -266,6 +314,26 @@ def payload(root, sid):
     return p
 
 
+def close_home(close, path, files):
+    """{file: {name: rule | ""}}: each `close` edit in the project file where the rule lives — the target `path` when it holds the name (or
+    no file does: a new rule is appended there), else the first project file that holds it — and "" (drop) in every other project file that
+    holds the name, so an edit never leaves a second copy with the old rule. A removal ("") goes to every file."""
+    if not close:
+        return {path: {}}
+    texts = {f: read_text(f)[1] for f in files}
+    holds = lambda f, name: any((m := CLOSE_LINE.match(l)) and close_name(m.group(2)) == close_name(name)
+                                for ls in [texts[f].splitlines()] for i in H.override_indexes(ls) for l in [ls[i]])
+    out = {f: {} for f in [path] + [f for f in files if f != path]}
+    for name, rule in close.items():
+        have = [f for f in files if holds(f, name)]
+        home = path if rule == "" or path in have or not have else have[0]
+        out[home][name] = rule
+        for f in files:
+            if f != home and (rule == "" or f in have):
+                out[f][name] = ""
+    return out
+
+
 def project_files(root):
     """The project files override_blocks reads, in its order: a reset must reach the key in each, or the next one still sets it."""
     return [Path(path) for src, path, _ in H.override_blocks(root) if src == "project"]
@@ -294,7 +362,7 @@ def main():
         scope = opt(args, "--scope")
         if cmd != "set" or scope not in ("project", "user"):
             raise Bad("usage: overrides.py get --json | set --scope project|user  (stdin JSON {set, raw})")
-        sets, raw = read_request()
+        sets, raw, close = read_request()
         path = H.override_target(scope, root)
         old_b, old = read_text(path)
         if raw is not None:  # a line that is no complex form must already be in the block (an unknown key the pane lists): it stays where it is
@@ -307,14 +375,16 @@ def main():
                     raise Bad(f"'{c[:40]}…' is longer than {MAX_VALUE} characters")
                 if not is_complex(c) and not any(same(c, m) for m in mine):
                     raise Bad(f"'{c[:40]}' is not an override form")
-        writes = [(path, sets, raw)]
-        if scope == "project":  # a reset takes the key out of every project file the hooks read
+        writes = [(path, sets, raw, close)]
+        if scope == "project":  # a reset takes the key out of every project file the hooks read; so does a removed Close rule (every file's rules count)
             resets = {k: "" for k, v in sets.items() if v == ""}
-            writes += [(f, resets, None) for f in project_files(root) if f != path and resets]
+            homes = close_home(close, path, project_files(root))  # a rule edit lands in the file where it lives
+            writes = [(path, sets, raw, homes[path])]
+            writes += [(f, resets, None, homes.get(f) or {}) for f in project_files(root) if f != path and (resets or homes.get(f))]
         edits = []  # every file read and edited before the first write: a file that cannot be read stops the save before anything is written
-        for f, sets_f, raw_f in writes:
+        for f, sets_f, raw_f, close_f in writes:
             b, t = (old_b, old) if f == path else read_text(f)
-            new = edit_text(t, sets_f, raw_f)
+            new = edit_text(t, sets_f, raw_f, close_f)
             if new != t:
                 edits.append((f, (BOM if (b or b"").startswith(BOM) else b"") + new.encode("utf-8"), b))
         for f, data, b in edits:

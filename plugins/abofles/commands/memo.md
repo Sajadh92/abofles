@@ -1,6 +1,6 @@
 ---
 description: "Optional: write a sharper Now section of the work memo (task, done, left, decisions, next, verify). /compact already saves the memo by itself"
-allowed-tools: Bash(bash *), Bash(git *), Agent
+allowed-tools: Bash(bash *), Bash(git *), Agent, Read, Write, Edit
 ---
 
 Write a sharper **Now** section for this session. It is optional: every `/compact` and auto-compact already saves the memo by itself (`Memo on compact = auto`; with `off`, run this first).
@@ -17,12 +17,16 @@ Task      <the current task in one line, or "none — between tasks">
 Done      <what is finished, one line per item, files named>
 Left      <what is not finished, one line per item — repeat the `Left` label on every line>
 Decisions <decisions the user made this session that must not be reopened, one per line>
-Next      <the first thing to do after the compact, one line>
+Next      <the handoff: the first thing to do after the compact, one line a fresh session can act on without this transcript>
 Verify    <the command that proves the current state, with its expected result>
 Tree      <first 20 lines of git status --short, or "clean">
 EOF
 ```
 
-3. Unless the project's `Memo agent` override is `off`, start the memo agent in the background in the same step (the same message as the `memo.py now` call): print the route line `🗂️ \`Memo\` → **Memo Upkeep** · Haiku 5.5 · Low · Cap 15 · 🟢 Minor`, then call Agent with `subagent_type` `abofles:abofles-memo`, `model` `haiku`, `effort` `low`, `run_in_background` true, `description` `Memo upkeep` and this prompt: `abofles: Memo Upkeep / Work · T1`, then `Session id: ${CLAUDE_SESSION_ID}. Memo command: bash "${CLAUDE_PLUGIN_ROOT}/scripts/py" "${CLAUDE_PLUGIN_ROOT}/scripts/memo.py" <subcommand> ... --session ${CLAUDE_SESSION_ID}`, then `Line cap: 15`. It needs no budget, no receipt and no answer; never wait for it.
+   The first `Next` line is the handoff: write it so a new session (or this one after `/compact`) can start from it alone — the step, the file, the check.
 
-4. Reply with two lines: the session file path (the script prints it), then: `Memo saved. Run /compact when ready — the resume block is shown again after it.` The user runs `/compact` themselves (a command cannot). When the user typed `/abofles:memo`, those two lines are the whole reply. When the context watch made you run it mid-turn, print the two lines and continue the turn.
+3. Update the auto-memory. If this session settled a durable fact — a rule, a preference, a decision or a project fact that holds beyond this task — that the project's auto-memory (the memory folder of this project that the session was given, its `MEMORY.md` index) does not hold yet, add it there: one short file per fact and one index line in `MEMORY.md`; change an existing entry instead of adding a second one when the fact changed. Nothing task-local (what is done or left now — that is the Now), no secrets. Nothing new: skip this step and say nothing about it.
+
+4. Unless the project's `Memo agent` override is `off`, start the memo agent in the background in the same step (the same message as the `memo.py now` call): print the route line `🗂️ \`Memo\` → **Memo Upkeep** · Haiku 5.5 · Low · Cap 15 · 🟢 Minor`, then call Agent with `subagent_type` `abofles:abofles-memo`, `model` `haiku`, `effort` `low`, `run_in_background` true, `description` `Memo upkeep` and this prompt: `abofles: Memo Upkeep / Work · T1`, then `Session id: ${CLAUDE_SESSION_ID}. Memo command: bash "${CLAUDE_PLUGIN_ROOT}/scripts/py" "${CLAUDE_PLUGIN_ROOT}/scripts/memo.py" <subcommand> ... --session ${CLAUDE_SESSION_ID}`, then `Line cap: 15`. It needs no budget, no receipt and no answer; never wait for it.
+
+5. Reply with two lines: the session file path (the script prints it), then: `Memo saved. Run /compact when ready — the resume block is shown again after it.` The user runs `/compact` themselves (a command cannot). When the user typed `/abofles:memo`, those two lines are the whole reply. When the context watch made you run it mid-turn, print the two lines and continue the turn.

@@ -1,6 +1,6 @@
 ---
 name: abofles-reader
-description: "Abo Fles Read & Collect agent (side Read). Finds files, maps code, collects facts, lists usages. Returns facts only, no opinions, no fixes. Use for \"where is X\", \"what calls Y\", \"list all uses of Z\", \"map this folder\"."
+description: "Abo Fles Read agent (side Read): finds files, maps code, collects facts and usages. Returns facts only, no opinions or fixes."
 tools: Read, Glob, Grep, Bash
 ---
 

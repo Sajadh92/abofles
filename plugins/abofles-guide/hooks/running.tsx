@@ -36,6 +36,7 @@ type WorkNow = Work & { bg?: string[] }
 const EMPTY: WorkNow = { main: null, agents: {}, tasks: [], crons: [] }
 const work = atom({ plugin: 'abofles-guide', key: 'work' } as const, EMPTY)
 const workTick = atom({ plugin: 'abofles-guide', key: 'workTick' } as const, 0) // bumped while anything runs: the elapsed times move
+const mainOn = atom({ plugin: 'abofles-guide', key: 'mainOn' } as const, false) // the main turn is on: written only at its start and end, so Home (which reads it) does not redraw on every tool call
 const workBusy = atom({ plugin: 'abofles-guide', key: 'workBusy' } as const, 0) // agents + background commands: the nav bar's dot reads this alone, so it redraws only when the count changes
 const workConfirm = atom({ plugin: 'abofles-guide', key: 'workConfirm' } as const, null as string | null) // the row whose Stop waits for its confirmation
 
@@ -48,7 +49,7 @@ const OUTPUT_LINES = 30
 
 // A note must never disturb the work it watches: each catches its own failure, so the tool or the model call goes on and the page shows less.
 
-const fresh = (at: number): WorkLoop => ({ startedAt: at, now: null, uses: 0, tokens: 0, model: null, effort: null })
+const fresh = (at: number): WorkLoop => ({ startedAt: at, now: null, uses: 0, tokens: 0, model: null, effort: null, doneAt: at }) // doneAt from the start: a first tool that never returns is seen as in flight
 
 function withLoop(w: Work, agentId: string | undefined, at: number, f: (l: WorkLoop) => WorkLoop): Work {
   if (agentId) return { ...w, agents: { ...w.agents, [agentId]: f(w.agents[agentId] ?? fresh(at)) } }
@@ -124,9 +125,68 @@ async function syncBusy($: EngineInterface): Promise<number> {
 // The main session's turn is on (its loop started and has not ended).
 export async function getMainRunning($: EngineInterface): Promise<boolean> {
   try {
-    return (await read($, work)).main !== null
+    return (await read($, mainOn)) === true
   } catch {
     return false
+  }
+}
+
+// A background command with nothing new for this long is quiet: a server, a watcher or a loop that never ends. It still shows on
+// Running, but grey with its quiet time, and the Tasks card does not wait on it.
+export const QUIET_MS = 30 * 60 * 1000
+// Quiet is time since the output last grew (its file's size, looked at each tick), else since the start: a long job that still writes is not quiet.
+// A command whose output file was never seen (a row the Stop list seeded after a reload) has no known output: it is never called quiet.
+export const quietSince = (t: { startedAt: number; outAt?: number }) => t.outAt ?? t.startedAt
+export const isQuiet = (t: { startedAt: number; outAt?: number; size?: number }, now: number) => t.size !== undefined && now - quietSince(t) >= QUIET_MS
+
+// An agent's loop is quiet when its last tool call is that old (or, with none, its start): a hung agent no longer reads as busy.
+// Since when a loop has been quiet: its last tool's start, or its end when the tool returned. A tool that started and has not returned
+// (one long build) is not quiet: the loop is at work, so the time is the far future.
+export const loopQuietSince = (l: { startedAt: number; recent?: { at: number }[]; doneAt?: number }) => {
+  const last = l.recent?.[l.recent.length - 1]?.at ?? 0
+  // a loop from before this was tracked (no doneAt) keeps the old reading: quiet from its last tool's start
+  if (last > 0 && l.doneAt !== undefined && l.doneAt < last) return Number.MAX_SAFE_INTEGER
+  return Math.max(l.startedAt, last, l.doneAt ?? 0)
+}
+
+// Each tick: the size of every command's output file. A file that grew moves its `outAt`. Written only when one changed.
+async function noteOutput($: EngineInterface) {
+  const w = await read($, work)
+  if (!w.tasks.some(t => t.out)) return
+  const now = await $.clock.now()
+  const sizes = new Map<string, number>()
+  for (const t of w.tasks) {
+    if (!t.out) continue
+    try {
+      sizes.set(t.id, (await $.fs.stat(t.out)).size)
+    } catch {
+      // gone or unreadable: its time stays
+    }
+  }
+  if (!w.tasks.some(t => grewOf(t, sizes))) return
+  await update($, work, cur => ({ ...cur, tasks: withSizes(cur.tasks, sizes, now) }))
+}
+
+const grewOf = (t: WorkTask, sizes: Map<string, number>) => sizes.has(t.id) && sizes.get(t.id) !== t.size
+
+// The tasks after one look at their output sizes: a file that grew moves `outAt` to now (the first look only records the size).
+export function withSizes(tasks: WorkTask[], sizes: Map<string, number>, now: number): WorkTask[] {
+  return tasks.map(t => (grewOf(t, sizes) ? { ...t, size: sizes.get(t.id), outAt: t.size === undefined ? t.startedAt : now } : t))
+}
+
+// What the Tasks card waits on: the agents at work and the commands that are not quiet.
+export async function getWaitBusy($: EngineInterface): Promise<number> {
+  try {
+    const now = await $.clock.now()
+    const w = await read($, work)
+    // an agent quiet past QUIET_MS (hung, or polling forever) is not waited on, the same as a quiet command
+    const agents = (await activeAgents($)).filter(a => {
+      const l = w.agents[a.id]
+      return !(a.status === 'running' && l && l.endedAt === undefined && now - loopQuietSince(l) >= QUIET_MS)
+    })
+    return agents.length + w.tasks.filter(t => !isQuiet(t, now)).length
+  } catch {
+    return 0
   }
 }
 
@@ -149,6 +209,7 @@ export async function noteTurnStart($: EngineInterface, agentId?: string) {
       return { ...w, agents: { ...w.agents, [agentId]: rest } }
     })
     if (agentId) await syncBusy($)
+    else if ((await read($, mainOn)) !== true) await update($, mainOn, () => true)
   } catch {
     // the page keeps what it has
   }
@@ -164,6 +225,7 @@ export async function noteTurnEnd($: EngineInterface, agentId?: string) {
       const l = w.agents[agentId]
       return l ? { ...w, agents: { ...w.agents, [agentId]: { ...l, endedAt: at } } } : w
     })
+    if (!agentId && (await read($, mainOn)) !== false) await update($, mainOn, () => false)
     await syncBusy($)
   } catch {
     // the page keeps what it has
@@ -200,6 +262,14 @@ export async function noteTool($: EngineInterface, e: { tool: string; agentId?: 
 // A command moved to the background shows at once, not only at the next Stop. A stopped task goes at once too.
 export async function noteToolDone($: EngineInterface, e: { tool: string; agentId?: string }, ran: unknown) {
   try {
+    // an agent's tool returned: its quiet clock starts here, not at the tool's start
+    if (e.agentId) {
+      const done = await $.clock.now()
+      await update($, work, w => {
+        const l = w.agents[e.agentId as string]
+        return l ? { ...w, agents: { ...w.agents, [e.agentId as string]: { ...l, doneAt: done } } } : w
+      })
+    }
     const a = e as unknown as Record<string, unknown>
     const out = isObj(ran) && isObj(ran.result) ? ran.result : null
     if (e.tool === 'TaskStop' && isObj(ran) && !ran.deny && !ran.isError) {
@@ -214,7 +284,9 @@ export async function noteToolDone($: EngineInterface, e: { tool: string; agentI
     const command = isStr(a.command) ? a.command : ''
     const desc = plain(isStr(a.description) && a.description ? a.description : firstLine(command))
     // the output file, as the result names it: only a path ending in this task's own id
-    const file = new RegExp(`([^\\s"'\\\\]+/${id.replace(/[^\w-]/g, '')}\\.output)`).exec(JSON.stringify(ran) ?? '')?.[1] ?? null
+    // a structured result may name it in a field; else the text names it. No path: the row is never called quiet (no size to watch)
+    const named = [out.outputFile, out.output_file, out.outputPath].find(isStr)
+    const file = named ?? new RegExp(`([^\\s"'\\\\]+/${id.replace(/[^\w-]/g, '')}\\.output)`).exec(JSON.stringify(ran) ?? '')?.[1] ?? null
     const task: WorkTask = { id, kind: e.tool === 'Monitor' ? 'monitor' : 'shell', desc, detail: command ? plain(firstLine(command)) : null, startedAt: at, out: file, owner: e.agentId ?? null }
     await update($, work, w => (w.tasks.some(t => t.id === id) ? w : { ...w, tasks: [...w.tasks, task] }))
     await syncBusy($)
@@ -243,7 +315,7 @@ export async function noteBackground($: EngineInterface, e: { background_tasks?:
             if (!isObj(t) || !isStr(t.id) || t.type === 'subagent' || live.has(t.id)) return []
             const was = known.get(t.id)
             const detail = [t.command, t.name, t.tool].find(isStr)
-            return [{ id: t.id, kind: isStr(t.type) ? t.type : 'task', desc: plain(isStr(t.description) ? t.description : ''), detail: detail ? plain(firstLine(detail)) : was?.detail ?? null, startedAt: was?.startedAt ?? at, out: was?.out ?? null, owner: was?.owner ?? null }]
+            return [{ id: t.id, kind: isStr(t.type) ? t.type : 'task', desc: plain(isStr(t.description) ? t.description : ''), detail: detail ? plain(firstLine(detail)) : was?.detail ?? null, startedAt: was?.startedAt ?? at, out: was?.out ?? null, owner: was?.owner ?? null, ...(was?.size !== undefined ? { size: was.size } : {}), ...(was?.outAt !== undefined ? { outAt: was.outAt } : {}) }]
           })
       const listed = new Set(tasks.map(t => t.id))
       const newer = Array.isArray(e.background_tasks) ? w.tasks.filter(t => t.startedAt > at && !listed.has(t.id)) : []
@@ -271,8 +343,13 @@ export async function noteNotified($: EngineInterface, message: unknown) {
 
 async function tick($: EngineInterface) {
   try {
+    await noteOutput($).catch(() => {})
     const busy = await syncBusy($)
-    if (busy > 0 || (await read($, work)).main) await update($, workTick, n => n + 1)
+    // agents or commands at work: every tick moves their times. Only quiet ones (a server, a watcher): every 12th tick (60 s), their
+    // minutes still move. Only the main turn: every 6th tick (30 s), enough for its own row
+    tickN += 1
+    const live = busy > 0 && (await getWaitBusy($)) > 0
+    if (live || (busy > 0 && tickN % 12 === 0) || ((await read($, work)).main && tickN % 6 === 0)) await update($, workTick, n => n + 1)
   } catch {
     // the next tick tries again
   }
@@ -280,6 +357,7 @@ async function tick($: EngineInterface) {
 
 // The elapsed times move while something runs. It starts over at a reload (the module's variables do); the engine ends the old one.
 let ticking = false
+let tickN = 0
 export function startTick($: EngineInterface) {
   if (ticking) return
   ticking = true
@@ -373,12 +451,14 @@ export async function runningOf($: EngineInterface, p: Pane | null): Promise<Run
     const side = live?.side || typeName(a.type)
     sides.set(a.id, side)
     const row: RunRow = { id: a.id, ...word(a.status), side, desc, cost: since(l), now: l?.now ?? '', meta: loopMeta(l, loopModel(l, labels, live)), stop: 'agent', open: true, stoppable: canStop(a, Array.isArray(bg) ? bg : [], live) }
+    if (a.status === 'running' && l && l.endedAt === undefined && now - loopQuietSince(l) >= QUIET_MS) return { ...row, tone: 'grey', word: `quiet ${Math.floor((now - loopQuietSince(l)) / 60000)}m`, wordTone: 'grey' }
     // its reply is in and the engine holds it only on its own background work: not stuck, so it says so
     return a.status === 'waiting' && l?.endedAt !== undefined ? { ...row, ...repliedOf(w.tasks.filter(t => t.owner === a.id)) } : row
   })
   const tasks = w.tasks.map((t): RunRow => {
     const detail = t.detail && t.detail !== t.desc ? t.detail : ''
     const owner = t.owner ? sides.get(t.owner) : undefined
+    if (isQuiet(t, now)) return { id: t.id, tone: 'grey', word: `quiet ${Math.floor((now - quietSince(t)) / 60000)}m`, wordTone: 'grey', side: typeName(t.kind), desc: t.desc, cost: since(t), now: detail, meta: owner ? `started by ${owner}` : '', stop: 'command', open: !!t.out }
     return { id: t.id, tone: 'blue', word: '', wordTone: null, side: typeName(t.kind), desc: t.desc, cost: since(t), now: detail, meta: owner ? `started by ${owner}` : '', stop: 'command', open: !!t.out }
   })
   const crons = w.crons.map((c): RunRow => ({ id: c.id, tone: 'grey', word: '', wordTone: null, side: 'Scheduled', desc: c.prompt, cost: '', now: '', meta: `${c.schedule} · ${c.recurring ? 'repeats' : 'once'}`, stop: null, open: false }))

@@ -1,6 +1,6 @@
 ---
 name: abofles-memo
-description: "Abo Fles Memo agent (side Work, topic Memo Upkeep). Runs in the background, at most once per `Memo agent every` hours per project, when the work memo needs a check by meaning: merges Decisions that mean the same, rewrites a stale Now, moves an item that belongs to another project, archives closed sessions, drops noise with a reason. Reads and writes only through scripts/memo.py. Never asks questions. Not for code, not for the user's own memo text."
+description: "Abo Fles Memo agent (side Work, topic Memo Upkeep): background upkeep of the work memo by meaning, only through scripts/memo.py — merges Decisions, rewrites a stale Now, moves or archives items. Never asks questions; not for code or the user's own memo text."
 tools: Read, Bash
 model: haiku
 effort: low

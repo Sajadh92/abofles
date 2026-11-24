@@ -20,7 +20,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from topics_data import DOMAINS, SUGGESTIONS  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
-from abofles_hook import SESSION_CELL  # noqa: E402  the Session column comes from the hook, so the two never drift
+from abofles_hook import SESSION_CELL, PRICE, EFFORT  # noqa: E402  the Session column comes from the hook, so the two never drift
 SESSION = {t: f"{m}·{e}" for t, (m, e) in SESSION_CELL.items()}
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -154,6 +154,10 @@ def parse_line(line):
     for k in list(ov) + list(caps):
         if k not in SIDES:
             raise ValueError(f"unknown side {k!r} in {line!r}")
+    for k, v in ov.items():  # a cell is `model·effort` of the hook's tables: a typo (`opsu·high`, `opus-high`) would reach workflow.json and the hook
+        model, sep, effort = v.partition("·")
+        if not sep or model not in PRICE or effort not in EFFORT:
+            raise ValueError(f"bad cell {k}={v!r} in {line!r} (model·effort: {', '.join(PRICE)} · {', '.join(EFFORT)})")
     for r in extra:
         if r not in REVIEWERS:
             raise ValueError(f"unknown reviewer {r!r} in {line!r}")
@@ -474,8 +478,12 @@ def build_workflow_json():
 
 
 if __name__ == "__main__":
+    import argparse
+    ap = argparse.ArgumentParser(description="Regenerate the topic matrix files (no flag), or check them (--check).")
+    ap.add_argument("--check", action="store_true", help="write nothing; exit 1 when any file is out of date")
+    args = ap.parse_args()  # an unknown flag (a typo of --check) exits 2 before anything is built or written
     outputs = ((TOPICS_MD, build_topics_md()), (INDEX_MD, build_topic_index()), (MATRIX, build_matrix()), (WORKFLOW_MD, build_workflow_md()), (WORKFLOW_JSON, build_workflow_json()))
-    if "--check" in sys.argv[1:]:
+    if args.check:
         stale = [p.name for p, new in outputs if not p.exists() or p.read_text() != new]
         if stale:
             print("stale: " + ", ".join(stale) + " (run gen_matrix.py)")

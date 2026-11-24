@@ -1,6 +1,6 @@
 ---
 name: abofles-cleancoder
-description: "Abo Fles Clean Code reviewer (side Verify, tag Clean). Reviews a finished change for readability and structure: naming, duplication, dead code, function size, module boundaries — without proposing behaviour changes. Returns PASS or FAIL with evidence. Use after Verify on 🟠/🔴 changes in Code Health topics, or when the user asks for a clean-code pass."
+description: "Abo Fles Clean Code reviewer (side Verify, tag Clean): naming, duplication, dead code, function size, module boundaries — no behaviour changes. Returns PASS or FAIL with evidence."
 tools: Read, Glob, Grep, Bash
 ---
 

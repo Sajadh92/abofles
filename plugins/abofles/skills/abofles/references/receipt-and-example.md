@@ -2,7 +2,7 @@
 
 Read when printing a receipt or a progress line, estimating cost units, or to see a full routed task.
 
-Cost units (`u`) = model price × effort factor: haiku 1 · sonnet 20 · opus 40 · fable 100, times low 0.5 · medium 1 · high 1.5 · xhigh 2.5 · max 4 (haiku·low = 0.5 u, sonnet·medium = 20 u, opus·high = 60 u, opus·xhigh = 100 u). Every step down pays.
+Cost units (`u`) = model price × effort factor: haiku 1 · sonnet 20 · opus 40 · fable 80, times low 0.5 · medium 1 · high 1.5 · xhigh 2.5 · max 4 (haiku·low = 0.5 u, sonnet·medium = 20 u, opus·high = 60 u, opus·xhigh = 100 u). Every step down pays.
 
 Between agents print nothing but the route line and, when a chain of 2+ agents runs, one progress line reprinted only when it changes:
 
@@ -43,7 +43,7 @@ Orchestrator mode (main = Opus 5.5 · Medium); the agent gate was answered `Auto
 
 Task: "Add commission calculation to the wallet transfer, with tests."
 
-main: suggest Opus 5.5 · High for this task (now Opus 5.5 · Medium). Switch in the model picker, or say "keep".
+main: suggest Opus 5.5 · High for this 🔴 Critical task (now Opus 5.5 · Medium). Switch in the model picker, or say "keep".
 
 - 🔍 `Read` → **Pricing, Fees, Commission & Tax** · Sonnet 5.5 · Low · Cap 100 · 🔴 Critical
 - 📐 `Plan` → **Pricing, Fees, Commission & Tax** · Opus 5.5 · Extra · Cap 150 · 🔴 Critical
@@ -52,7 +52,7 @@ main: suggest Opus 5.5 · High for this task (now Opus 5.5 · Medium). Switch in
 - ✅ `Verify` → **Financial & Amount Calculations** · Sonnet 5.5 · Extra · Cap 60 · 🔴 Critical
 
 ```
-abofles [■■■■■] 5/5 · Read ✓ · Plan ✓ · Work ✓ · Work ✓ · Verify ✓ · 250 u
+abofles [■■■■■] 5/5 · Read ✓ · Plan ✓ · Work ✓ · Work ✓ · Verify ✓ · 300 u
 ```
 
 🧾 **5 Agents · 3.4M Tokens · $2.95 · Saved 8% ($0.26)** vs Opus 5.5

@@ -1,6 +1,6 @@
 ---
 name: abofles-git
-description: "Abo Fles Git agent (side Work, tag Git). Owns every git and GitHub action: inspects the repo first, then branches, worktrees, commits, merges, rebases, conflict resolution, pull requests, tags and releases, with claims so several sessions and agents can share one project. Returns the actions run, the repo state, the conflicts resolved and what was left. Use for \"commit this\", \"merge main into the branch\", \"resolve the conflict\", \"open a draft PR\", \"cut the release tag\"."
+description: "Abo Fles Git agent (side Work, tag Git): owns every git and GitHub write — branches, worktrees, commits, merges, rebases, conflicts, PRs, tags, releases — with claims for shared projects. Returns the actions, the repo state, the conflicts and what was left."
 tools: Read, Glob, Grep, Bash, Edit
 ---
 

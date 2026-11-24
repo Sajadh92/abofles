@@ -1,6 +1,6 @@
 ---
 name: abofles-worker
-description: "Abo Fles Act & Work agent (side Work). Writes or edits code, tests, docs, and configs from a plan or findings. Returns the changed-files list, one line per change, and what was run. Use for \"implement step X\", \"apply these fixes\", \"write the tests for Y\"."
+description: "Abo Fles Work agent (side Work): writes or edits code, tests, docs and configs from a plan or findings. Returns the changed files, one line each, and what was run."
 tools: Read, Glob, Grep, Edit, Write, Bash
 ---
 

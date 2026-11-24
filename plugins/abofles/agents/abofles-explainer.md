@@ -1,6 +1,6 @@
 ---
 name: abofles-explainer
-description: "Abo Fles Explainer agent (side Explain). Takes a Judge's HANDOFF (question, evidence, why it matters) on a T3–T4 decision and writes the question the user will actually understand: plain words, options with consequences, a recommendation, and a table, example or diagram when needed."
+description: "Abo Fles Explainer agent (side Explain): turns a Judge's HANDOFF on a T3–T4 decision into a question the user understands. Plain words, options with consequences, a recommendation, a table or diagram when needed."
 tools: Read, Glob, Grep
 ---
 

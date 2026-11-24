@@ -1,13 +1,14 @@
 import type { EngineInterface } from 'claude-code'
 
-import type { Guide, GuideItem, Pane, PaneDecision, PaneLive, PaneCheckup, PaneRow, PaneSpawns, PaneTotals } from '../types'
+import type { Guide, GuideItem, Pane, PaneClose, PaneDecision, Plan, PaneLive, PaneCheckup, PaneRow, PaneSpawns, PaneTotals } from '../types'
 import { overridesCard, overridesPage } from './editor'
-import { BRAND_AR, BRAND_EN, WHOLE, brandFooter, checkupBlock, decisionCards, guideBlock, guideDetail, homeBlocks, othersBlock, receiptCard, receiptDetail, resumeBlocks, resumeDetail, spawnsBlocks, spawnsDetail, subhead, toneOf } from './html'
+import { BRAND_AR, BRAND_EN, WHOLE, brandFooter, checkupBlock, closeCard, decisionCards, guideBlock, guideDetail, homeBlocks, othersBlock, receiptCard, receiptDetail, resumeBlocks, resumeDetail, spawnsBlocks, spawnsDetail, subhead, toneOf } from './html'
 import type { Block, CardItem, DecisionRow, Fact, Receipt, SpawnRow, Tone } from './html'
-import { planWhere, tasksDetail, tasksHomeCard, tasksTerminal } from './tasks'
+import { getPlan, planWhere, tasksDetail, tasksHomeCard, tasksTerminal } from './tasks'
+import { closeAlt, closeFact, closeHomeCard, closeTerminal, closeView } from './close'
 import { getVersionView, versionFoot, versionHomeCard } from './version'
 import type { VersionView } from './version'
-import { getMainRunning, getWorkBusy, runningDetail, runningHomeCard, runningPage, runningTerminal } from './running'
+import { getMainRunning, getWaitBusy, getWorkBusy, runningDetail, runningHomeCard, runningPage, runningTerminal } from './running'
 import {
   fmtTokens,
   modelName,
@@ -99,7 +100,7 @@ export function fmtWhen(text: string, comma = false): string {
 // The colours the app's own meters use; theme keys for meaning (error, warning, success).
 const BLUE = '#4a8cf0'
 const ORANGE = '#e0763a'
-const MODEL_COLOR: Record<string, string> = { haiku: BLUE, sonnet: ORANGE, opus: '#4fae8e', fable: '#a78bfa' }
+const MODEL_COLOR: Record<string, string> = { haiku: BLUE, sonnet: ORANGE, opus: '#4fae8e', fable: '#8b6cf0' } // fable = the violet tone: a colour outside TONE draws grey
 
 // ---- the rows
 
@@ -344,7 +345,7 @@ export function headParts(head: string): { memo: string | null; away: string | n
 // gives the time, `1 spawn`, `$0.28`, `46%`; `done`, `check` and `open` are its details. A line without the numbers keeps its text.
 const RECEIPT_FIELD = /^(done|why|workflow|check|open|next|largest):\s/i
 
-export function receiptOf(line: string): { time: string | null; spawns: string | null; usd: string | null; saved: string | null; tokens: string | null; money: string | null; text: string; details: string[] } {
+export function receiptOf(line: string): { time: string | null; spawns: string | null; usd: string | null; saved: string | null; over?: string | null; tokens: string | null; money: string | null; text: string; details: string[] } {
   const parts = plain(line).split(' · ')
   const time = /^\d\d-\d\d \d\d:\d\d$/.test(parts[0] ?? '') ? (parts.shift() as string) : null
   const at = parts.findIndex(x => /^[a-z]+:\s/i.test(x))
@@ -358,6 +359,7 @@ export function receiptOf(line: string): { time: string | null; spawns: string |
   const n = stats.map(x => /^(\d+) (?:Agents?|Spawns?)(?: \+ (.+))?$/i.exec(x)).find(Boolean)
   const usd = stats.map(x => /^(\$[\d.,]+)$/.exec(x)).find(Boolean)
   const saved = stats.map(x => /^Saved (\d+%)/i.exec(x)).find(Boolean)
+  const over = stats.map(x => /^Cost \+(\d+%)/i.exec(x)).find(Boolean) // the agents cost more than the base model
   const tokens = stats.map(x => /^([\d.,]+[KMB]?) Tokens$/i.exec(x)).find(Boolean)
   const money = stats.find(x => /^(Saved|Cost) /i.test(x))
   if (!n) return { time, spawns: null, usd: null, saved: null, tokens: null, money: null, text: stats.join(' · ') || details.shift() || '', details }
@@ -366,8 +368,9 @@ export function receiptOf(line: string): { time: string | null; spawns: string |
     spawns: `${plural(Number(n[1]), 'agent')}${n[2] ? ` + ${n[2]}` : ''}`,
     usd: usd ? usd[1]! : null,
     saved: saved ? saved[1]! : null,
+    over: over ? over[1]! : null,
     tokens: tokens ? `${tokens[1]} tokens` : null,
-    money: money ? money.replace(/^Saved (\d+%)/i, '$1 saved') : null,
+    money: money ? money.replace(/^Saved (\d+%)/i, '$1 saved').replace(/^Cost \+(\d+%)/i, '$1 over cost') : null,
     text: '',
     details,
   }
@@ -699,10 +702,15 @@ function spawnRowsOf(s: PaneSpawns, rows: PaneRow[], now: number) {
 }
 
 // The spend card's content and alt text, for the Spawns page and Home. Home's At a glance already holds the open FAIL.
-function spendOf(t: PaneTotals, openFail: boolean) {
+export function spendOf(t: PaneTotals, openFail: boolean) {
   const models = t.by_model.filter(m => m.spawns > 0)
-  const saved = `${t.saved_pct}% saved`
-  const versus = t.base_usd > 0 ? `${fmtUsd(t.usd)} of ${fmtUsd(t.base_usd)}${t.base_label ? ` on ${t.base_label}` : ''}` : fmtUsd(t.usd)
+  // agents that cost more than the same work on the base model: an over cost in red, never a negative saving
+  const over = t.base_usd > 0 && t.usd > t.base_usd
+  const pct = Math.abs(t.saved_pct)
+  const saved = over ? `${pct}% over cost` : `${t.saved_pct}% saved`
+  const on = t.base_label ? ` on ${t.base_label}` : ''
+  const versus = t.base_usd <= 0 ? fmtUsd(t.usd) : over ? `${fmtUsd(t.usd)} · ${fmtUsd(t.usd - t.base_usd)} more than ${fmtUsd(t.base_usd)}${on}` : `${fmtUsd(t.usd)} of ${fmtUsd(t.base_usd)}${on}`
+  const tone: Tone | null = over ? 'red' : null
   const facts: Fact[] = [t.tokens > 0 ? { label: 'Tokens', value: fmtTokens(t.tokens) } : null, openFail && t.open_fail > 0 ? { label: 'Open FAIL', value: String(t.open_fail), tone: 'red' as Tone } : null].filter((x): x is Fact => x !== null)
   const alt = [
     saved,
@@ -711,7 +719,7 @@ function spendOf(t: PaneTotals, openFail: boolean) {
     ...models.map(m => `${m.label}: ${m.tokens > 0 ? `${fmtTokens(m.tokens)} tokens, ` : ''}${plural(m.spawns, 'agent')}, ${fmtUsd(m.usd)}, ${m.pct}% of spend`),
     ...facts.flatMap(f => [f.label, f.value]),
   ]
-  return { saved, versus, facts, alt, models: models.map(m => ({ label: m.label, tone: toneOf(MODEL_COLOR[m.model] ?? GREY), tokens: m.tokens > 0 ? fmtTokens(m.tokens) : '', spawns: m.spawns, usd: fmtUsd(m.usd), pct: m.pct })) }
+  return { saved, tone, versus, facts, alt, models: models.map(m => ({ label: m.label, tone: toneOf(MODEL_COLOR[m.model] ?? GREY), tokens: m.tokens > 0 ? fmtTokens(m.tokens) : '', spawns: m.spawns, usd: fmtUsd(m.usd), pct: m.pct })) }
 }
 
 // Agents on the desktop: the saving and the spend split by model, the history by day (newest first) with its
@@ -767,7 +775,7 @@ function spawnsHtml($: EngineInterface, ui: Ui, s: PaneSpawns, folds: Folds, loo
   b.history.forEach((c, i) => body.push(pic(ui, look, c, i === 0 ? ['History', 'newest first', ...alt, updated] : [])))
   body.push(
     buttonRow(ui, [
-      moreButton($, ui, folds, 'history', Math.max(t.spawns + (t.sessions ?? 0), s.rows.length), HISTORY_ROWS, look),
+      moreButton($, ui, folds, 'history', Math.max(t.spawns + (t.sessions ?? 0), s.rows.length), HISTORY_ROWS, look, s.rows.length),
       <Button key="detail:spawns" label={glyph(look, GLYPH.detail, 'Full details')} variant="secondary" onPress={() => openDetail($, 'spawns')} />,
     ]),
   )
@@ -806,7 +814,7 @@ function spawnsCard($: EngineInterface, ui: Ui, s: PaneSpawns, folds: Folds, loo
         )}
       </Box>
     ))
-    parts.push(rule(ui, look, 'row divider', true), group(ui, heading(ui, 'History', 'newest first', undefined, { look, name: 'clock' }), [...daysOut, moreButton($, ui, folds, 'history', Math.max(t.spawns + (t.sessions ?? 0), s.rows.length), HISTORY_ROWS)]))
+    parts.push(rule(ui, look, 'row divider', true), group(ui, heading(ui, 'History', 'newest first', undefined, { look, name: 'clock' }), [...daysOut, moreButton($, ui, folds, 'history', Math.max(t.spawns + (t.sessions ?? 0), s.rows.length), HISTORY_ROWS, undefined, s.rows.length)]))
   }
   if (ts > 0) parts.push(<Text size="caption" dimColor>{`Updated ${fmtStart(ts)} · refreshes when a turn ends`}</Text>)
   return card($, ui, { id: 'spawns', title: 'Agents', def: false, summary: spawnsSummary(s), tone: t.open_fail > 0 ? 'error' : undefined, folds, icon: 'fork', look }, <Box flexDirection="column" rowGap={1}>{parts}</Box>)
@@ -958,7 +966,7 @@ function detailOf(id: string, p: Pane | null, g: Guide | null, look: Look, now: 
 async function detailPage($: EngineInterface, ui: Ui, p: Pane | null, g: Guide | null, look: Look, now: number) {
   const { Box, Button, Text } = ui
   const id = await getPaneDetail($)
-  const d: Detail | null = !id ? null : id.startsWith('run:') ? await runningDetail($, id.slice(4), p, look) : id === 'tasks' ? await tasksDetail($, look, await getMainRunning($), await getWorkBusy($)) : detailOf(id, p, g, look, now)
+  const d: Detail | null = !id ? null : id.startsWith('run:') ? await runningDetail($, id.slice(4), p, look) : id === 'tasks' ? await tasksDetail($, look, await getMainRunning($), await getWaitBusy($)) : id === 'close' ? await closeDetail($, p, look, now) : detailOf(id, p, g, look, now)
   const tab = await getPaneTab($)
   const back = <Button key="detail-back" label={glyph(look, '‹', NAV.find(n => n.id === tab)?.label ?? 'Back')} variant="secondary" onPress={() => setPaneView($, 'main')} />
   if (d === null) return <Box flexDirection="column" rowGap="sm"><Box flexDirection="row" alignItems="center">{back}</Box><Text dimColor>Nothing to show here any more.</Text></Box>
@@ -974,6 +982,22 @@ async function detailPage($: EngineInterface, ui: Ui, p: Pane | null, g: Guide |
   )
 }
 
+// The close check's inputs, or null when `Close place` is not pane: the stored check, the task list (none when Tasks place = off: it
+// would hold open steps the pane cannot show), the agents and commands that are not quiet, and whether the session worked yet.
+async function closeArgs($: EngineInterface, p: Pane | null, now: number) {
+  if (!p || (p.places.close ?? 'pane') !== 'pane') return null
+  const plan = p.places.tasks !== 'off' ? await getPlan($) : null
+  return { close: p.close ?? null, plan, busy: await getWaitBusy($), worked: p.spawns.totals.spawns > 0 || plan !== null || !!p.close, now }
+}
+
+// The close check's Full details page: every line whole, with Copy.
+async function closeDetail($: EngineInterface, p: Pane | null, look: Look, now: number): Promise<Detail | null> {
+  const a = await closeArgs($, p, now)
+  const v = a ? closeView(a.close, a.plan, a.busy, true, now, true, true) : null
+  if (!v) return null
+  return { icon: 'check', tone: v.tone, title: 'Close check', sub: v.word, subTone: v.tone, cards: [closeCard({ paneW: paneW(look), word: v.word, tone: v.tone, notes: v.notes, rows: v.rows, more: null, whole: true })], alt: closeAlt(v) }
+}
+
 // ---- Home
 
 // Nothing open: what the memo says next, or that all is clear.
@@ -986,7 +1010,7 @@ function clearNote(g: Guide | null, v: GuideView | null): { title: string; text:
 // The Home page of the desktop: the one thing to do next with its buttons, the numbers that matter from every section at a glance,
 // what runs now, the spend card, where the work stands, and the latest decision and receipt. The nav bar's other pages hold the detail.
 // Only the sections the pane holds feed it: one placed in the band or the chat is not summed up here (`p` and `g` come filtered).
-function homeHtml($: EngineInterface, ui: Ui, p: { resume: Pane['resume']; spawns: PaneSpawns | null; decisions: Pane['decisions'] | null }, g: Guide | null, look: Look, hidden: boolean, running: JSX.Element | null, tasks: JSX.Element | null = null, version: JSX.Element | null = null, live: { now: string; next: string | null; step: string; nextStep: string | null } | null = null, busy = 0) {
+function homeHtml($: EngineInterface, ui: Ui, p: { resume: Pane['resume']; spawns: PaneSpawns | null; decisions: Pane['decisions'] | null }, g: Guide | null, look: Look, hidden: boolean, running: JSX.Element | null, tasks: JSX.Element | null = null, version: JSX.Element | null = null, live: { now: string; next: string | null; step: string; nextStep: string | null } | null = null, busy = 0, cl: { close: PaneClose | null; plan: Plan | null; busy: number; worked: boolean; now: number } | null = null) {
   const { Button } = ui
   const v = g ? viewOf(g) : null
   const open = v ? v.items.filter(i => i.p !== '✅').length : 0
@@ -1005,6 +1029,11 @@ function homeHtml($: EngineInterface, ui: Ui, p: { resume: Pane['resume']; spawn
   if (s && s.totals.open_fail > 0) glance.push({ label: 'Open FAIL', value: String(s.totals.open_fail), tone: 'red' })
   const task = gf.find(f => f.label === 'This task')
   if (task) glance.push(task)
+  const cf = cl ? closeFact(cl.close) : null // a stored close check with a blocker: its count mid-session
+  if (cf) glance.push(cf)
+  // the "Ready to archive?" card: after a close check, or once the guide is clear (with a busy line while work still runs)
+  // null when `Close place` is not pane; shown with or without the guide in the pane (Guide place = band keeps it here)
+  const cv = cl ? closeView(cl.close, cl.plan, cl.busy, clear, cl.now, false, cl.worked) : null
   const spend = s && s.totals.spawns > 0 ? { ...spendOf(s.totals, false), spawns: s.totals.spawns } : null // the saving and the split by model: its own card under the glance
   // the newest decision of either group (the times sort as written)
   const d = p?.decisions ?? null
@@ -1046,6 +1075,8 @@ function homeHtml($: EngineInterface, ui: Ui, p: { resume: Pane['resume']; spawn
         ]),
   ]
   if (b.glance) body.push(pic(ui, look, b.glance, ['At a glance', ...glance.flatMap(f => [f.label, f.value])]))
+  const cc = closeHomeCard($, ui, look, cv, () => openDetail($, 'close'))
+  if (cc) body.push(cc)
   if (tasks) body.push(tasks) // where the work stands, step by step: under At a glance, above Running and the Agents spend
   if (running) body.push(running)
   if (b.spend && spend) body.push(pic(ui, look, b.spend, ['Agents', String(spend.spawns), ...spend.alt]))
@@ -1053,7 +1084,7 @@ function homeHtml($: EngineInterface, ui: Ui, p: { resume: Pane['resume']; spawn
   if (b.latest) body.push(pic(ui, look, b.latest, [decision ? 'Last decision' : null, decision?.when, decision && !decision.note ? decision.q : null, decision?.a, done ? 'Last receipt' : null, done ? plain(done) : null]))
   if (version) body.push(version) // a newer version waits (Update or Reload): last on Home, above the footer's version line
   if (body.length === 0) body.push(emptyPic(ui, look, 'Nothing to sum up yet'))
-  return htmlSection(ui, look, { icon: 'house', tone: 'mint', title: 'Home', summary: g ? (open > 0 ? `${open} open` : 'all clear') : null, summaryTone: g ? (open > 0 ? 'amber' : 'green') : null }, body)
+  return htmlSection(ui, look, { icon: 'house', tone: 'mint', title: 'Home', summary: g ? (open > 0 ? `${open} open` : 'guide clear') : null, summaryTone: g ? (open > 0 || (cv?.blockers ?? 0) > 0 ? 'amber' : 'green') : null }, body)
 }
 
 // ---- the pane
@@ -1127,10 +1158,11 @@ export async function renderPane($: EngineInterface, e: RenderEvent) {
                     lk,
                     g !== null && hideKeyOf(g) === (await getHiddenKey($)),
                     p?.places.running !== 'off' ? await runningHomeCard($, ui, p, lk) : null,
-                    p?.places.tasks !== 'off' ? await tasksHomeCard($, ui, lk, await getMainRunning($), await getWorkBusy($)) : null,
+                    p?.places.tasks !== 'off' ? await tasksHomeCard($, ui, lk, await getMainRunning($), await getWaitBusy($)) : null,
                     await versionHomeCard($, ui, lk),
                     p?.places.tasks !== 'off' ? await planWhere($) : null,
                     await getWorkBusy($),
+                    await closeArgs($, p, now),
                   )
     const { Box } = ui
     return (
@@ -1145,8 +1177,15 @@ export async function renderPane($: EngineInterface, e: RenderEvent) {
   const gc = await guideHere(look)
   if (gc) cards.push(gc)
   if (p?.places.tasks !== 'off') {
-    const tc = await tasksTerminal($, ui, folds, look, await getMainRunning($), await getWorkBusy($))
+    const tc = await tasksTerminal($, ui, folds, look, await getMainRunning($), await getWaitBusy($))
     if (tc) cards.push(tc)
+  }
+  {
+    // the terminal has no Home: the close check folds in under the tasks, only while a check is stored
+    const a = await closeArgs($, p, await $.clock.now())
+    const v = a && a.close ? closeView(a.close, a.plan, a.busy, true, a.now) : null
+    const body = closeTerminal($, ui, v)
+    if (body && v) cards.push(card($, ui, { id: 'close', title: 'Close check', summary: v.word, folds, icon: 'check', look }, body))
   }
   if (p?.places.running !== 'off') {
     const rc = await runningTerminal($, ui, p, folds, look, e)

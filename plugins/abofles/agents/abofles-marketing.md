@@ -1,6 +1,6 @@
 ---
 name: abofles-marketing
-description: "Abo Fles Marketing reviewer (side Verify, tag Marketing). Reviews a finished social post, comment reply, profile, campaign or ad setup before it goes live: platform specs and limits, ad policy risk, honest claims and disclosure, hook and call to action, audience and budget sanity, brand voice, links and tracking. Returns PASS or FAIL with evidence. Use after Verify on 🟠/🔴 changes in the Social Media, Ads & Marketing domain."
+description: "Abo Fles Marketing reviewer (side Verify, tag Marketing): posts, replies, campaigns and ads before they go live — platform specs, ad policy, honest claims, hook and call to action, tracking. Returns PASS or FAIL with evidence."
 tools: Read, Glob, Grep, Bash, WebFetch, WebSearch
 ---
 

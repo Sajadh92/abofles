@@ -57,12 +57,18 @@ def read(path):
     warned about once on stderr, and read as no claims (the next write replaces it)."""
     global _warned
     try:
-        text = path.read_text(encoding="utf-8")
+        raw = path.read_bytes()
     except FileNotFoundError:
         return []
-    if not text.strip():
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:  # not UTF-8 at all: damaged like bad JSON (backed up as it was, read as no claims), never a crash
+        text = None
+    if text is not None and not text.strip():
         return []
     try:
+        if text is None:
+            raise ValueError("not UTF-8")
         data = json.loads(text)
         return [c for c in data.get("claims", []) if isinstance(c, dict) and c.get("session")]
     except (ValueError, AttributeError, TypeError):
@@ -75,8 +81,8 @@ def read(path):
                 pass
             try:
                 fd = os.open(bak, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
-                with os.fdopen(fd, "w", encoding="utf-8") as fh:
-                    fh.write(text)
+                with os.fdopen(fd, "wb") as fh:
+                    fh.write(raw)  # the bytes as they were: a damaged file is kept whole, not re-encoded
             except OSError:
                 pass
             print(f"abofles: claims store {path} is damaged — copied to {bak.name}, starting with no claims", file=sys.stderr)
@@ -92,7 +98,16 @@ def beat_of(c):
 
 
 def live(claims, now):
-    return [c for c in claims if now - beat_of(c) <= TTL]
+    """The claims beaten in the last TTL seconds. A beat in the future (a clock ahead, a hand edit) is clamped to `now` in the claim,
+    so it drops out TTL after it was first seen (the next locked write stores the clamp) instead of never."""
+    out = []
+    for c in claims:
+        b = beat_of(c)
+        if b > now:
+            c["beat"] = b = int(now)
+        if now - b <= TTL:
+            out.append(c)
+    return out
 
 
 def clean(x):
@@ -158,6 +173,33 @@ def overlaps(c, claims):
             if any(files_clash(f, g) for g in o.get("files") or []):
                 out.append(f"file {clean(f)} with {clean(o['session'])}")
     return out
+
+
+def live_claim(repo, session, timeout=2):
+    """Read-only lookup for the close check: the live claim `session` holds in the repository at `repo` (a dict), None when it holds none, False
+    when it cannot be told (no git repository, git ran past `timeout` seconds, a store that is not valid claims JSON). Never writes: no lock,
+    no `.bak`, no warning. A claim stored under the session's first 8 characters or more counts as its own."""
+    try:
+        r = subprocess.run(["git", "--no-optional-locks", "-C", repo, "rev-parse", "--git-common-dir"], capture_output=True, text=True, timeout=timeout)
+    except (subprocess.TimeoutExpired, OSError):
+        return False
+    if r.returncode != 0 or not r.stdout.strip():
+        return False
+    path = Path(os.path.abspath(os.path.join(repo, r.stdout.strip()))) / "abofles-claims.json"
+    try:
+        text = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None
+    except (OSError, UnicodeDecodeError):
+        return False
+    if not text.strip():
+        return None
+    try:
+        claims = [c for c in json.loads(text).get("claims", []) if isinstance(c, dict) and c.get("session")]
+    except (ValueError, AttributeError, TypeError):
+        return False
+    own = lambda c: str(c["session"]) == session or (len(str(c["session"])) >= 8 and session.startswith(str(c["session"])))
+    return next((c for c in live(claims, time.time()) if own(c)), None)
 
 
 def ago(ts, now):

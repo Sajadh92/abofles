@@ -1,6 +1,6 @@
 ---
 name: abofles-judge
-description: "Abo Fles Judge agent (side Judge). Runs before any question reaches the user: answers it from the code, comments, tests, docs, ticket text given in the prompt or the memo with evidence — or, when it is really the owner's call, explains it in plain words (T1–T2) or hands the evidence to the Explainer (T3–T4). Use for \"should we ask the user X\", \"can the repo answer Y\"."
+description: "Abo Fles Judge agent (side Judge): runs before any question reaches the user and answers it from the code, docs, ticket or memo with evidence. When it is the owner's call it explains it (T1–T2) or hands off to the Explainer (T3–T4)."
 tools: Read, Glob, Grep, Bash
 ---
 

@@ -3,12 +3,12 @@
 
     bill.py                 newest session ledger
     bill.py --all           every ledger
-    bill.py --baseline opus·high   compare against this model·effort (default opus·high)
+    bill.py --baseline opus·high   compare against this model·effort (default opus·high; opus.medium, opus-medium too)
     bill.py --assumed-effort       mark the baseline effort as assumed (session effort unknown)
     bill.py --history       one line per agent (time, side, status, confidence, model·effort, tokens, $, saved) and the totals line
 
 Cost index = output-price ratio x effort factor. haiku 1, sonnet 20, opus 40,
-fable 100 (list price per output token, Haiku = 1). Effort: low 0.5, medium 1,
+fable 80 (list price per output token, Haiku = 1). Effort: low 0.5, medium 1,
 high 1.5, xhigh 2.5, max 4. Reply length is not known, so one agent = one unit
 of work. These are relative numbers for comparing routes, not dollars.
 """
@@ -22,7 +22,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 try:
-    from abofles_hook import label, newest_state, newest_session_id, usd, fmt_tokens, fmt_usd, PRICE_USD, session_arg, history_totals
+    from abofles_hook import label, newest_state, newest_session_id, usd, fmt_tokens, fmt_usd, PRICE_USD, session_arg, history_totals, load_state, reprice_rows
+    from abofles_hook import PRICE, EFFORT, units as cost, saving_text, base_label_of  # the hook's tables and wording: never a copy here
 except Exception:  # pragma: no cover
     newest_state = lambda *a, **k: {}
     newest_session_id = lambda *a, **k: ""
@@ -33,16 +34,16 @@ except Exception:  # pragma: no cover
     fmt_usd = lambda x: f"${x:.2f}"
     PRICE_USD = {}
     history_totals = lambda rows, bm="opus", be="high": {"spawns": len(rows), "tokens": 0, "usd": 0.0, "base_usd": 0.0, "saved_pct": 0, "open_fail": 0}
+    load_state = lambda sid: {}
+    reprice_rows = lambda rows, st, sid: rows
+    PRICE, EFFORT = {}, {}
+    cost = lambda model, effort: 0.0
+    saving_text = lambda c, b, header=False, money=True, pct=None: f"saved {pct if pct is not None else 0}%"
+    base_label_of = lambda rows, fallback="opus": label(fallback)
 
 LEDGER_DIR = Path(os.environ.get("ABOFLES_LEDGER_DIR", Path.home() / ".abofles" / "ledgers"))
-PRICE = {"haiku": 1, "sonnet": 20, "opus": 40, "fable": 100}
-EFFORT = {"low": 0.5, "medium": 1, "high": 1.5, "xhigh": 2.5, "max": 4}
 SIDE_FULL = {"R": "Read", "A": "Analyse", "P": "Plan", "W": "Work", "V": "Verify"}
 SIDE_ORDER = ["Read", "Analyse", "Plan", "Work", "Verify"]
-
-
-def cost(model, effort):
-    return PRICE.get(model, 40) * EFFORT.get(effort, 1.5)
 
 
 def load(all_sessions, sess=None):
@@ -57,12 +58,27 @@ def load(all_sessions, sess=None):
                 break
     rows = []
     for f in files:
+        st = load_state(f.stem)
+        mine = []
         for line in f.read_text().splitlines():
             try:
-                rows.append(json.loads(line))
+                mine.append(json.loads(line))
             except Exception:
-                pass
+                continue
+        # a row priced at SubagentStop before its last message was written: priced from the transcript as it is now (not written back),
+        # by the hook's own rule (reprice_due), so bill, status and the receipt agree on which rows are read again
+        rows += reprice_rows(mine, st, f.stem)
     return rows
+
+
+USAGE = "usage: bill.py [--all] [--history] [--baseline <model·effort>] [--assumed-effort] [--session <sid>]"
+
+
+def split_baseline(v):
+    """`opus·high`, `opus.medium`, `Opus-Low`, `opus high`, `opus` -> (model, effort or ""), lower case: every separator the docs and the
+    overrides use (`Main session = opus.medium`), so a dot never leaves the effort to the session or High."""
+    bm, _, be = re.sub(r"[\s.\-·]+", "·", v.strip().lower()).strip("·").partition("·")
+    return bm, be
 
 
 def main():
@@ -72,10 +88,14 @@ def main():
     sess = session_arg(args)
     all_sessions = "--all" in args
     baseline = "opus·high"
-    if "--baseline" in args:
-        baseline = args[args.index("--baseline") + 1]
+    if "--baseline" in args:  # a flag with no value (last arg, empty, `--`-led) is a usage error, never an IndexError
+        i = args.index("--baseline") + 1
+        if i >= len(args) or not args[i].strip() or args[i].startswith("--"):
+            print(USAGE)
+            sys.exit(2)
+        baseline = args[i]
     assumed = "--assumed-effort" in args
-    bm, _, be = baseline.replace("-", "·").partition("·")
+    bm, be = split_baseline(baseline)
     from_session = False
     if not be or assumed:
         se = newest_state(os.getcwd(), sess).get("effort")
@@ -109,6 +129,7 @@ def main():
         by_topic[r.get("topic") or "(no header)"] += 1
         conf[r.get("confidence") or "?"] += 1
         status[r.get("status") or "?"] += 1
+        total += cost(r.get("model"), r.get("effort"))  # before the verdict block: an open FAIL row's `continue` must not drop its cost (status.py counts it)
         if r.get("verdict"):
             key = r["verdict"] + (" +attention" if r.get("attention") else "")
             if r["verdict"] == "PASS" and open_fail.get(r.get("topic")):
@@ -119,9 +140,7 @@ def main():
                 open_fail[r.get("topic")] = open_fail.get(r.get("topic"), 0) + 1
                 continue
             verdict[key] += 1
-        total += cost(r.get("model"), r.get("effort"))
     base_total = len(rows) * cost(bm, be or "high")
-    saved = 100 * (1 - total / base_total) if base_total else 0
 
     scope = "all sessions" if all_sessions else "this session"
     print(f"Abo Fles (ابو فليس) — bill for {scope}: {len(rows)} agent{'' if len(rows) == 1 else 's'}")
@@ -152,13 +171,13 @@ def main():
     print(f"Cost index: {total:.1f} units" if total < 10 else f"Cost index: {total:,.0f} units")
     print(f"Same agents all at {baseline}{' (baseline effort assumed — the session effort is not visible)' if assumed else ''}{' (effort read from the session)' if from_session else ''}: {base_total:,.0f} units")
     low_tier = any((r.get("model") in ("haiku", "sonnet")) for r in rows)
-    if saved < 0:
-        note = f" (T4 agents ran above the session effort `{be or 'high'}` on purpose — abofles raises effort where money or security is at stake; the saving is in the cheap reads and tests around them)"
-    elif saved > 0 or low_tier:
+    if total > base_total:
+        note = f" (agents ran above {baseline}: a higher cell — Extra effort or Fable on 🟠/🔴 plans and work — or an escalation; the saving is in the cheaper reads and checks around them)"
+    elif total < base_total or low_tier:
         note = ""
     else:
-        note = " (every agent ran on opus — the saving of abofles is in tier routing; no Read/T1–T2 agent in this session)"
-    print(f"Saved: {saved:.0f}%{note}")
+        note = " (every agent ran on Opus or Fable — under Matrix = quality Opus writes at every tier, and the saving comes from the cheaper Read and Verify cells)"
+    print(f"Versus {baseline}: {saving_text(total, base_total, money=False)}{note}")
     print_real_spend(rows, bm)
 
 
@@ -167,14 +186,16 @@ def print_history(rows, bm, be):
     for r in rows:
         t = time.strftime("%m-%d %H:%M", time.localtime(r["ts"])) if r.get("ts") else "--:--"
         real = r.get("tokens") and r.get("base_usd")
-        saved = f"saved {100 * (1 - (r.get('usd') or 0) / r['base_usd']):.0f}%" if real else "saved -"
+        saved = saving_text(r.get("usd") or 0, r["base_usd"], money=False) if real else "saved -"
         side = "🪟 Session" if r.get("side") == "Session" else (r.get("side") or "?")  # the pane's label
         print(f"{t}  {side:<8} {(r.get('status') or '?'):<8} {(r.get('confidence') or '?'):<6} "
               f"{label(r.get('model') or '?', r.get('effort')):<22} {fmt_tokens(r['tokens']) if r.get('tokens') else '-':>6} tok  "
               f"{fmt_usd(r['usd']) if r.get('usd') is not None else '-':>7}  {saved}")
     t = history_totals(rows, bm, be)
     print(f"Total: {t['spawns']} agent{'' if t['spawns'] == 1 else 's'} · {fmt_tokens(t['tokens'])} tokens · {fmt_usd(t['usd'])} "
-          + (f"(same tokens on {label(bm, be)}: {fmt_usd(t['base_usd'])}) · " if t["base_usd"] else "") + f"saved {t['saved_pct']}%" + (f" · {t['open_fail']} open FAIL" if t["open_fail"] else ""))
+          + (f"(same tokens on {t['base_label']}: {fmt_usd(t['base_usd'])}) · " if t["base_usd"] else "")
+          + (saving_text(t["usd"], t["base_usd"], money=False) if t["base_usd"] else saving_text(0, 0, money=False, pct=t["saved_pct"]))
+          + (f" · {t['open_fail']} open FAIL" if t["open_fail"] else ""))
 
 
 def print_real_spend(rows, base_model):
@@ -185,10 +206,9 @@ def print_real_spend(rows, base_model):
     tokens = sum(r["tokens"] for r in real)
     cost = sum(r.get("usd") or 0 for r in real)
     base = sum(r.get("base_usd") or 0 for r in real)
-    saved = base - cost
     print()
     print(f"Real spend ({len(real)} of {len(rows)} agents had a transcript): {fmt_tokens(tokens)} tokens · {fmt_usd(cost)}")
-    print(f"Same tokens on {label(base_model)}: {fmt_usd(base)} · saved {fmt_usd(saved)} ({100 * saved / base:.0f}%)" if base else "")
+    print(f"Same tokens on {base_label_of(real, base_model)}: {fmt_usd(base)} · {saving_text(cost, base)}" if base else "")
 
 
 if __name__ == "__main__":

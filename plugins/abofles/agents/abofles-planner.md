@@ -1,6 +1,6 @@
 ---
 name: abofles-planner
-description: "Abo Fles Plan & Design agent (side Plan). Writes an implementation plan, design, or migration strategy before code changes. Returns numbered steps with files, risks, and a verification step. Use for \"plan how to add X\", \"design the change for Y\", \"migration strategy for Z\"."
+description: "Abo Fles Plan agent (side Plan): writes an implementation plan, design or migration strategy before code changes. Returns numbered steps with files, risks and a verification step."
 tools: Read, Glob, Grep, Bash
 ---
 

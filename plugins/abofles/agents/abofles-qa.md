@@ -1,6 +1,6 @@
 ---
 name: abofles-qa
-description: "Abo Fles QA reviewer (side Verify, tag QA). Checks a finished change against the ticket's acceptance criteria as a user would: flows end to end, regressions on neighbouring features, error and empty states. Returns PASS or FAIL with evidence. Use after Verify on 🟠/🔴 changes in Business Logic, Integrations, Frontend and Product topics."
+description: "Abo Fles QA reviewer (side Verify, tag QA): checks a change against the acceptance criteria as a user would — flows end to end, regressions, error and empty states. Returns PASS or FAIL with evidence."
 tools: Read, Glob, Grep, Bash
 ---
 

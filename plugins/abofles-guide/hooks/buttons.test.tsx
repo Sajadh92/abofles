@@ -68,6 +68,7 @@ async function harness($: any, on: any, first: object | null) {
     exits: [] as number[],
     gate: null as Promise<void> | null,
     draft: '',
+    raw: null as string | null, // when set, the state file reads as this text (a write caught mid-way)
     isFilled: true,
     toasts: [] as string[],
     runs: [] as { argv: unknown; cwd?: string }[],
@@ -85,7 +86,7 @@ async function harness($: any, on: any, first: object | null) {
     w.toasts.push(e.text)
     return { value: undefined }
   })
-  on('fs.read', () => (w.state === null ? { deny: 'no such file' } : { value: JSON.stringify({ guide: w.state }) }))
+  on('fs.read', () => (w.raw !== null ? { value: w.raw } : w.state === null ? { deny: 'no such file' } : { value: JSON.stringify({ guide: w.state }) }))
   on('process.run', async ($: any, e: any) => {
     w.runs.push({ argv: e.argv, cwd: e.init?.cwd })
     if (w.gate) await w.gate
@@ -161,6 +162,15 @@ test('with the memo saved by a compact the button fills /compact', async ($, on)
   const w = await harness($, on, guideOf([item()], { ctx: { tokens: 480000, mark: 500, auto: true } }))
   await w.ui.press({ key: 'memo' })
   expect(w.fills).toEqual([{ text: '/compact', mode: 'replace' }])
+  await w.ui.unmount()
+})
+
+test('a slash command is not added under a draft: it would be sent as text, so the button asks to clear the draft first', async ($, on) => {
+  const w = await harness($, on, guideOf([item()], { ctx: { tokens: 480000, mark: 500, auto: true } }))
+  w.draft = 'half a thought'
+  await w.ui.press({ key: 'memo' })
+  expect(w.fills).toEqual([])
+  expect(w.toasts.some(t => /clear your draft/.test(t) && t.includes('/compact'))).toBe(true)
   await w.ui.unmount()
 })
 
@@ -309,6 +319,20 @@ test('a bad number in the state file does not take the band away', async ($, on)
   const w = await harness($, on, guideOf([item(), { p: 7, text: 'junk' } as never], { task: { spawns: 'x', usd: '0.4' }, ctx: { tokens: 'many', mark: 500 } }))
   expect(await has(w, 'use')).toBe(true)
   expect(await has(w, 'memo')).toBe(false)
+  await w.ui.unmount()
+})
+
+test('one bad read of the state file keeps the band that is drawn', async ($, on) => {
+  const w = await harness($, on, guideOf([item()]))
+  expect(await has(w, 'use')).toBe(true)
+  w.raw = '{"guide": {"line": "half writ'
+  await $.turn.complete(turn('t1'))
+  expect(await has(w, 'use')).toBe(true)
+  // the file gone (not half written): the band goes
+  w.raw = null
+  w.state = null
+  await $.turn.complete(turn('t2'))
+  expect(await has(w, 'use')).toBe(false)
   await w.ui.unmount()
 })
 

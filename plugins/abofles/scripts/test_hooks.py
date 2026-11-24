@@ -42,11 +42,20 @@ def agent(model=None, effort=None, stype="abofles:abofles-reader", prompt="abofl
     return d
 
 
+ROUTE_NOTES = ("print this route line now: ", "print the workflow line first, intent filled in: ")
+
+
+def route_note(part):
+    """True for a pre() note that only hands out the route line and / or the workflow line (batch 5 #33)."""
+    ls = part.replace("abofles: ", "", 1).splitlines()
+    return bool(ls) and part.startswith("abofles: ") and all(l.startswith(ROUTE_NOTES) for l in ls)
+
+
 def pc_free(o):
-    """A pre() output with the Prompt checkup note (warn) taken out: None when that note was all of it. For the checks written before
-    the checkup that expect a short test prompt to start with no output at all."""
+    """A pre() output with the Prompt checkup note (warn) and the route / workflow line hand-out taken out: None when those were all
+    of it. For the checks written before them that expect a short test prompt to start with no output at all."""
     h = o.get("hookSpecificOutput", {}) if isinstance(o, dict) else {}
-    if h and "permissionDecision" not in h and all(m.startswith("abofles: prompt checkup — ") for m in (h.get("additionalContext") or "x").split("\n\n")):
+    if h and "permissionDecision" not in h and all(m.startswith("abofles: prompt checkup — ") or route_note(m) for m in (h.get("additionalContext") or "x").split("\n\n")):
         return None
     return o
 
@@ -176,10 +185,11 @@ def memo_health_tests(check):
         # ── health 2: idle session files ──
         r2 = mkroot()
         put_main(r2, [nline(1, "owner decision: keep the idle one?", "idleopen", r2, age=5)])
-        put_sess(r2, "idle0001", now="Written   2020-01-01 00:00\nTask      old work of idle0001\nNext      nothing", journal=["- 01-01 10:00 · 1 Agent · done: old thing"], age=5)
+        # nothing open = no real Task either (M8: a real Task is open work, it waits 2 × Archive sessions and leaves a `left open` item)
+        put_sess(r2, "idle0001", now="Written   2020-01-01 00:00\nTask      none — between tasks\nDone      old work of idle0001\nNext      nothing", journal=["- 01-01 10:00 · 1 Agent · done: old thing"], age=5)
         mdir(r2).joinpath("idle0001.compact.md").write_text("# Compact summary\nraw old summary\n")
-        put_sess(r2, "idle0003", now="Written   2020-01-01 00:00\nTask      older work", age=3 + 1 / 24)
-        put_sess(r2, "idle0004", now="Written   2020-01-01 00:00\nTask      never indexed", age=6, index=False)
+        put_sess(r2, "idle0003", now="Written   2020-01-01 00:00\nTask      none — older work", age=3 + 1 / 24)
+        put_sess(r2, "idle0004", now="Written   2020-01-01 00:00\nTask      none — never indexed", age=6, index=False)
         put_sess(r2, "idleopen", now="Written   2020-01-01 00:00\nTask      has an open item", age=5)
         put_sess(r2, "caller01", now="Written   2020-01-01 00:00\nTask      the caller", age=5)
         put_sess(r2, "fresh001", now="Written   2020-01-01 00:00\nTask      fresh", age=1 / 24)
@@ -192,7 +202,7 @@ def memo_health_tests(check):
               and not mdir(r2).joinpath("idle0001.compact.md").exists() and "old work of idle0001" in mdir(r2).joinpath("archive", "idle0001.md").read_text())
         check("health: ... their index lines are in the `## Archive` list of archive.md, first group, linking archive/<sid8>.md",
               all(f"](archive/{k}.md)" in a2 for k in ("idle0001", "idle0003", "idle0004")) and re.search(r"\n## Archive\n- \[idle0001\]\(archive/idle0001\.md\).* · archived \d{4}-\d\d-\d\d", a2)
-              and a2.index("## Archive") == min(a2.index(h) for h in re.findall(r"^## .+$", a2, re.M)) and "task: old work of idle0001" in a2)
+              and a2.index("## Archive") == min(a2.index(h) for h in re.findall(r"^## .+$", a2, re.M)) and "task: none — between tasks" in a2)
         check("health: ... the calling session, a session with an open item of its own, a fresh one and one just under 3 days stay",
               live_of(r2) == ["caller01", "fresh001", "idle0002", "idleopen"] and set(index_of(r2)) == {"caller01", "fresh001", "idle0002", "idleopen"})
         check("health: archived_sids lists them", HM.archived_sids(str(r2)) == {"idle0001", "idle0003", "idle0004"})
@@ -206,7 +216,7 @@ def memo_health_tests(check):
         check("health: once its item is resolved (and old enough) the idle session is archived too", mdir(r2).joinpath("archive", "idleopen.md").exists() and not mdir(r2).joinpath("idleopen.md").exists() and "idleopen" not in index_of(r2)
               and "caller01" in live_of(r2))
         # an archived session that wakes up again: its new file and the archived one are both kept
-        put_sess(r2, "idle0001", now="Written   2020-01-01 00:00\nTask      came back", age=10)
+        put_sess(r2, "idle0001", now="Written   2020-01-01 00:00\nTask      none — between tasks\nDone      came back", age=10)
         HM.memo_health(str(r2), sid="caller01-aaaa-bbbb")
         back = mdir(r2).joinpath("archive", "idle0001.md").read_text()
         check("health: a session archived twice keeps both texts (joined, nothing overwritten)", "old work of idle0001" in back and "came back" in back)
@@ -239,9 +249,9 @@ def memo_health_tests(check):
         res = HM.memo_health(str(r4), sid="dupXXXXX")
         sx, sy, sz = (HM.sess_read(str(r4), k)["Decisions"] for k in ("dupXXXXX", "dupYYYYY", "dupZZZZZ"))
         main_dec = HM.memo_read(str(r4))["Decisions"]
-        check("health: exact-duplicate decisions across files -> the oldest stays, the others are dropped", res["deduped"] == 3 and "Cap in IQD only? → Yes" in sx and "Cap in IQD only? → Yes" not in sy and "Cap in IQD only? → Yes" not in sz)
-        check("health: ... same question with another answer is not a duplicate; two main-memo notes with the same text keep the older", "Cap in IQD only? → No" in sz and "Other question? → A" in sx and "Other question? → B" in sy
-              and main_dec.count("use IQD") == 1 and stamp(ago(6)) in main_dec and "use USD" in main_dec)
+        check("health: exact-duplicate decisions across files -> the newest stays (the later copy), the others are dropped", res["deduped"] == 3 and "Cap in IQD only? → Yes" in sy and "Cap in IQD only? → Yes" not in sx and "Cap in IQD only? → Yes" not in sz)
+        check("health: ... same question with another answer is not a duplicate; two main-memo notes with the same text keep the newer", "Cap in IQD only? → No" in sz and "Other question? → A" in sx and "Other question? → B" in sy
+              and main_dec.count("use IQD") == 1 and stamp(ago(1)) in main_dec and stamp(ago(6)) not in main_dec and "use USD" in main_dec)
         a4 = arch_txt(r4)
         check("health: ... the dropped lines are in archive.md under `duplicate decisions` (no text lost)", "· duplicate decisions" in a4 and a4.count("Cap in IQD only? → Yes") == 2 and a4.count("use IQD") == 1)
         s4 = snap(r4)
@@ -249,7 +259,7 @@ def memo_health_tests(check):
 
         # ── health 5: size caps ──
         r5 = mkroot()
-        notes = [f"- {stamp(ago(30 - i / 10))} · by:you · note → settled point number {i:03d} " + "x" * 60 + f" (s:cap00001 p:{HM.proj_tag(r5)})" for i in range(130)]
+        notes = [f"- {stamp(ago(30 - i / 10))} · by:judge · judge: settled point number {i:03d}? → " + "x" * 60 + f" (s:cap00001 p:{HM.proj_tag(r5)})" for i in range(130)]  # Judge notes: the cap moves them (never the owner's: batch6_tests)
         put_main(r5, [nline(1, "recent resolved", "cap00001", r5, done=1, age=2), nline(2, "owner decision: still open?", "cap00001", r5, age=2)], notes)
         jl = [f"- {stamp(ago(0, 100 - i))} · {i:02d} Agents · done: journal entry number {i:02d} " + "y" * 330 for i in range(60)][::-1]  # newest first, over SESSION_CAP
         put_sess(r5, "cap00001", now="Written   2020-01-01 00:00\nTask      big journal", journal=jl, age=0)
@@ -260,7 +270,7 @@ def memo_health_tests(check):
         check("health: session cap — the oldest Journal lines left, the newest kept (in order), the cut ones are in archive.md", js == jl[:len(js)] and 0 < len(js) < 60 and f"journal entry number {int(js[-1].split('number ')[1][:2]) - 1:02d}" in a5
               and "· journal · cap00001" in a5 and all(l in a5 for l in jl[len(js):]))
         left_notes = HM.memo_read(str(r5))["Decisions"].splitlines()
-        check("health: main cap — resolved items go first, then the oldest notes; open items stay; the notes left are the newest; nothing is lost",
+        check("health: main cap — resolved items go first, then the oldest Judge notes; open items stay; the notes left are the newest; nothing is lost",
               any("owner decision: still open?" in l for l in needs_of(r5)) and "recent resolved" in a5 and left_notes == notes[len(notes) - len(left_notes):] and len(left_notes) < 130
               and all(l in a5 or l in left_notes for l in notes) and "· notes" in a5)
         s5 = snap(r5)
@@ -600,8 +610,8 @@ def memo_health_tests(check):
         for i in range(HM.JOURNAL_KEEP + 2):
             HM.memo_trace(str(rx), XA, f"trace line {i:03d}")
         ax = HM.archive_path(str(rx)).read_text()
-        check("trim: decisions and journal lines past their count go to archive.md first (nothing is lost)",
-              "settled point 000" in ax and "settled point 000" not in HM.memo_read(str(rx))["Decisions"] and "question 000?" in ax and "question 000?" not in HM.sess_read(str(rx), XA)["Decisions"]
+        check("trim: session decisions and journal lines past their count go to archive.md first (nothing is lost); the owner's notes are never cut",
+              "settled point 000" not in ax and "settled point 000" in HM.memo_read(str(rx))["Decisions"] and "question 000?" in ax and "question 000?" not in HM.sess_read(str(rx), XA)["Decisions"]
               and "trace line 000" in ax and "trace line 000" not in HM.sess_read(str(rx), XA)["Journal"] and f"settled point {HM.DECISIONS_KEEP + 1:03d}" in HM.memo_read(str(rx))["Decisions"])
         q = HM.parse_compact_summary("7. Pending Tasks:\n   - None. Optionally, the user may check the pane live.\n   - Context is about 463K, so /compact is due soon.\n8. Current Work:\n   Moved the file.\n9. Optional Next Step:\n   - Start no new work.\n")
         check("compact: parse — `None.` with more after it is nothing pending; a note on the context size or on starting no work is no work", q == {"task": "Moved the file.", "left": [], "next": "", "done": []})
@@ -676,6 +686,12 @@ def memo_health_tests(check):
               st_.get("inflight") == 0 and st_.get("inflight_bg") == 0 and not st_.get("inflight_ids") and not den_(hrun("pre", ag_(SR, rr, bg=True, tid="tu3"))))
         hrun("release", {**ag_(SR, rr, tid="nope"), "error": "x"})
         check("agent gate: ... a release of an id it never reserved changes nothing", HM.load_state(SR).get("inflight") == 1 and HM.load_state(SR).get("inflight_bg") == 1)
+        rb = mkroot(["Agents = 4", "Parallel = 2"]); SB = "gb000000-1111-2222-3333-444444444444"
+        hrun("start", {"session_id": SB, "cwd": str(rb), "source": "startup"})
+        pb_ = ag_(SB, rb, bg=True, tid="tb1"); hrun("pre", pb_)
+        n_before = HM.load_state(SB).get("inflight_bg")
+        hrun("post", {**pb_, "tool_response": {"status": "completed", "agentId": "b1", "content": [{"type": "text", "text": "STATUS: done\nCONFIDENCE: high\nCHANGED:\n- a.py — x\nRAN: none\nLEFT: none"}]}})
+        check("agent gate: a background call that comes back completed clears its inflight_bg slot (no leak)", n_before == 1 and HM.load_state(SB).get("inflight_bg") == 0 and not HM.load_state(SB).get("inflight_ids"))
         rk = mkroot(["Agents = 1"]); SK = "gk000000-1111-2222-3333-444444444444"
         hrun("start", {"session_id": SK, "cwd": str(rk), "source": "startup"})
         pk_ = ag_(SK, rk, prompt="abofles:skip research the market", stype="general-purpose"); hrun("pre", pk_); done_(pk_, "k1")
@@ -1117,7 +1133,11 @@ def memo_agent_tests(check):
         check("memoagent: rewrite-now replaces Task, Left and Next only, stamps `· from memo agent`, keeps Done and Verify",
               w2.returncode == 0 and re.match(r"Written   \d{4}-\d\d-\d\d \d\d:\d\d · from memo agent\n", nb) and "Task      new task from the summary" in nb and "Left      only left" in nb and "Next      do the thing" in nb
               and "Done      did x" in nb and "Verify    ran y" in nb and "old task" not in nb and "should be ignored" not in nb)
-        check("memoagent: ... the index line follows; a second rewrite of a memo-agent Now is allowed", "task: new task from the summary" in HM.memo_path(str(r)).read_text() and F.cli(r, CA, "rewrite-now", "bb000000", stdin="Next      again").returncode == 0)
+        w3 = F.cli(r, CA, "rewrite-now", "bb000000", stdin="Next      again")
+        bbf_ = HM.session_memo_path(str(r), "bb000000"); bbf_.write_text(re.sub(r"^Written   \S+ \S+", "Written   2020-01-01 00:00", bbf_.read_text(), count=1, flags=re.M))
+        check("memoagent: ... the index line follows; a memo-agent Now written under 10 min ago is not rewritten again (fresh), an older one is",
+              "task: new task from the summary" in HM.memo_path(str(r)).read_text() and w3.returncode == 5 and "min ago" in w3.stdout
+              and F.cli(r, CA, "rewrite-now", "bb000000", stdin="Next      again").returncode == 0)
         F.put_sess(r, "dd000000", now="Written   2020-01-01 00:00\nTask      hand written long ago\nLeft      x", journal=[f"- {stamp(1)} · 1 Agent · done: newer receipt"])
         check("memoagent: ... a hand-written Now OLDER than the last receipt may be rewritten; a text with no Task/Left/Next line exits 2",
               F.cli(r, CA, "rewrite-now", "dd000000", stdin="Task      fresh").returncode == 0 and F.cli(r, CA, "rewrite-now", "dd000000", stdin="Done      only done").returncode == 2)
@@ -1620,7 +1640,7 @@ def sub_session_tests(check):
         sc = lambda name: subprocess.run([sys.executable, "-X", "utf8", str(Path(__file__).resolve().parent / name), "--baseline", "opus·high"], cwd=str(proj), capture_output=True, text=True, env=benv).stdout
         bo, so = sc("bill.py"), sc("status.py")
         check("bill: a Session row is no agent: 1 agent, no Sonnet bar, the cost of the Work row only", "bill for this session: 1 agent\n" in bo and "Sonnet" not in bo
-              and "Saved: 0%" in bo and "Session" not in bo)
+              and "Versus Opus 5.5 · High: saved 0%" in bo and "Session" not in bo)
         check("status: a Session row is no agent: 1 agent, no Sonnet bar, saved 0%", "this session: 1 agent ·" in so and "saved 0%" in so and "Sonnet" not in so)
         (lw / "billsess.jsonl").write_text(json.dumps({"ts": 2, "agent_id": "local_s9", "side": "Session", "topic": "T", "status": "open", "model": "sonnet", "effort": "medium"}) + "\n")
         bo, so = sc("bill.py"), sc("status.py")
@@ -2214,6 +2234,2314 @@ def user_prompt_checkup_tests(check):
         _H.refresh_pane(str(rw), st0, "upc40000-1111-2222-3333-444444444444")
         check("prompt checkup counts: ... zeros when there was no hit", st0["pane"].get("checkup") == {"agent": 0, "user": 0, "denied": 0, "last": None})
 
+def memo_fix_backlog_tests(check):
+    """Work-memo fix backlog (items 14-23): a move joins the session files, a receipt keeps the Left it does not cover, colon labels, the worktree
+    memo root, an unknown --session, status.py's trace, closed sessions' items, resolve after a renumber, archive safety, and the smaller ones."""
+    import threading
+    F = _MemoFixture("memofixes"); HM = F.HM
+    gitc = lambda d, *a: subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *a], cwd=str(d), capture_output=True, text=True)
+    try:
+        # 14. a move into a project that already holds this session's file joins them
+        A, B = F.mkroot(), F.mkroot(); S = "mvmerge1-aaaa-bbbb"
+        jB = [f"- 11-{10 + i:02d} 10:00 · 1 Agent · done: B receipt {i}" for i in range(10)][::-1]
+        F.put_sess(B, S, now="Written   2026-11-20 10:00 · from receipt\nTask      newer task in B\nLeft      B left", journal=jB, decisions=["- 11-11 10:00 · by:you · B q? → yes"])
+        F.put_sess(A, S, now="Written   2026-11-01 10:00 · from receipt\nTask      older task in A", journal=["- 11-21 09:00 · 1 Agent · done: A receipt", jB[0]],
+                   decisions=["- 11-12 10:00 · by:you · A q? → no", "- 11-11 10:00 · by:you · B q? → yes"])
+        HM.memo_move(str(A), str(B), S, "test")
+        sB = HM.sess_read(str(B), S); rec = [l for l in sB["Journal"].splitlines() if "done:" in l]
+        check("fix 14: move into a project with this session's file keeps every receipt (10 + 1, the shared one once), the newer Now, the decisions joined",
+              len(rec) == 11 and "A receipt" in rec[0] and "newer task in B" in sB["Now"] and "older task in A" not in sB["Now"]
+              and sB["Decisions"].splitlines() == ["- 11-11 10:00 · by:you · B q? → yes", "- 11-12 10:00 · by:you · A q? → no"] and "moved here from" in sB["Journal"].splitlines()[0])
+        F.put_sess(A, S, now="Written   2026-11-22 10:00\nTask      newest task in A")
+        HM.memo_move(str(B), str(A), S, "back")
+        check("fix 14: ... and a newer Now on the moving side wins", "newest task in A" in HM.sess_read(str(A), S)["Now"] and len([l for l in HM.sess_read(str(A), S)["Journal"].splitlines() if "done:" in l]) == 11)
+        # 15. a receipt keeps the old Left its done does not cover, an owner decision after `none;`, never the word "ready"
+        P = F.mkroot(git=False)
+        rc_ = lambda op, done="wire the FE badge — done on the order page": HM.parse_receipt(f"🧾 **1 Agent · 1 u · Saved 1%** vs Opus 5.5\n- `done` → {done}\n- `check` → ok\n- `open` → {op}")
+        old_ = "Written   2026-11-20 10:00\nTask      t\nLeft      wire the FE badge\nLeft      update the docs page"
+        b1 = HM.receipt_now(str(P), old_, rc_("none"))
+        check("fix 15: open none keeps the old Left the done does not cover, drops the covered one, writes no Next and no 'ready'",
+              "Left      update the docs page" in b1 and "wire the FE badge" not in b1.split("Done")[1].split("\n", 1)[1] and "Next" not in b1 and "ready" not in b1)
+        b2 = HM.receipt_now(str(P), "", rc_("none; owner decision: cap in IQD only?", done="x"))
+        check("fix 15: `open → none; owner decision: X?` keeps X as a Left line, not 'ready'", "Left      owner decision: cap in IQD only?" in b2 and "ready" not in b2 and "Next" not in b2)
+        b3 = HM.receipt_now(str(P), "", rc_("none", done="x"))
+        check("fix 15: nothing left and no next -> `Next none in receipt`", "Next      none in receipt" in b3 and "ready" not in b3 and "Left" not in b3)
+        # 16. labels with a colon, an arrow or backticks
+        nf_ = HM.now_fields("Task: cap the surcharge\nLeft → FE badge\n`Next` → run the suite\n**Done:** capped")
+        check("fix 16: now_fields reads `Task:`, `Left →`, `` `Next` → `` and `**Done:**`", nf_.get("Task") == ["cap the surcharge"] and nf_.get("Left") == ["FE badge"] and nf_.get("Next") == ["run the suite"] and nf_.get("Done") == ["capped"])
+        S16 = "colonlab-aaaa-bbbb"
+        HM.memo_now(str(P), "Task: cap the surcharge\nLeft: FE badge\nNext: run the suite", S16)
+        n16 = HM.sess_read(str(P), S16)["Now"]; d16 = HM.resume_data(str(P), S16)
+        check("fix 16: memo now with colon labels is written as `Task      x` and read back by the resume data and the index",
+              "Task      cap the surcharge" in n16 and "Left      FE badge" in n16 and d16["now"] == ["cap the surcharge"] and d16["left"] == ["FE badge"] and d16["next"] == ["run the suite"]
+              and "task: cap the surcharge · next: run the suite" in HM.memo_path(str(P)).read_text())
+        # 17. a session launched in a linked worktree keeps its memo in the main repository
+        M17 = F.mkroot(); gitc(M17, "commit", "-q", "--allow-empty", "-m", "init"); WT = Path(F.hh, "wt17")
+        gitc(M17, "worktree", "add", "-q", str(WT))
+        WT = Path(os.path.realpath(WT))
+        if WT.is_dir():
+            Path(M17, "sub").mkdir()
+            check("fix 17: memo_home maps a linked worktree to the main repository top; a subfolder of a normal repository stays itself",
+                  HM.memo_home(str(WT)) == str(M17) and HM.memo_home(str(Path(M17, "sub"))) == str(Path(M17, "sub")) and HM.memo_home(str(M17)) == str(M17))
+            S17 = "worktree-aaaa-bbbb"
+            F.hrun("start", {"session_id": S17, "cwd": str(WT)})
+            st17 = HM.load_state(S17)
+            check("fix 17: start in a worktree -> the memo project is the main repository; an edit in the worktree counts for it (no move back)",
+                  os.path.realpath(HM.project_root({}, st17)) == str(M17) and HM.work_key(st17, str(WT / "a.py")) == str(M17))
+        else:
+            check("fix 17: git worktree add worked", False)
+        # 18. --session <UUID> with no state: no session, never the folder's newest one
+        R18 = F.mkroot(); F.mkstate("other18-1111-2222", R18, last_prompt_ts=time.time())
+        U18 = "1a2b3c4d-1111-4222-8333-444455556666"
+        w18 = F.cli(R18, U18, "now", stdin="Task      mine")
+        check("fix 18: newest_state_path with an unknown UUID is None; memo.py now --session <it> never writes into the other session's file, nor makes one for it (exit 4)",
+              HM.newest_state_path(str(R18), U18) is None and HM.newest_state_path(str(R18)).stem == "other18-1111-2222"
+              and not HM.session_memo_path(str(R18), "other18-1111-2222").exists() and not HM.session_memo_path(str(R18), U18).exists() and w18.returncode == 4 and "no session" in w18.stdout)
+        n18, r18 = F.cli(R18, U18, "note", "ghost note"), F.cli(R18, U18, "receipt", stdin="🧾 **1 Agent · 1 u · Saved 1%** vs Opus 5.5\n- `done` → x\n- `open` → none")
+        check("fix 18: ... note and receipt with an unknown --session UUID exit 4 too: no memo line, no session file, no state file",
+              n18.returncode == 4 and r18.returncode == 4 and "ghost note" not in (HM.memo_path(str(R18)).read_text() if HM.memo_path(str(R18)).exists() else "")
+              and not HM.session_memo_path(str(R18), U18).exists() and not HM.state_path(U18).exists())
+        # 19. status.py writes its trace into the session's memo project, not its launch root
+        R19a, R19b = F.mkroot(), F.mkroot(); S19 = "status19-aaaa-bbbb"
+        F.mkstate(S19, R19a, project=str(R19b))
+        Path(F.led, f"{S19}.jsonl").write_text(json.dumps({"agent_id": "abcdef123456", "verdict": "FAIL", "topic": "pay"}) + "\n")
+        r19 = subprocess.run([sys.executable, str(Path(__file__).resolve().parent / "status.py"), "--resolve", "abcdef", "--trace", "re-checked: ok", "--session", S19],
+                             cwd=str(R19a), capture_output=True, text=True, env=dict(os.environ))
+        check("fix 19: status.py --resolve --trace lands in the project's memo (st project), the launch root gets none",
+              r19.returncode == 0 and "resolved by hand" in HM.sess_read(str(R19b), S19)["Journal"] and not HM.session_memo_path(str(R19a), S19).exists())
+        # 20. a closed session's item whose p: names another project belongs to this project's sessions
+        R20 = F.mkroot(); HM.archive_dir(str(R20)).mkdir(parents=True)
+        HM.archive_dir(str(R20)).joinpath("closed20.md").write_text("# Session closed20\n")
+        F.put_main(R20, needs=["1. [ ] 11-01 10:00 · owner decision: cap? #ab12 (s:closed20 p:OtherProj)", "2. [ ] 11-01 10:01 · owner decision: live one? #cd34 (s:live2000 p:OtherProj)"])
+        F.put_sess(R20, "live2000", now="Written   2026-11-23 10:00\nTask      live")
+        own20, oth20 = HM.need_split([l for l in HM.memo_read(str(R20))["Needs you"].splitlines() if "[ ]" in l], "me200000-1", str(R20))
+        check("fix 20: a closed session's item tagged with another project is this project's own; a live session's stays information",
+              len(own20) == 1 and "#ab12" in own20[0] and len(oth20) == 1 and "#cd34" in oth20[0] and bool(HM.memo_apply(str(R20), "resolve", "me200000-1", ref="#ab12", note="done")))
+        # 21. resolve <n> after a renumber
+        R21 = F.mkroot(); S21 = "renum210-aaaa-bbbb"
+        for q in ("first?", "second?", "third?"):
+            HM.memo_needs(str(R21), S21, f"owner decision: {q}", str(R21))
+        ids21 = [HM.need_id(l) for l in HM.memo_read(str(R21))["Needs you"].splitlines()]
+        HM.resume_block(str(R21), session_id=S21)  # shown: 1 2 3
+        HM.memo_apply(str(R21), "drop_item", S21, ref="#" + ids21[0], reason="noise")  # renumbered: second is 1, third is 2
+        r21 = HM.memo_apply(str(R21), "resolve", S21, ref="2", note="x")
+        check("fix 21: a bare number that names another item than when shown is refused, naming the #id to use; nothing ticked",
+              not r21 and r21.code == "renumbered" and f"#{ids21[1]}" in r21.reason and f"#{ids21[2]}" in r21.reason and "[x]" not in HM.memo_path(str(R21)).read_text())
+        check("fix 21: ... the #id works; after the list is shown again the number works too",
+              bool(HM.memo_apply(str(R21), "resolve", S21, ref="#" + ids21[1], note="x")) and (HM.resume_block(str(R21), session_id=S21) or True)
+              and bool(HM.memo_apply(str(R21), "resolve", S21, ref="2", note="x")) and "third?" in HM.memo_path(str(R21)).read_text().split("[x]")[-1])
+        # 22. archive safety: Left lines, an open task, git work at risk
+        R22 = F.mkroot(); C22 = "caller22-aaaa-bbbb"
+        F.put_sess(R22, "lefty022", now="Written   2020-01-01 00:00\nTask      x\nLeft      FE tests", age=10)
+        a22 = HM.memo_apply(str(R22), "archive_session", C22, curator=True, target="lefty022")
+        check("fix 22: archive-session is refused for a session with Left lines", not a22 and a22.code == "refused" and "Left" in a22.reason)
+        def repo22(name, push=True):
+            bare = Path(F.hh, name + ".git"); subprocess.run(["git", "init", "-q", "--bare", str(bare)], capture_output=True)
+            w = F.mkroot(name=name); gitc(w, "commit", "-q", "--allow-empty", "-m", "c1"); gitc(w, "remote", "add", "origin", str(bare))
+            gitc(w, "push", "-q", "-u", "origin", "HEAD")
+            if not push:
+                gitc(w, "commit", "-q", "--allow-empty", "-m", "c2")
+            return w
+        Wc, Wu = repo22("clean22"), repo22("unpushed22", push=False)
+        F.mkstate("clean022", Wc, work={str(Wc): 3}); F.mkstate("gitty022", Wu, work={str(Wu): 3})
+        F.put_sess(R22, "clean022", now="Written   2020-01-01 00:00\nTask      none — between tasks", age=10)
+        F.put_sess(R22, "gitty022", now="Written   2020-01-01 00:00\nTask      none — between tasks", age=10)
+        F.put_sess(R22, "step0022", now="Written   2020-01-01 00:00\nTask      step 2 of 4 — B", age=10)
+        F.put_sess(R22, "lefty4d2", now="Written   2020-01-01 00:00\nTask      x\nLeft      BE docs", age=4)  # idle past 3 days, not past 2 × 3
+        h22 = HM.memo_health(str(R22), sid=C22)
+        check("fix 22: git_risk says unpushed / clean", HM.git_risk(str(Wu)) == "unpushed" and HM.git_risk(str(Wc)) == "")
+        n22 = HM.memo_read(str(R22))["Needs you"]
+        check("fix 22: auto-archive skips an idle session with Left lines (under 2 × Archive sessions) and one whose repository has an unpushed commit; a clean idle one goes",
+              HM.archived_sids(str(R22)) == {"clean022", "lefty022", "step0022"} and h22["archived_sessions"] == 3 and sorted(p.stem for p in HM.session_files(str(R22))) == ["gitty022", "lefty4d2"])
+        check("fix 22: ... one idle past 2 × Archive sessions goes with its Left lines moved first into one open Needs-you item of the project (its tag kept)",
+              re.search(r"^1\. \[ \] \d\d-\d\d \d\d:\d\d · left open when session lefty022 was archived: FE tests #[0-9a-f]{4} \(s:lefty022 p:" + re.escape(R22.name) + r"\)$", n22, re.M) is not None
+              and "BE docs" not in n22 and n22.count("left open") == 2)
+        check("M15: a session stuck on `step k of n` idle past 2 × Archive sessions goes too, its step kept as a `left open` item (it never blocks forever)",
+              "left open when session step0022 was archived: task: step 2 of 4 — B" in n22)
+        # 1a. archive-session --force --trace: Left lines and git risk waived on the owner's word, the Left lines kept as one Needs-you item
+        a22g = HM.memo_apply(str(R22), "archive_session", C22, curator=True, target="gitty022")
+        check("fix 22: archive-session is refused for a session whose repository has work at risk, naming --force --trace", not a22g and a22g.code == "refused" and "unpushed" in a22g.reason and "--force --trace" in a22g.reason)
+        a22n = HM.memo_apply(str(R22), "archive_session", C22, curator=True, target="lefty4d2", force=True, trace="  ")
+        a22f = HM.memo_apply(str(R22), "archive_session", C22, curator=True, target="lefty4d2", force=True, trace="owner: archive it, BE docs moves on")
+        a22h = HM.memo_apply(str(R22), "archive_session", C22, curator=True, target="gitty022", force=True, trace="owner: the unpushed commit is a scratch one")
+        n22f, arc22, j22 = HM.memo_read(str(R22))["Needs you"], (HM.memo_dir(str(R22)) / "archive.md").read_text(), HM.sess_read(str(R22), C22)["Journal"]
+        check("fix 22: archive-session --force without a trace is refused (bad-arg); with the owner's words it archives the Left session and the git-risk one",
+              not a22n and a22n.code == "bad-arg" and bool(a22f) and bool(a22h) and {"lefty4d2", "gitty022"} <= HM.archived_sids(str(R22)))
+        check("fix 22: ... the forced session's Left lines are one open Needs-you item, the trace is on the archive line and in the caller's Journal",
+              re.search(r"left open when session lefty4d2 was archived: BE docs #[0-9a-f]{4} \(s:lefty4d2 p:" + re.escape(R22.name) + r"\)", n22f) and n22f.count("left open") == 3
+              and "forced: owner: archive it, BE docs moves on" in arc22 and "archived session lefty4d2 by force (1 Left line → Needs you): owner: archive it" in j22
+              and "archived session gitty022 by force: owner: the unpushed commit" in j22)
+        R1c = F.mkroot(); F.mkstate("callcli1", R1c); F.put_sess(R1c, "leftcli1", now="Written   2020-01-01 00:00\nTask      x\nLeft      FE badge\nLeft      BE cap", age=1)
+        c1a, c1b = F.cli(R1c, "callcli1", "archive-session", "leftcli1", "--force"), F.cli(R1c, "callcli1", "archive-session", "leftcli1", "--trace", "x")
+        c1c = F.cli(R1c, "callcli1", "archive-session", "leftcli1", "--force", "--trace", "owner said archive")
+        check("fix 22: memo.py archive-session --force needs --trace and --trace needs --force (exit 2); both archive it, Left joined into one item",
+              c1a.returncode == 2 and c1b.returncode == 2 and c1c.returncode == 0 and HM.archived_sids(str(R1c)) == {"leftcli1"}
+              and "left open when session leftcli1 was archived: FE badge; BE cap" in HM.memo_read(str(R1c))["Needs you"])
+        # 2. git reads take no optional locks
+        real_run, calls2 = HM.subprocess.run, []
+        HM.subprocess.run = lambda a, **kw: (calls2.append(list(a)), real_run(a, **kw))[1]
+        try:
+            HM.git_risk(str(Wu))
+        finally:
+            HM.subprocess.run = real_run
+        check("fix 2: every git call of git_risk passes --no-optional-locks", len(calls2) >= 2 and all(c[:2] == ["git", "--no-optional-locks"] for c in calls2))
+        # 4. one git deadline for the whole health pass
+        W4 = repo22("clean4g"); R4 = F.mkroot(); F.mkstate("clean4g0", W4, work={str(W4): 1})
+        F.put_sess(R4, "clean4g0", now="Written   2020-01-01 00:00\nTask      none — between tasks", age=10)
+        check("fix 4: session_git_risk past the shared deadline counts as at risk without a git call", HM.session_git_risk("clean4g0", time.monotonic() - 1) == f"{W4}: deadline" and HM.session_git_risk("clean4g0") == "")
+        HM.GIT_RISK_TOTAL = 0
+        try:
+            h4 = HM.memo_health(str(R4), sid=C22)
+        finally:
+            HM.GIT_RISK_TOTAL = 6
+        h4b = HM.memo_health(str(R4), sid=C22)
+        check("fix 4: past the pass deadline memo_health archives no session its git check did not reach; the next pass with time does",
+              h4["archived_sessions"] == 0 and h4b["archived_sessions"] == 1 and HM.archived_sids(str(R4)) == {"clean4g0"})
+        # 5. Decisions stops at the next known section
+        R5 = F.mkroot(); HM.memo_path(str(R5)).parent.mkdir(parents=True, exist_ok=True)
+        HM.memo_path(str(R5)).write_text("# memo\n\n## Needs you\n\n## Decisions\n- 11-20 10:00 · by:you · real q? → yes\n\n## Sessions\n- 11-21 10:00 · by:you · index q? → no\n")
+        pd5 = json.dumps(HM.pane_decisions(str(R5)))
+        check("fix 5: pane_decisions reads the main memo's Decisions only, never a `## Sessions` line after it", "real q?" in pd5 and "index q?" not in pd5)
+        R5m = F.mkroot(); HM.memo_path(str(R5m)).parent.mkdir(parents=True, exist_ok=True)
+        HM.memo_path(str(R5m)).write_text("# memo\n\n## Now\nSession   oldmig05\nTask      t\n\n## Decisions\n- 11-20 10:00 · by:you · kept q? → yes\n\n## Sessions\n- 11-21 10:00 · by:you · stray q? → no\n\n## Journal\n")
+        d5m = HM.memo_read(str(R5m))["Decisions"]
+        check("fix 5: memo_migrate keeps a `## Sessions` index of a one-file memo out of Decisions", "kept q?" in d5m and "stray q?" not in d5m)
+        # 6. old Left: capped, and dropped when the receipt's done names the old Task
+        old6 = "Written   2026-11-20 10:00\nTask      cap the surcharge\n" + "".join(f"Left      reworded item number {i} alpha{i}\n" for i in range(8))
+        b6 = HM.receipt_now(str(P), old6, rc_("FE badge", done="docs updated"))
+        l6 = [l for l in b6.splitlines() if l.startswith("Left")]
+        check("fix 6: a receipt keeps at most 5 old Left lines (the first, newest ones) after its own", len(l6) == 6 and l6[0] == "Left      FE badge" and "alpha4" in l6[5] and "alpha5" not in b6)
+        b6d = HM.receipt_now(str(P), old6, rc_("FE badge", done="cap the surcharge — done in AqsatiRules"))
+        check("M6: ... a done that names the old Task no longer drops the old Left lines it does not cover (5 kept after the receipt's own)",
+              [l for l in b6d.splitlines() if l.startswith("Left")] == ["Left      FE badge"] + [f"Left      reworded item number {i} alpha{i}" for i in range(5)])
+        b6s = HM.receipt_now(str(P), old_, rc_("none"))
+        check("fix 6: ... a short Task word inside the done (`t`) is no match: the uncovered old Left stays", "Left      update the docs page" in b6s)
+        # 7. docs name an item by its #id
+        docs7 = [p for d in ("README.md", "commands") for p in (Path(HM.SCRIPTS_DIR).parent.parent.glob(f"*/{d}") if d == "README.md" else Path(HM.SCRIPTS_DIR).parent.parent.glob(f"*/{d}/*.md"))]
+        check("fix 7: no README or command page names --reopen / --resolve <n>; the guide README says --reopen <#id>",
+              len(docs7) > 2 and not any(re.search(r"--(?:reopen|resolve) <n>", p.read_text()) for p in docs7) and "--reopen <#id>" in Path(HM.SCRIPTS_DIR).parent.parent.joinpath("abofles-guide", "README.md").read_text())
+        Path(Wc, "dirty.txt").write_text("x"); Wn = F.mkroot(name="noup22"); gitc(Wn, "commit", "-q", "--allow-empty", "-m", "c1")
+        dirty22 = HM.git_risk(str(Wc)); gitc(Wc, "stash", "-q", "-u")
+        check("fix 22: ... dirty and no-upstream repositories count as at risk; a stash too", dirty22 == "dirty" and HM.git_risk(str(Wn)) == "no upstream" and HM.git_risk(str(Wc)) == "stash")
+        # 23a. closed counts from the session's own last write, not the file's mtime
+        R23 = F.mkroot(); S23 = "closed23-aaaa-bbbb"
+        HM.memo_now(str(R23), "Task      t", S23)
+        p23 = HM.session_memo_path(str(R23), S23)
+        old23 = time.strftime("%Y-%m-%d %H:%M", time.localtime(time.time() - 20 * 86400))
+        p23.write_text(HM.ACTIVE_RE.sub(f"Active: {old23}", p23.read_text(), count=1))
+        HM.sess_write(str(R23), S23, HM.sess_read(str(R23), S23))  # a tidy-up's write: mtime now, Active kept
+        check("fix 23a: another writer keeps the Active stamp; 20 days since the session's own write is closed although the mtime is new",
+              f"Active: {old23}" in p23.read_text() and HM.session_closed(str(R23), S23[:8]))
+        HM.memo_now(str(R23), "Task      back", S23)
+        check("fix 23a: ... its own write makes it live again", not HM.session_closed(str(R23), S23[:8]))
+        # 23b. a `##` line inside Now text
+        HM.memo_now(str(R23), "Task      t\n## Notes\nnote text\n## Journal\nstill Now", S23)
+        s23 = HM.sess_read(str(R23), S23)
+        check("fix 23b: a `## Notes` and a `## Journal` line in Now stay in Now; the Journal is not split by them",
+              "## Notes" in s23["Now"] and "## Journal\nstill Now" in s23["Now"] and "still Now" not in s23["Journal"] and "note text" in s23["Now"])
+        # 23c. bare decide/approve/choose words
+        check("fix 23c: a bare verb is no Needs-you item; a request to the user or a question is",
+              HM.needs_items("auto-approve hook fixed; the router chooses the model; we decide later in code; you decide: IQD or USD; decide whether to cap; cap per currency?")
+              == ["you decide: IQD or USD", "decide whether to cap", "cap per currency?"])
+        # 23d. an ATTENTION / FAIL item is not settled by a question with some of its words
+        R23d = F.mkroot(); S23d = "match23d-aaaa-bbbb"
+        HM.memo_needs(str(R23d), S23d, "ATTENTION: cap test flaky on the CI runner", str(R23d))
+        i23 = HM.need_id(HM.memo_read(str(R23d))["Needs you"].splitlines()[0])
+        n1 = HM.memo_resolve_matching(str(R23d), "Is the ATTENTION about the flaky cap test fixed?", "Yes", ["Yes", "No"], S23d)
+        n2 = HM.memo_resolve_matching(str(R23d), f"Is #{i23} handled?", "Yes", ["Yes", "No"], S23d)
+        check("fix 23d: a weak word match leaves an ATTENTION item open; the question naming its #id settles it", n1 == 0 and n2 == 1)
+        # 23e. rewrite-now age floor
+        F.put_sess(R22, "fresh022", now=f"Written   {time.strftime('%Y-%m-%d %H:%M')} · from receipt\nTask      t\nLeft      l")
+        e23 = HM.memo_apply(str(R22), "rewrite_now", C22, curator=True, target="fresh022", text="Task      new")
+        check("fix 23e: rewrite-now refuses a Now written under 10 min ago", not e23 and e23.code == "refused" and "min ago" in e23.reason and "Task      t" in HM.sess_read(str(R22), "fresh022")["Now"])
+        # 23f. memo-index.json under a lock
+        roots23 = [str(Path(F.hh, f"reg{i}")) for i in range(12)]
+        ths = [threading.Thread(target=HM.registry_set, args=(r_,), kwargs={"n": i}) for i, r_ in enumerate(roots23)]
+        for th in ths: th.start()
+        for th in ths: th.join()
+        reg23 = HM.registry_read()
+        check("fix 23f: 12 parallel registry writes all land (locked read-modify-write), no temp file left",
+              all(reg23.get(os.path.realpath(r_), {}).get("n") == i for i, r_ in enumerate(roots23)) and not list(F.sdir.glob("memo-index*.tmp")) and (F.sdir / "memo-index.lock").exists())
+    finally:
+        F.close()
+
+
+def batch6_tests(check):
+    """Fix backlog batch 6: memo moves journalled and finished at start, owner notes never evicted, MM-DD stamps as dates, the memo lock's timeout,
+    pid-unique temps, archive rotation, write failures reported, the newer duplicate kept; agent_transcripts pruned, the memo offer claimed once,
+    gen_matrix flags, the pricing of older model ids."""
+    import threading
+    F = _MemoFixture("batch6"); HM = F.HM
+    try:
+        ago = lambda days=0: time.time() - days * 86400
+        stamp = lambda t: time.strftime("%m-%d %H:%M", time.localtime(t))
+        # B1a. memo_health killed between the main memo write and the file move: the journal finishes the move at the next start
+        r = F.mkroot()
+        F.put_main(r, needs=[])
+        F.put_sess(r, "idle0001", now="Written   2026-01-01 10:00\nTask      old work\nLeft      finish the docs", age=90)  # past twice any `Archive sessions` a user file may set
+        F.put_sess(r, "caller01", now="Task      mine", age=0)
+        real_move = HM._move_into_archive
+        def killed(*a):
+            raise RuntimeError("killed mid-move")
+        HM._move_into_archive = killed
+        try:
+            HM.memo_health(str(r), sid="caller01"); died = False
+        except RuntimeError:
+            died = True
+        HM._move_into_archive = real_move
+        sf = HM.memo_dir(str(r)) / "idle0001.md"
+        left_items = lambda: [l for l in HM.memo_read(str(r))["Needs you"].splitlines() if "finish the docs" in l]
+        check("B1: a tidy-up killed after the memo write and before the move is half done (file still there, its index line and Left item written) and journalled",
+              died and sf.exists() and len(left_items()) == 1 and "idle0001" not in dict(HM.index_entries(HM.memo_read(str(r)))) and HM.moves_read(str(r)))
+        check("B1: ... moves_resume at the next start finishes it: the file is in archive/, the journal is empty, the Left item is there once",
+              HM.moves_resume(str(r)) == 1 and not sf.exists() and (HM.archive_dir(str(r)) / "idle0001.md").exists() and not HM.moves_read(str(r)) and len(left_items()) == 1)
+        F.hrun("start", {"session_id": "caller01-0000-0000-0000-000000000000", "cwd": str(r), "source": "startup"})
+        check("B1: ... and a start with nothing journalled changes nothing", len(left_items()) == 1 and not HM.moves_read(str(r)))
+        # B1b. a repair killed between the move and its state: the state follows at the next start; a move done again adds no item twice
+        A, B = F.mkroot(), F.mkroot(); S = "rp000001-aaaa-bbbb-cccc-dddddddddddd"
+        F.mkstate(S, A, project_pinned=str(B))
+        F.put_sess(A, S, now="Task      moved work")
+        F.put_main(A, needs=[f"1. [ ] {stamp(ago(1))} · owner decision: pick X? #00a1 (s:rp000001 p:{HM.proj_tag(A)})"])
+        real_follow = HM.repair_state_follow
+        HM.repair_state_follow = killed
+        try:
+            HM.memo_repair(str(A)); died = False
+        except RuntimeError:
+            died = True
+        HM.repair_state_follow = real_follow
+        check("B1: a repair killed after the move leaves the state behind, journalled", died and not HM.load_state(S).get("project") and any(e.get("kind") == "move" for e in HM.moves_read(str(A))))
+        check("B1: ... moves_resume makes the state follow and clears the journal", HM.moves_resume(str(A)) == 1 and HM.load_state(S).get("project") == str(B) and not HM.moves_read(str(A)))
+        F.put_sess(A, S, now="Task      moved work")
+        F.put_main(A, needs=[f"1. [ ] {stamp(ago(1))} · owner decision: pick X? #00a1 (s:rp000001 p:{HM.proj_tag(A)})"])
+        HM.memo_move(str(A), str(B), S, "repair: pinned by hand")
+        nb = [l for l in HM.memo_read(str(B))["Needs you"].splitlines() if "pick X?" in l]
+        check("B1: a move done a second time (a resumed half move) adds its items and its trace line once", len(nb) == 1 and HM.sess_read(str(B), S)["Journal"].count("moved here from") == 1)
+        # B2. the size cap never evicts the owner's notes; Judge / agent notes go first
+        rn = F.mkroot()
+        own = [f"- {stamp(ago(40 - i / 10))} · by:you · note → owner rule number {i:03d} " + "o" * 60 for i in range(30)]
+        jud = [f"- {stamp(ago(30 - i / 10))} · by:judge · judge note {i:03d}? → " + "j" * 60 for i in range(100)]
+        F.put_main(rn, needs=[], decisions=own[:10] + jud + own[10:])
+        HM.memo_health(str(rn), sid="x")
+        dec = HM.memo_read(str(rn))["Decisions"].splitlines()
+        check("B2: over the cap the oldest Judge notes leave and every owner note stays", all(l in dec for l in own) and 0 < sum("by:judge" in l for l in dec) < 100
+              and [l for l in dec if "by:judge" in l] == jud[100 - sum("by:judge" in l for l in dec):] and HM.memo_path(str(rn)).stat().st_size <= HM.MAIN_CAP)
+        ro = F.mkroot()
+        own2 = [f"- {stamp(ago(40 - i / 10))} · by:you · note → owner rule number {i:03d} " + "o" * 60 for i in range(90)]
+        F.put_main(ro, needs=[], decisions=own2)
+        HM.memo_health(str(ro), sid="x")
+        F.mkstate("ownr0001", ro)
+        HM.memo_apply(str(ro), "decision", "ownr0001", question="note", answer="one more owner rule")
+        dec2 = HM.memo_read(str(ro))["Decisions"].splitlines()
+        check("B2: owner notes alone over the cap and past DECISIONS_KEEP are all kept (nothing to evict)", all(l in dec2 for l in own2) and any("one more owner rule" in l for l in dec2) and len(dec2) == 91)
+        # B3. MM-DD stamps compare as dates across 1 January
+        jan1 = time.mktime(time.strptime("2027-01-01 10:00", "%Y-%m-%d %H:%M"))
+        check("B3: a 01-01 stamp is newer than a Now written 2026-12-31; a 12-31 22:00 one is not",
+              HM.stamp_newer("01-01 09:00", "2026-12-31 23:00", now=jan1) and not HM.stamp_newer("12-31 22:00", "2026-12-31 23:00", now=jan1)
+              and HM.stamp_newer("12-31 23:30", "2026-12-31 23:00", now=jan1))
+        # B4. the memo lock waits LOCK_WAIT seconds, then says `memo busy` and writes nothing
+        rb = F.mkroot(); F.put_main(rb, needs=[]); F.mkstate("busy0001", rb)
+        held, go = threading.Event(), threading.Event()
+        def hold():
+            with HM.memo_lock(str(rb)):
+                held.set(); go.wait(10)
+        th = threading.Thread(target=hold); th.start(); held.wait(5)
+        old_wait = HM.LOCK_WAIT; HM.LOCK_WAIT = 0.3
+        t0 = time.time(); rr = HM.memo_apply(str(rb), "decision", "busy0001", question="note", answer="while busy")
+        took = time.time() - t0
+        HM.LOCK_WAIT = old_wait; go.set(); th.join()
+        check("B4: a held memo lock times out (LOCK_WAIT) into a `memo busy` refusal; nothing is written", not rr and rr.code == "busy" and "memo busy" in rr.reason and took < 3
+              and "while busy" not in HM.memo_read(str(rb))["Decisions"])
+        # B5. a stale fixed-name temp (here a folder, so a fixed-name write fails) does not stop a write: the temp is pid-unique
+        rt = F.mkroot(); F.put_main(rt, needs=[])
+        Path(HM.memo_path(str(rt)).with_suffix(".tmp")).mkdir()
+        (HM.memo_dir(str(rt)) / "tmpx0001.tmp").mkdir(parents=True)
+        F.mkstate("tmpx0001", rt)
+        ok5 = HM.memo_apply(str(rt), "decision", "tmpx0001", question="note", answer="written past a stale temp")
+        HM.memo_now(str(rt), "Task      past the stale temp", "tmpx0001")
+        check("B5: memo and session writes go through a pid-unique temp (a stale `.tmp` in the way breaks nothing)", bool(ok5) and "written past a stale temp" in HM.memo_read(str(rt))["Decisions"]
+              and "past the stale temp" in HM.sess_read(str(rt), "tmpx0001")["Now"])
+        # B6. archive.md rotates past ARCHIVE_ROTATE: the older groups go whole to archive-YYYY-MM.md, the `## Archive` list stays
+        ra = F.mkroot(); F.put_main(ra, needs=[])
+        big = [f"- old line {i:04d} " + "a" * 200 for i in range(330)]
+        HM.archive_append(str(ra), {"Archive": ["- [zz000001](archive/zz000001.md) · archived"], "2026-10-01 · notes": big[:5]})
+        HM.archive_append(str(ra), {"2026-10-01 · notes": big[5:]})  # this append passes 64 KB: it rotates
+        HM.archive_append(str(ra), {"2026-11-01 · notes": ["- the newest line"]})
+        rot = list(HM.memo_dir(str(ra)).glob("archive-*.md"))
+        at, rt_ = HM.archive_path(str(ra)).read_text(), (rot[0].read_text() if rot else "")
+        check("B6: past 64 KB archive.md moves its groups to archive-YYYY-MM.md and keeps the `## Archive` list; no line lost",
+              len(rot) == 1 and HM.archive_path(str(ra)).stat().st_size < 4096 and "zz000001" in at and all(l in rt_ for l in big) and "the newest line" in at and "the newest line" not in rt_ and "zz000001" not in rt_)
+        check("B6: ... the rotated file is no session file to the tidy-up", all(p.name != rot[0].name for p in HM.session_files(str(ra))))
+        # B7. a write that fails is reported (exit 7), never `noted` / a path
+        rw = F.mkroot(); F.put_main(rw, needs=[]); SW = "wfail001-aaaa-bbbb-cccc-dddddddddddd"; F.mkstate(SW, rw)
+        F.put_sess(rw, SW, now="Task      t")
+        for d in (Path(rw, ".claude"), HM.memo_dir(str(rw))):
+            os.chmod(d, 0o555)
+        try:
+            n7, w7 = F.cli(rw, SW, "note", "a rule"), F.cli(rw, SW, "now", stdin="Task      new task\n")
+        finally:
+            for d in (Path(rw, ".claude"), HM.memo_dir(str(rw))):
+                os.chmod(d, 0o755)
+        check("B7: memo.py note / now under a write failure exit 7 with `memo not written`, never `noted` or a path",
+              n7.returncode == 7 and "memo not written" in n7.stdout and "noted" not in n7.stdout and w7.returncode == 7 and "memo not written" in w7.stdout and "a rule" not in HM.memo_read(str(rw))["Decisions"])
+        # C3. agent_transcripts: the newest 200 closed agents and every pending one
+        paths = {f"a{i:03d}": f"/t/{i}" for i in range(250)}
+        pr_ = HM.agent_transcripts_prune(paths, [{"agent_id": "a000", "status": "pending"}, {"agent_id": "a001", "status": "done"}])
+        check("C3: agent_transcripts keeps the newest 200 of the closed agents and every pending one", len(pr_) == 201 and "a000" in pr_ and "a249" in pr_ and "a001" not in pr_ and "a049" not in pr_ and "a050" in pr_)
+        # D3. the memo-agent offer is claimed once per window per project, even with parallel prompts and nobody acting on it
+        rm_ = F.mkroot()
+        wins = []
+        ths = [threading.Thread(target=lambda: wins.append(HM.memo_offer_claim(str(rm_)))) for _ in range(8)]
+        for t in ths: t.start()
+        for t in ths: t.join()
+        later = HM.memo_offer_claim(str(rm_), now=time.time() + HM.memo_agent_every(str(rm_)) + 1)
+        check("D3: 8 parallel prompts claim the offer once; inside the window none more; after it, once again", wins.count(True) == 1 and not HM.memo_offer_claim(str(rm_)) and later)
+        # D1, D2: the memo command writes the auto-memory and the handoff; run.py states no line count
+        md = Path(__file__).resolve().parent.parent / "commands" / "memo.md"
+        mt = md.read_text()
+        check("D1: /abofles:memo documents the auto-memory update (MEMORY.md, one fact per file) and the Next-line handoff, with Write in its tools",
+              "auto-memory" in mt and "MEMORY.md" in mt and "handoff" in mt and re.search(r"allowed-tools:.*\bWrite\b", mt))
+        rp = (Path(__file__).resolve().parent.parent / "hooks" / "run.py").read_text()
+        check("D2: hooks/run.py's docstring states no line count", not re.search(r"\d[\d,]*-line", rp.split('"""')[1]))
+        # D4. gen_matrix refuses an unknown flag (exit 2) and writes nothing
+        gm = Path(__file__).resolve().parent / "gen_matrix.py"
+        outs = [Path(__file__).resolve().parent.parent / p for p in ("hooks/workflow.json", "skills/abofles/references/topics.md", "skills/abofles/references/matrix.md")]
+        before = [p.stat().st_mtime_ns for p in outs]
+        g4 = subprocess.run([sys.executable, str(gm), "--chek"], capture_output=True, text=True)
+        check("D4: gen_matrix.py --chek (a typo) exits 2 and rewrites no file", g4.returncode == 2 and "unrecognized arguments" in g4.stderr and [p.stat().st_mtime_ns for p in outs] == before)
+        # D5. older model ids price at the app's own rates; a dated id takes the longest listed id; the gate still names only the current ones
+        M = 1_000_000
+        check("D5: Opus 5 bills $25 / M output and Opus 5.5 (dated too) $20; Fable 5 reads its cache at $1 / M; Haiku 4.5 has no long-prompt 5x",
+              HM.usd("claude-opus-5-20260101", {"output_tokens": M}) == 25.0 and HM.usd("claude-opus-5-5-20261101", {"output_tokens": M}) == 20.0
+              and HM.usd("claude-fable-5", {"cache_read_input_tokens": M}) == 1.0 and HM.usd("claude-sonnet-5", {"cache_read_input_tokens": M}) == 0.2
+              and HM.usd("claude-haiku-4-5-20251001", {"output_tokens": M, "long": {"output_tokens": M}}) == 5.0
+              and HM.usd("claude-haiku-5-5", {"output_tokens": M, "long": {"output_tokens": M}}) == 2.5 and HM.usd("opus", {"output_tokens": M}) == 20.0)
+        check("D5: ... an older priced id names no alias at the session gate", HM.gate_model("claude-opus-4-8") is None and HM.gate_model("claude-opus-5") is None and HM.gate_model("claude-fable-5-1") == "fable")
+    finally:
+        F.close()
+
+
+def verifier_lock_plan_tests(check):
+    """Verifier fixes: the task-list mirror follows the pane's applyPlan (closed list, one step in progress, a fresh list after a finished one,
+    a TodoWrite with no list, `done` as completed); every memo-lock user and the state lock skip their write on a busy lock, never write unlocked."""
+    import threading
+    F = _MemoFixture("verifier"); HM = F.HM
+    UP, WR = "mcp__ccd_turn__update_plan", "mcp__ccd_turn__wrap_up"
+    try:
+        # mirror parity: the same sequence as tasks.tsx applyPlan
+        sts = lambda s: [x["status"] for x in s]
+        its = {"items": [{"content": c, "status": "pending"} for c in "ABC"]}
+        s = HM.plan_apply(None, UP, its)
+        s = HM.plan_apply(s, UP, {"advance": True})
+        w = HM.plan_apply(s, WR, {"recap": "r"})
+        check("P1: wrap_up keeps every status (the app only hides the list) and only the display flag says wrapped",
+              sts(w) == ["in_progress", "pending", "pending"] and HM.plan_wrapped(WR, w) is True and HM.plan_wrapped(UP, w) is False and HM.plan_wrapped(WR, []) is False)
+        check("P1: a wrapped list is not live (no nudges), its open steps stay open; the same list shown again is live",
+              not HM.plan_live({"items": w, "wrapped": True}) and HM.plan_live({"items": w, "wrapped": False}) and not HM.plan_live({"items": [dict(x, status="completed") for x in w]}))
+        check("P2: advance, done and start after the wrap-up resume the list (no closed guard)",
+              sts(HM.plan_apply(w, UP, {"advance": True})) == ["completed", "in_progress", "pending"] and sts(HM.plan_apply(w, UP, {"done": [1]})) == ["completed", "pending", "pending"]
+              and sts(HM.plan_apply(w, UP, {"start": "3"})) == ["in_progress", "pending", "in_progress"])
+        s = HM.plan_apply(s, UP, its)
+        s = HM.plan_apply(HM.plan_apply(s, UP, {"start": 1}), UP, {"start": 2})
+        check("P3: start 1 then start 2 keeps both in progress, as the app does (\"steps 1, 2 of 3 are in progress\")", sts(s) == ["in_progress", "in_progress", "pending"])
+        ren = HM.plan_apply([{"content": "old name", "status": "in_progress", "id": "4"}], "TaskUpdate", {"taskId": "4", "subject": "  new   name "})
+        check("P5: TaskUpdate `subject` renames the step (status kept); a blank subject keeps the name",
+              ren == [{"content": "new name", "status": "in_progress", "id": "4"}] and HM.plan_apply(ren, "TaskUpdate", {"taskId": "4", "subject": " ", "status": "completed"}) == [{"content": "new name", "status": "completed", "id": "4"}])
+        # P6: replay against the app's own result texts (scripted from the transcripts; fixture lines scrubbed)
+        app_steps = lambda t: (lambda m: ([int(x) for x in re.findall(r"\d+", m.group(1))], int(m.group(2))) if m else None)(re.search(r"steps? ([\d, ]+) of (\d+) (?:is|are) in progress", t))
+        five = {"items": [{"content": f"s{i}", "status": "in_progress" if i == 1 else "pending"} for i in range(1, 6)]}
+        four = {"items": [{"content": f"t{i}", "status": "in_progress" if i == 1 else "pending"} for i in range(1, 5)]}
+        script = [(UP, five, "Plan updated: step 1 of 5 is in progress."), (WR, {"recap": "r"}, None), (UP, {"advance": True}, "Plan updated: step 2 of 5 is in progress."),
+                  (UP, four, "Plan updated: step 1 of 4 is in progress."), (UP, {"start": 3}, "Plan updated: steps 1, 3 of 4 are in progress."), (UP, {"done": [1]}, "Plan updated: step 3 of 4 is in progress.")]
+        mir, agree, flags, tr6 = [], [], [], []
+        for n6, (tool6, in6, said6) in enumerate(script):
+            mir = HM.plan_apply(mir, tool6, in6)
+            flags.append(HM.plan_wrapped(tool6, mir))
+            if said6:
+                agree.append(app_steps(said6) == ([i + 1 for i, x in enumerate(mir) if x["status"] == "in_progress"], len(mir)))
+            tr6.append(json.dumps({"type": "assistant", "message": {"content": [{"type": "tool_use", "id": f"p6{n6}", "name": tool6, "input": in6}]}}))
+            tr6.append(json.dumps({"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": f"p6{n6}", "content": said6 or "Wrapped up."}]}}))
+        check("P6: the mirror agrees with every app result text of the replay (wrap-up kept the 5 steps, advance resumed it, start kept step 1)", len(agree) == 5 and all(agree))
+        check("P6: ... only the wrap-up's call leaves the list wrapped", flags == [False, True, False, False, False, False])
+        p6 = Path(tempfile.mkdtemp(), "t.jsonl"); p6.write_text("\n".join(tr6) + "\n")
+        check("P6: ... the transcript rebuild of the same calls ends on the same list", HM.plan_replay(str(p6)) == (mir, False))
+        p6.write_text("\n".join(tr6[:4]) + "\n")
+        check("P6: ... a transcript that ends on the wrap-up rebuilds a wrapped list with its open steps", HM.plan_replay(str(p6)) == (HM.plan_apply([], UP, five), True))
+        done_ = HM.plan_apply(s, UP, {"done": [1, 2, 3]})
+        s = HM.plan_apply(done_, "TaskCreate", {"subject": "next task"})
+        check("plan parity: TaskCreate on a finished list starts a fresh list (numbered from 1)", s == [{"content": "next task", "status": "pending", "id": "1"}])
+        check("plan parity: TaskCreate on an open list still appends", [x["content"] for x in HM.plan_apply(s, "TaskCreate", {"subject": "two"})] == ["next task", "two"])
+        check("plan parity: TodoWrite without a `todos` list changes nothing (no clear)", HM.plan_apply(s, "TodoWrite", {}) == s and HM.plan_apply(s, "TodoWrite", {"todos": None}) == s and HM.plan_apply(done_, "TodoWrite", {}) == done_)
+        check("plan parity: a `done` status counts as completed", sts(HM.plan_apply([], "TodoWrite", {"todos": [{"content": "a", "status": "done"}, {"content": "b", "status": "bogus"}]})) == ["completed", "pending"])
+
+        # ── batch 7 M: memo safety (reads, moves, dedup, shown numbers, Left lines, archive, receipts) ──
+        # M1/M2: a memo file that exists but cannot be read is never read as empty and written over
+        RM = F.mkroot(); SM = "readfail-aaaa"; F.mkstate(SM, RM)
+        HM.memo_needs(str(RM), SM, "owner decision: keep A?", str(RM))
+        mp1 = HM.memo_path(str(RM)); t1 = mp1.read_text(); os.chmod(mp1, 0)
+        try:
+            r1 = HM.memo_apply(str(RM), "needs", SM, item="owner decision: other?")
+        finally:
+            os.chmod(mp1, 0o644)
+        check("M2: an unreadable main memo refuses the write (write-failed), the file keeps its text", not r1 and r1.code == "write-failed" and mp1.read_text() == t1)
+        check("M2: ... once it reads again the next write works and keeps the old item", bool(HM.memo_apply(str(RM), "needs", SM, item="owner decision: other?")) and "keep A?" in mp1.read_text() and "other?" in mp1.read_text())
+        HM.memo_now(str(RM), "Task      cap ticket\nLeft      FE badge", SM)
+        sp1 = HM.session_memo_path(str(RM), SM); st1 = sp1.read_text(); os.chmod(sp1, 0)
+        try:
+            r1 = HM.memo_apply(str(RM), "now", SM, text="Task      wiped")
+        finally:
+            os.chmod(sp1, 0o644)
+        check("M1: an unreadable session file refuses the write, the file keeps its Now", not r1 and r1.code == "write-failed" and sp1.read_text() == st1)
+        mp1.write_bytes(t1.encode() + b"\n\xff\xfe stray bytes\n")
+        check("M1/M2: bytes that are not UTF-8 read with replacement, never as an empty memo", "keep A?" in HM.memo_read(str(RM))["Needs you"])
+        # M3 / M16 / M12 / M13 / M17: a move deletes nothing until the destination is written; a clashing id moves under a new one
+        MA, MB = F.mkroot(), F.mkroot(); SV = "mvfail11-aaaa"
+        F.mkstate(SV, MA); F.put_sess(MA, SV, now="Task      cap\nLeft      FE"); HM.memo_needs(str(MA), SV, "owner decision: mine?", str(MA))
+        (MB / "x.py").write_text("x\n"); Path(MB, ".claude").mkdir(); os.chmod(Path(MB, ".claude"), 0o500)
+        try:
+            r3 = HM.memo_move_result(str(MA), str(MB), SV, "test")
+            for _ in range(8):
+                HM.work_count({"session_id": SV, "cwd": str(MA)}, [str(MB / "x.py")])
+        finally:
+            os.chmod(Path(MB, ".claude"), 0o755)
+        check("M3: a move whose destination write fails is refused and the old project keeps the session file and its open item",
+              not r3 and HM.session_memo_path(str(MA), SV).exists() and "mine?" in HM.memo_read(str(MA))["Needs you"] and not HM.session_memo_path(str(MB), SV).exists())
+        check("M12: work_count with a refused move keeps the session's project where it was (no project, no claim)", "project" not in HM.load_state(SV) and not HM.load_state(SV).get("work_claimed"))
+        os.chmod(Path(MB, ".claude"), 0o500)
+        try:
+            c13 = F.cli(MA, SV, "move", str(MB))
+        finally:
+            os.chmod(Path(MB, ".claude"), 0o755)
+        check("M13: memo.py move refused by the memo exits 1 and pins nothing", c13.returncode == 1 and "not moved" in c13.stdout and not HM.load_state(SV).get("project_pinned"))
+        idm = HM.need_id(next(l for l in HM.memo_read(str(MA))["Needs you"].splitlines() if "mine?" in l))
+        F.put_main(MB, needs=[f"1. [ ] 01-01 10:00 · someone else's item #{idm} (s:zzzz1111 p:{MB.name})"])
+        check("M16: a moved item whose id another item holds there moves under a new id, never dropped",
+              HM.memo_move(str(MA), str(MB), SV, "test") and "someone else's item #" + idm in HM.memo_read(str(MB))["Needs you"]
+              and re.search(r"mine\? #(?!" + idm + r")[0-9a-f]{4} \(s:mvfail11", HM.memo_read(str(MB))["Needs you"]) is not None and not HM.session_memo_path(str(MA), SV).exists())
+        MC = F.mkroot(); SC = "mvitem11-aaaa"; F.mkstate(SC, MC); HM.memo_needs(str(MC), SC, "owner decision: about B?", str(MB))
+        os.chmod(Path(MB, ".claude"), 0o500)
+        try:
+            r17 = HM.memo_apply(str(MC), "move_item", SC, str(MB), ref="1", curator=True)
+        finally:
+            os.chmod(Path(MB, ".claude"), 0o755)
+        check("M17: move-item whose destination write fails is refused and the item stays", not r17 and "about B?" in HM.memo_read(str(MC))["Needs you"] and "about B?" not in HM.memo_read(str(MB))["Needs you"])
+        # M4 / M9: need_dup on the exact key only
+        nd = ["1. [x] 01-01 10:00 · owner decision: ship 2.14 now? #aaaa (s:dupsess1 p:x) → resolved 01-01 11:00: yes", "2. [ ] 01-01 10:00 · owner decision: rename the cap badge to the limit badge? #bbbb (s:dupsess1 p:x)"]
+        check("M4: a resolved `ship 2.14 now?` does not hide a new `ship 2.15 now?`; the same text still is a duplicate",
+              not HM.need_dup(nd, HM.need_key("owner decision: ship 2.15 now?"), "dupsess1") and HM.need_dup(nd, HM.need_key("owner decision: ship 2.14 now?"), "dupsess1"))
+        check("M9: an open decision 80% alike is no duplicate of a different one", not HM.need_dup(nd, HM.need_key("owner decision: rename the cap badge to the price badge?"), "dupsess1"))
+        # M5: only a list the model saw writes the shown numbers
+        R5 = F.mkroot(); S5 = "shown555-aaaa"; F.mkstate(S5, R5); HM.memo_needs(str(R5), S5, "owner decision: first?", str(R5))
+        HM.guide_entries(str(R5), HM.load_state(S5), S5); HM.resume_data(str(R5), S5, width=HM.PANE_RECEIPT)
+        m5a = HM.needs_shown_map(str(R5), S5)
+        HM.resume_block(str(R5), session_id=S5)
+        check("M5: a guide refresh and the pane's copy write no shown map; the resume block the model reads does", m5a is None and HM.needs_shown_map(str(R5), S5) == {"1": HM.need_id(HM.memo_read(str(R5))["Needs you"])})
+        # M6 / M7 / M10: receipt Left lines
+        rcp = lambda d, o: HM.parse_receipt(f"🧾 **1 Agent · 1 u · Saved 1%** vs Opus 5.5\n- `done` → {d}\n- `check` → ok\n- `open` → {o}")
+        tmp6 = tempfile.mkdtemp()
+        n6 = HM.receipt_now(tmp6, "Task      cap ticket\nLeft      BE docs page", rcp("finished the cap ticket", "wire the FE badge"))
+        check("M6: a receipt that closes the old Task keeps the other old Left lines", "Left      wire the FE badge" in n6 and "Left      BE docs page" in n6)
+        n6b = HM.receipt_now(tmp6, "Task      cap ticket\nLeft      BE docs page", rcp("finished the cap ticket and the BE docs page", "none"))
+        check("M6: ... they go only when open is an explicit none and done covers each", not [l for l in n6b.splitlines() if l.startswith("Left")])
+        n7 = HM.receipt_now(tmp6, "Task      x\nLeft      cap", rcp("capped the surcharge", "none"))
+        check("M7: covered() matches whole words: `cap` is not covered by `capped the surcharge`", "Left      cap" in n7)
+        R10 = F.mkroot(); S10 = "leftcut1-aaaa"; F.mkstate(S10, R10)
+        HM.memo_now(str(R10), "Task      x\n" + "".join(f"Left      old item {i}\n" for i in range(1, 8)), S10)
+        HM.memo_journal(str(R10), S10, rcp("unrelated work", "none"))
+        n10, nn10 = HM.sess_read(str(R10), S10)["Now"], HM.memo_read(str(R10))["Needs you"]
+        check("M10: Left lines past OLD_LEFT_KEEP leave Now into one open Needs-you item, none lost",
+              all(f"old item {i}" in n10 for i in range(1, 6)) and "old item 6" not in n10 and "left open, past the Now's Left lines: old item 6; old item 7" in nn10)
+        # M8 / M20: archive with a real Task waits 2x and keeps it; archive-session needs a closed or idle session
+        R8 = F.mkroot(); C8 = "caller88-aaaa"
+        F.put_sess(R8, "taskyng8", now="Task      cap ticket", age=4); F.put_sess(R8, "taskold8", now="Task      cap ticket", age=7)
+        HM.memo_health(str(R8), sid=C8)
+        check("M8: a real Task counts as open work: idle past 1x stays, past 2x goes with a `left open` item naming the task",
+              HM.archived_sids(str(R8)) == {"taskold8"} and "left open when session taskold8 was archived: task: cap ticket" in HM.memo_read(str(R8))["Needs you"])
+        F.put_sess(R8, "liveses8", now="Task      none — between tasks")
+        r20 = HM.memo_apply(str(R8), "archive_session", C8, curator=True, target="liveses8")
+        F.put_sess(R8, "idlese8x", now="Task      none — between tasks", age=4)
+        check("M20: archive-session without force is refused for a session active within Archive sessions; an idle one is archived",
+              not r20 and r20.code == "refused" and "not closed" in r20.reason and bool(HM.memo_apply(str(R8), "archive_session", C8, curator=True, target="idlese8x")))
+        # M11: a receipt the memo refused (busy) is kept and written at the next retry
+        R11 = F.mkroot(); S11 = "busyrc11-aaaa"; F.mkstate(S11, R11)
+        real_j = HM.memo_journal
+        HM.memo_journal = lambda *a, **k: HM.memo_refuse("busy", "memo busy")
+        try:
+            HM.journal_keep(str(R11), S11, rcp("kept through a busy lock", "none"))
+        finally:
+            HM.memo_journal = real_j
+        kept11 = HM.load_state(S11).get("journal_retry") or []
+        HM.journal_retry(S11)
+        check("M11: a busy memo keeps the receipt in the state; the retry journals it once and clears it",
+              len(kept11) == 1 and "kept through a busy lock" in HM.sess_read(str(R11), S11)["Journal"] and not HM.load_state(S11).get("journal_retry"))
+        # M14: an open item is `N. [ ] ` at the start only
+        check("M14: need_open matches `^N. [ ] ` only", HM.need_open("3. [ ] 01-01 10:00 · x") and not HM.need_open("- [ ] x") and not HM.need_open("3. [x] 01-01 10:00 · has [ ] inside"))
+        # M21: an answered question settles only the same question reworded
+        it21 = "1. [ ] 01-01 10:00 · owner decision: should we ship the surcharge cap now? #cccc (s:match211 p:x)"
+        check("M21: match bar 0.8 of each side: a question that also asks something else settles nothing; the same question does",
+              not HM.match_settles(it21, "Should we ship the surcharge cap now, or first rename the limit badge and update the docs page?") and HM.match_settles(it21, "Should we ship the surcharge cap now?"))
+        # M22: now_text strips the `Session <id>` header form only
+        nt22 = HM.now_text("Session   abc12345\nTask      x\nSession cap raised to 5 agents")
+        check("M22: now_text drops a `Session <id>` header, keeps a Now line that starts with Session", "abc12345" not in nt22 and "Session cap raised to 5 agents" in nt22)
+        # M23: an archive copy and the live file are merged section by section
+        R23 = F.mkroot(); k23 = "merge230"
+        F.put_sess(R23, k23, now="Task      t", journal=["- 01-02 10:00 · newer"])
+        HM.archive_dir(str(R23)).mkdir(parents=True, exist_ok=True)
+        (HM.archive_dir(str(R23)) / f"{k23}.md").write_text(HM._sess_text(str(R23), k23, {"Now": "", "Journal": "- 01-01 10:00 · older", "Decisions": ""}))
+        HM._move_into_archive(str(R23), k23)
+        a23 = (HM.archive_dir(str(R23)) / f"{k23}.md").read_text()
+        check("M23: one header, one Journal holding both lines (newest first)", a23.count("# Session ") == 1 and a23.count("## Journal") == 1 and a23.index("· newer") < a23.index("· older"))
+        # M24: repair_at is set only after memo_repair returns
+        R24 = F.mkroot(["Memo repair = auto"]); F.put_sess(R24, "repair24", now="Task      t")
+        real_r = HM.memo_repair
+        HM.memo_repair = lambda root: (_ for _ in ()).throw(RuntimeError("killed"))
+        try:
+            HM.repair_run(str(R24))
+            ra24 = (HM.registry_read().get(os.path.realpath(str(R24))) or {}).get("repair_at")
+        finally:
+            HM.memo_repair = real_r
+        HM.repair_run(str(R24))
+        check("M24: a repair that did not return leaves repair_at unset (it runs again); one that returns sets it",
+              ra24 is None and (HM.registry_read().get(os.path.realpath(str(R24))) or {}).get("repair_at"))
+        # M26: a claims store that is not UTF-8 reads as no claims and is backed up whole
+        _cs = _ilu.spec_from_file_location("claims_m26", str(Path(__file__).resolve().parent / "claims.py")); CL = _ilu.module_from_spec(_cs); _cs.loader.exec_module(CL)
+        c26 = Path(tempfile.mkdtemp(), "claims.json"); c26.write_bytes(b'{"claims": [\xff\xfe]}')
+        check("M26: claims.read on bytes that are not UTF-8: no claims, no crash, the bytes kept in .bak", CL.read(c26) == [] and c26.with_name("claims.json.bak").read_bytes() == b'{"claims": [\xff\xfe]}')
+
+        # memo lock held by another writer: every user skips its pass, writes nothing, and the next pass does the work
+        def holder(lock):
+            held, go = threading.Event(), threading.Event()
+            def hold():
+                with lock:
+                    held.set(); go.wait(15)
+            th = threading.Thread(target=hold); th.start(); held.wait(5)
+            def release():
+                go.set(); th.join()
+            return release
+        old_wait = HM.LOCK_WAIT; HM.LOCK_WAIT = 0.2
+        try:
+            r = F.mkroot(); F.put_main(r, needs=[])
+            F.put_sess(r, "idle0001", now="Written   2026-01-01 10:00\nTask      old work\nLeft      finish the docs", age=90)
+            F.put_sess(r, "caller01", now="Task      mine", age=0)
+            memo_files = lambda: {str(p_): p_.read_bytes() for p_ in Path(r, ".claude").rglob("*") if p_.is_file()}
+            before = memo_files()
+            rel = holder(HM.memo_lock(str(r)))
+            hres = HM.memo_health(str(r), sid="caller01")
+            rel()
+            check("lock: memo_health on a busy memo lock skips the pass — no memo file written, no last_health_at (only the lock-failed note)", not any(hres[k] for k in HM.HEALTH_KEYS)
+                  and memo_files() == before and not (HM.registry_read().get(str(r)) or {}).get("last_health_at") and (HM.registry_read().get(str(r)) or {}).get("lock_failed"))
+            check("lock: ... the next pass archives the idle session", HM.memo_health(str(r), sid="caller01")["archived_sessions"] == 1)
+            # moves_resume / moves_add / moves_drop
+            rm = F.mkroot(); F.put_main(rm, needs=[])
+            HM.sess_write(str(rm), "orph0001", {"Now": "Task      x", "Journal": "", "Decisions": ""})  # a session file the index no longer lists: half archived
+            entry = {"kind": "archive", "sids": ["orph0001"]}
+            check("lock: moves_add journals under the lock", HM.moves_add(str(rm), entry) is True and HM.moves_read(str(rm)) == [entry])
+            rel = holder(HM.memo_lock(str(rm)))
+            n_ = HM.moves_resume(str(rm))
+            added = HM.moves_add(str(rm), {"kind": "archive", "sids": ["other001"]})
+            HM.moves_drop(str(rm), entry)
+            rel()
+            check("lock: on a busy lock moves_resume finishes nothing and keeps the entry; moves_add writes nothing (False); moves_drop leaves the journal",
+                  n_ == 0 and added is False and HM.moves_read(str(rm)) == [entry] and HM.session_memo_path(str(rm), "orph0001").exists())
+            check("lock: ... the next start finishes the move and clears the journal", HM.moves_resume(str(rm)) == 1 and not HM.moves_read(str(rm))
+                  and (HM.archive_dir(str(rm)) / "orph0001.md").exists())
+            # memo_migrate
+            rg = F.mkroot()
+            legacy = "# Abo Fles memo\nUpdated: 2026-10-01 10:00 · session mg000001\n\n## Now\nSession   mg000001\nTask      one file task\nNext      go\n\n## Decisions\n\n## Journal\n- 10-01 10:00 · s:mg000001 · did a thing\n"
+            HM.memo_path(str(rg)).parent.mkdir(parents=True, exist_ok=True); HM.memo_path(str(rg)).write_text(legacy)
+            rel = holder(HM.memo_lock(str(rg)))
+            HM.memo_read(str(rg))
+            rel()
+            check("lock: memo_migrate on a busy lock splits nothing (the one-file memo stays as it was)", HM.memo_path(str(rg)).read_text() == legacy and not HM.session_memo_path(str(rg), "mg000001").exists())
+            HM.memo_read(str(rg))
+            check("lock: ... the next read splits it", "## Now" not in HM.memo_path(str(rg)).read_text() and "one file task" in HM.sess_read(str(rg), "mg000001")["Now"])
+            # session_restore
+            rs = F.mkroot(); F.put_main(rs, needs=[])
+            HM.archive_dir(str(rs)).mkdir(parents=True, exist_ok=True)
+            src = HM.archive_dir(str(rs)) / "rs000001.md"; src.write_text("# Session rs000001\n\n## Now\nTask      archived\n\n## Journal\n\n## Decisions\n")
+            rel = holder(HM.memo_lock(str(rs)))
+            got = HM.session_restore(str(rs), "rs000001")
+            rel()
+            check("lock: session_restore on a busy lock restores nothing", got is False and src.exists() and not HM.session_memo_path(str(rs), "rs000001").exists())
+            check("lock: ... the next call restores it", HM.session_restore(str(rs), "rs000001") is True and not src.exists())
+            # memo_repair: the tag pass
+            rp = F.mkroot()
+            F.put_sess(rp, "kk000001", now="Task      export")
+            F.put_main(rp, needs=["1. [ ] 11-01 10:00 · follow up on kk000001 export"])
+            rel = holder(HM.memo_lock(str(rp)))
+            HM.memo_repair(str(rp))
+            rel()
+            check("lock: memo_repair on a busy lock skips the tag pass (the item stays untagged)", "(s:kk000001" not in HM.memo_read(str(rp))["Needs you"])
+            HM.memo_repair(str(rp))
+            check("lock: ... the next repair tags it", "(s:kk000001" in HM.memo_read(str(rp))["Needs you"])
+
+            # state lock held: the hook call skips its state and ledger writes, the next call recomputes
+            sid = "stbusy01-aaaa-bbbb-cccc-dddddddddddd"
+            F.mkstate(sid, r)
+            HM.plan({"session_id": sid, "cwd": str(r), "tool_name": UP, "tool_input": its})
+            check("state lock: a free lock saves the list", (HM.load_state(sid).get("plan") or {}).get("items") and HM.load_state(sid).get("plan_open") is True)
+            st0 = HM.load_state(sid)
+            HM.private_dir(HM.LEDGER_DIR); HM.ledger_path(sid).write_text('{"agent_id": "a1"}\n')
+            rel = holder(HM.state_lock(sid))
+            t0 = time.time()
+            with HM.state_lock(sid) as lk:
+                busy_in = lk.busy and HM.state_busy(sid)
+                HM.write_rows(HM.ledger_path(sid), [{"agent_id": "lost"}])
+            took = time.time() - t0
+            HM.plan({"session_id": sid, "cwd": str(r), "tool_name": WR, "tool_input": {"recap": "r"}})
+            rel()
+            check("state lock: still busy after one retry -> busy, ledger rewrite and state save skipped (never written unlocked)", busy_in and took >= 0.35
+                  and "lost" not in HM.ledger_path(sid).read_text() and HM.load_state(sid) == st0 and not HM.state_busy(sid))
+            HM.plan({"session_id": sid, "cwd": str(r), "tool_name": WR, "tool_input": {"recap": "r"}})
+            check("state lock: ... the next hook call recomputes from the saved state: the list is wrapped (statuses kept, P1), no gate left stuck open", HM.load_state(sid).get("plan_open") is False
+                  and HM.load_state(sid)["plan"]["wrapped"] is True and [x["status"] for x in HM.load_state(sid)["plan"]["items"]] == ["pending"] * 3)
+        finally:
+            HM.LOCK_WAIT = old_wait
+    finally:
+        F.close()
+
+
+def batch5_tests(check):
+    """Batch 5 and the verifier's carry-over: busy-lock skips (status.py settle, registry, moves_resume), TaskUpdate status, ASCII step
+    numbers, ledger appends under a busy lock, the route / workflow hand-out, the fixed SessionStart cost and the last-good hook copy."""
+    import contextlib
+    import threading
+    F = _MemoFixture("batch5"); HM = F.HM
+    def holder(lock):
+        held, go = threading.Event(), threading.Event()
+        def hold():
+            with lock:
+                held.set(); go.wait(15)
+        th = threading.Thread(target=hold); th.start(); held.wait(5)
+        def release():
+            go.set(); th.join()
+        return release
+    old_wait = HM.LOCK_WAIT; HM.LOCK_WAIT = 0.2
+    try:
+        # A1: status.py --resolve on a busy state lock prints "ledger busy" and exits 1; the ledger is never rewritten unlocked
+        _ss = _ilu.spec_from_file_location("abofles_status_b5", str(Path(__file__).resolve().parent / "status.py")); ST = _ilu.module_from_spec(_ss); _ss.loader.exec_module(ST)
+        AH = sys.modules.get("abofles_hook")
+        aw = AH.LOCK_WAIT; AH.LOCK_WAIT = 0.2
+        try:
+            r1 = F.mkroot(); sA = "settle01-aaaa-bbbb-cccc-dddddddddddd"
+            AH.save_state(sA, {"started": int(time.time()), "root": str(r1)})
+            AH.private_dir(AH.LEDGER_DIR); lp = AH.ledger_path(sA)
+            lp.write_text(json.dumps({"agent_id": "ab12cd", "status": "partial", "topic": "Unit Test"}) + "\n")
+            before = lp.read_text()
+            rel = holder(AH.state_lock(sA)); buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = ST.settle(["--resolve", "ab12cd", "--trace", "re-checked: ok", "--session", sA], sA)
+            rel()
+            check("A1 status.py settle: a busy state lock -> 'ledger busy, try again', exit 1, the ledger untouched", rc == 1 and "ledger busy, try again" in buf.getvalue() and lp.read_text() == before)
+            with contextlib.redirect_stdout(io.StringIO()):
+                rc = ST.settle(["--resolve", "ab12cd", "--trace", "re-checked: ok", "--session", sA], sA)
+            check("A1 ... a free lock resolves the row", rc == 0 and json.loads(lp.read_text().splitlines()[0]).get("resolved") is True)
+        finally:
+            AH.LOCK_WAIT = aw
+        # A2: registry_update skips the memo-index.json write on a busy lock
+        r2 = F.mkroot()
+        reg_before = HM.registry_path().read_bytes() if HM.registry_path().exists() else b""
+        rel = holder(HM.state_lock("memo-index"))
+        HM.registry_touch(str(r2))
+        rel()
+        check("A2 registry_update: a busy memo-index lock writes nothing", (HM.registry_path().read_bytes() if HM.registry_path().exists() else b"") == reg_before)
+        HM.registry_touch(str(r2))
+        check("A2 ... the next touch writes the entry", os.path.realpath(str(r2)) in HM.registry_read())
+        # A3: moves_resume follows the state and drops the entry only when the move ran; a refused move keeps both
+        old_, dest_ = F.mkroot(), F.mkroot(); F.put_main(old_, needs=[]); F.put_main(dest_, needs=[])
+        sM = "mvres001-aaaa-bbbb-cccc-dddddddddddd"
+        F.mkstate(sM, old_); F.put_sess(old_, sM, now="Task      moved work")
+        entry = {"kind": "move", "sid": sM[:8], "old": str(old_), "dest": str(dest_), "why": "repair: test"}  # memo_repair journals the 8-char id
+        HM.moves_add(str(old_), entry)
+        rel = holder(HM.memo_lock(str(old_)))
+        n3 = HM.moves_resume(str(old_))
+        rel()
+        check("A3 moves_resume: a refused move (memo busy) keeps the journal entry and the state (no project switch)",
+              n3 == 0 and HM.moves_read(str(old_)) == [entry] and not HM.load_state(sM).get("project") and HM.session_memo_path(str(old_), sM).exists())
+        n3 = HM.moves_resume(str(old_))
+        check("A3 ... the next start moves it, the state follows, the entry goes", n3 == 1 and not HM.moves_read(str(old_)) and HM.session_memo_path(str(dest_), sM).exists()
+              and HM.load_state(sM).get("project") == os.path.realpath(str(dest_)))
+        # A4 / A5: TaskUpdate maps like plan_step; plan_int takes ASCII digits only
+        base = [{"content": c, "status": "pending", "id": str(i + 1)} for i, c in enumerate("ab")]
+        tu = lambda st_: HM.plan_apply(base, "TaskUpdate", {"taskId": "1", "status": st_})[0]["status"]
+        check("A4 TaskUpdate: done / completed -> completed, in_progress kept, an unknown word -> pending, no status -> unchanged",
+              tu("done") == "completed" and tu("completed") == "completed" and tu("in_progress") == "in_progress" and tu("bogus") == "pending"
+              and HM.plan_apply([dict(base[0], status="in_progress")], "TaskUpdate", {"taskId": "1", "subject": "x"})[0]["status"] == "in_progress")
+        ok5 = True
+        for v_ in ("²", "٣", "1²", " 3 ", "3", "x"):
+            try:
+                HM.plan_int(v_)
+            except Exception:
+                ok5 = False
+        check("A5 plan_int: '²' and Arabic-Indic digits give None without raising; ' 3 ' is 3", ok5 and HM.plan_int("²") is None and HM.plan_int("٣") is None and HM.plan_int(" 3 ") == 3
+              and HM.plan_apply([{"content": "a", "status": "pending"}], "mcp__ccd_turn__update_plan", {"start": "²"}) == [{"content": "a", "status": "pending"}])
+        # A6 (kept, not skipped): a ledger append under a busy state lock loses nothing, and pending_count / running_bg recompute from the ledger
+        r6 = F.mkroot(); s6 = "ledbusy1-aaaa-bbbb-cccc-dddddddddddd"
+        F.mkstate(s6, r6, gate="auto")
+        bg = {"session_id": s6, "cwd": str(r6), "tool_name": "Agent", "tool_use_id": "tu-bg1",
+              "tool_input": {"subagent_type": "abofles:abofles-reader", "prompt": "abofles: Unit Test / Read · T2\nq\nLine cap: 40", "model": "haiku", "effort": "low", "run_in_background": True},
+              "tool_response": {"status": "async_launched", "agentId": "bgagent1"}}
+        st6 = HM.load_state(s6)
+        rel = holder(HM.state_lock(s6))
+        with contextlib.redirect_stdout(io.StringIO()):
+            HM.post(bg)
+        rel()
+        rows6 = [json.loads(l) for l in HM.ledger_path(s6).read_text().splitlines() if l.strip()] if HM.ledger_path(s6).exists() else []
+        check("A6 ledger append under a busy state lock: the pending row is kept (one row), the state save is skipped",
+              [r_.get("agent_id") for r_ in rows6] == ["bgagent1"] and rows6[0].get("status") == "pending" and HM.load_state(s6).get("spawns", 0) == st6.get("spawns", 0))
+        sync = dict(bg, tool_use_id="tu-s1", tool_input=dict(bg["tool_input"], run_in_background=False), tool_response="STATUS: done\nCONFIDENCE: high\nFACTS:\n- src/a.cs:1 — x\nGAPS: none")
+        with contextlib.redirect_stdout(io.StringIO()):
+            HM.post(sync)
+        check("A6 ... the next hook call recomputes from the ledger: pending_count 1 and running_bg 1", HM.pending_count(s6) == 1 and HM.load_state(s6).get("running_bg") == 1)
+
+        # 33: the route line (and the workflow line at a task's first agent) handed out at the Agent start
+        ti33 = {"subagent_type": "abofles:abofles-worker", "prompt": "abofles: Agent Orchestration Design / Work · T3 · Scope −1\nx\nLine cap: 30", "model": "opus", "effort": "high", "run_in_background": True}
+        check("33 route_line: emoji, side, topic, model, effort, cap, tier name, the header's modifiers and Parallel",
+              HM.route_line(ti33) == "🛠️ `Work` → **Agent Orchestration Design** · Opus 5.5 · High · Cap 30 · 🟠 Sensitive · Scope −1 · Parallel"
+              and HM.route_line({"subagent_type": "abofles:abofles-security", "prompt": "abofles: Money / Security · T4\nq", "model": "opus", "effort": "high"}) == "🛡️ `Security` → **Money** · Opus 5.5 · High · 🔴 Critical"
+              and HM.route_line({"prompt": "no header", "model": "opus", "effort": "low"}) is None)
+        r33 = F.mkroot(); s33 = "route033-aaaa-bbbb-cccc-dddddddddddd"
+        F.mkstate(s33, r33, gate="auto")
+        ag33 = {"session_id": s33, "cwd": str(r33), "tool_name": "Agent", "tool_input": {"subagent_type": "abofles:abofles-reader", "prompt": "abofles: Unit Test / Read · T2\nlist every caller of the export function in src/ please\nLine cap: 40", "model": "haiku", "effort": "low"}}
+        c33 = ((F.hrun("pre", ag33) or {}).get("hookSpecificOutput") or {}).get("additionalContext", "")
+        check("33 pre: the first agent of a task gets the exact route line and the workflow line to print", "print this route line now: 🔍 `Read` → **Unit Test** · Haiku 5.5 · Low · Cap 40 · 🟡 Normal" in c33
+              and "print the workflow line first, intent filled in: 🧭 Workflow · <intent> · 🟡 Normal → <steps> (a change at this tier: Read → Work → Verify)" in c33 and len(c33) < 600)
+        tp33 = Path(F.hh, "t33.jsonl")
+        tp33.write_text(json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": "🧭 Workflow · question · 🟡 Normal → Read\n🔍 `Read` → **Unit Test** · Haiku 5.5 · Low · Cap 40 · 🟡 Normal"}]}}) + "\n")
+        F.mkstate(s33, r33, gate="auto")
+        c33b = ((F.hrun("pre", dict(ag33, transcript_path=str(tp33))) or {}).get("hookSpecificOutput") or {}).get("additionalContext", "")
+        check("33 pre: both lines already printed -> neither is handed out", "route line" not in c33b and "workflow line" not in c33b)
+        # 40: the fixed SessionStart cost
+        hj = json.loads((HOOK.parent / "hooks.json").read_text(encoding="utf-8"))
+        echo = hj["hooks"]["SessionStart"][0]["hooks"][0]["command"]
+        descs = [re.search(r"^description: (.*)$", p_.read_text(), re.M).group(1) for p_ in sorted((HOOK.parent.parent / "agents").glob("*.md"))]
+        so40 = F.hrun("start", {"session_id": "start040", "cwd": str(F.mkroot()), "source": "startup"}) or ""
+        check("40 SessionStart: the echo is one short line (once per session); the topic lookup line is the command and `once per task`",
+              len(echo) < 250 and "once per session" in echo and "\n" not in echo and "topic lookup = bash" in so40 and "once per task" in so40 and "3 matches" not in so40)
+        check("40 agents: every description is at most 2 sentences and all of them together stay under 5,000 chars",
+              len(descs) == 24 and all(len(re.findall(r"[.!?](?:\s|\"?$)", d_)) <= 2 for d_ in descs) and sum(len(d_) for d_ in descs) < 5000)
+        # 41: run.py keeps a last-good copy and loads it when a live edit does not import
+        hd = Path(F.hh, "hk"); hd.mkdir(); lg = Path(F.hh, "lastgood")
+        for f_ in ("abofles_hook.py", "run.py", "workflow.json"):
+            shutil.copy2(HOOK.parent / f_, hd / f_)
+        env41 = dict(os.environ, ABOFLES_LAST_GOOD=str(lg))
+        deny_in = json.dumps({"session_id": "lg41", "cwd": str(F.hh), "tool_name": "Agent", "tool_input": {"subagent_type": "abofles:abofles-reader", "prompt": "abofles: Unit Test / Read · T2\nq\nLine cap: 40", "model": "haiku"}})
+        g1 = subprocess.run([sys.executable, str(hd / "run.py"), "pre"], input=deny_in, capture_output=True, text=True, env=env41)
+        check("41 run.py: a good import keeps a last-good copy with the same mtime", g1.returncode == 0 and "effort=missing" in g1.stdout and (lg / "abofles_hook.py").exists()
+              and int((lg / "abofles_hook.py").stat().st_mtime) == int((hd / "abofles_hook.py").stat().st_mtime))
+        (hd / "abofles_hook.py").write_text((hd / "abofles_hook.py").read_text() + "\ndef broken(:\n")
+        g2 = subprocess.run([sys.executable, str(hd / "run.py"), "pre"], input=deny_in, capture_output=True, text=True, env=env41)
+        check("41 run.py: a syntax error in the live file runs the last good copy (the gate still denies) with one warning line naming the error",
+              g2.returncode == 0 and "effort=missing" in g2.stdout and json.loads(g2.stdout)["hookSpecificOutput"]["permissionDecision"] == "deny"
+              and g2.stderr.count("\n") == 1 and "SyntaxError" in g2.stderr and "last good copy" in g2.stderr)
+        check("41 ... the broken file is never saved as the last good copy", "def broken(:" not in (lg / "abofles_hook.py").read_text())
+        # any error at import (not only a syntax error) falls back; a file that imports but fails inside main() is never kept
+        (hd / "abofles_hook.py").write_text((HOOK.parent / "abofles_hook.py").read_text() + "\nundefined_name_at_import\n")
+        g4 = subprocess.run([sys.executable, str(hd / "run.py"), "pre"], input=deny_in, capture_output=True, text=True, env=env41)
+        check("41 run.py: a NameError at import also runs the last good copy", g4.returncode == 0 and "NameError" in g4.stderr and "last good copy" in g4.stderr)
+        (hd / "abofles_hook.py").write_text((HOOK.parent / "abofles_hook.py").read_text().replace("def main():", "def main():\n    raise RuntimeError('boom in main')\n\ndef _old_main():", 1))
+        subprocess.run([sys.executable, str(hd / "run.py"), "pre"], input=deny_in, capture_output=True, text=True, env=env41)
+        check("41 ... a live file that fails inside main() is not saved as the last good copy", "boom in main" not in (lg / "abofles_hook.py").read_text())
+        shutil.rmtree(lg)
+        (hd / "abofles_hook.py").write_text((HOOK.parent / "abofles_hook.py").read_text() + "\ndef broken(:\n")
+        g3 = subprocess.run([sys.executable, str(hd / "run.py"), "pre"], input=deny_in, capture_output=True, text=True, env=env41)
+        check("41 ... no last-good copy: the error surfaces as before (scripts/py --hook turns it into exit 0)", g3.returncode != 0 and "SyntaxError" in g3.stderr)
+    finally:
+        HM.LOCK_WAIT = old_wait
+        F.close()
+
+
+def batch7_tests(check):
+    """Fix backlog batch 7 G (gates) and B (billing and docs): the mid-turn receipt at Stop, typed prompts that name a hand-back, resumed checks
+    graded again, gate agents off the Parallel cap, the unlock kept whole and spent only when demanded, run.py's last-good copy after a swallowed
+    error, the poll counter, a reply in hand, the gate claim read back, temp files pruned, an interim stop kept pending, the route-line hand-out;
+    one saving wording, one re-price rule, base_model on each row, and the docs' numbers."""
+    import contextlib
+    F = _MemoFixture("batch7"); HM = F.HM
+    # verifier lows: the header names the model the task's base was priced at; mixed bases say so
+    st_h = {"task_tokens": 1000, "task_usd": 2.0, "task_base_usd": 1.0, "task_base_models": ["sonnet"], "main_model": "opus", "spawns_since_receipt": 1}
+    check("batch 7 verify: receipt header names the base model the rows were priced at", "vs Sonnet 5.5" in HM.receipt_header(st_h))
+    check("batch 7 verify: ... several base models read `each agent's main model`", "vs each agent's main model" in HM.receipt_header({**st_h, "task_base_models": ["opus", "sonnet"]}))
+    try:
+        def call(fn, data):
+            buf = io.StringIO()
+            try:
+                with contextlib.redirect_stdout(buf):
+                    fn(data)
+            except SystemExit:
+                pass
+            out = buf.getvalue().strip()
+            try:
+                return json.loads(out) if out else None
+            except ValueError:
+                return out
+        reason = lambda o: ((o or {}).get("hookSpecificOutput") or {}).get("permissionDecisionReason", "") if isinstance(o, dict) else ""
+        ctx = lambda o: ((o or {}).get("hookSpecificOutput") or {}).get("additionalContext", "") if isinstance(o, dict) else ""
+        HM.private_dir(HM.STATE_DIR); HM.private_dir(HM.LEDGER_DIR)
+        now = int(time.time())
+        iso = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())
+        root = F.mkroot()
+        def seed(sid, **kw):
+            HM.save_state(sid, {"started": now - 100, "root": str(root), "cwd": str(root), "gate": "auto", "task_started": now - 50, **kw})
+        def ledger(sid, *rows):
+            HM.ledger_path(sid).write_text("".join(json.dumps(r) + "\n" for r in rows))
+        wrow = {"ts": now - 40, "agent_id": "ag1", "topic": "X", "side": "Work", "tier": 2, "model": "sonnet", "effort": "high", "agent": "abofles:abofles-worker", "status": "done", "confidence": "high"}
+
+        # G1: a receipt printed before the turn's last tool call (wrap_up) closes the task at Stop and is journaled; the context watch closes nothing
+        s1 = "b7g1aaaa-1111-2222-3333-444444444444"
+        seed(s1, spawns_since_receipt=1, task_units=1.0, task_base=2.0, last_spawn_offset=0)
+        ledger(s1, wrow)
+        rtxt = HM.receipt_header(HM.load_state(s1)) + "\n- `done` → changed a.py\n- `why` → y\n- `check` → z\n- `open` → none\n"
+        tp1 = Path(F.hh, "g1.jsonl")
+        tp1.write_text("".join(json.dumps(e) + "\n" for e in (
+            {"type": "assistant", "timestamp": iso, "message": {"role": "assistant", "content": [{"type": "text", "text": rtxt}, {"type": "tool_use", "id": "t1", "name": "mcp__ccd_turn__wrap_up", "input": {}}]}},
+            {"type": "user", "timestamp": iso, "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t1", "content": "ok"}]}},
+            {"type": "assistant", "timestamp": iso, "message": {"role": "assistant", "content": [{"type": "text", "text": "All done."}]}})))
+        o1 = call(HM.receipt, {"session_id": s1, "cwd": str(root), "transcript_path": str(tp1), "last_assistant_message": "All done."})
+        sm1 = HM.session_memo_path(str(root), s1)
+        check("G1: a receipt printed before the last tool call closes the task at Stop (no 'no receipt' demand) and reaches the Journal",
+              "no receipt" not in json.dumps(o1 or {}) and HM.load_state(s1).get("spawns_since_receipt", 0) == 0 and sm1.exists() and "changed a.py" in sm1.read_text())
+        st1 = {"spawns_since_receipt": 2, "last_spawn_offset": 0, "task_started": now - 50, "root": str(root)}
+        HM.context_watch({"session_id": s1, "cwd": str(root), "transcript_path": str(tp1)}, st1)
+        check("G1: ... the context watch closes no task on a printed receipt (the Stop hook journals it instead)", st1.get("spawns_since_receipt") == 2)
+
+        # G2: a typed prompt that mentions a hand-back or a task-notification is the user's: the loop counts start over
+        s2 = "b7g2aaaa-1111-2222-3333-444444444444"
+        seed(s2, loop={"fails": {"Verify on X": 3}}, loop_stop={"why": "x", "ts": 1})
+        call(HM.prompt, {"session_id": s2, "cwd": str(root), "prompt": "the hand-back bug is still there, why did the task-notification not arrive?"})
+        st2 = HM.load_state(s2)
+        check("G2: a typed prompt naming hand-back / task-notification resets the loop guard and is the user's prompt", not st2.get("loop") and not st2.get("loop_stop") and st2.get("last_prompt_ts"))
+        seed(s2, loop={"fails": {"Verify on X": 3}})
+        call(HM.prompt, {"session_id": s2, "cwd": str(root), "prompt": "<task-notification>\n<task-id>x</task-id>\n</task-notification>"})
+        check("G2: ... a real <task-notification> envelope keeps the counts (no word from the user)", HM.load_state(s2).get("loop") == {"fails": {"Verify on X": 3}})
+
+        # G3: a resumed Verify drops its old verdict, so its new FAIL counts one more round and its PASS ends the loop
+        s3 = "b7g3aaaa-1111-2222-3333-444444444444"
+        seed(s3)
+        ledger(s3, dict(wrow, side="Verify", agent="abofles:abofles-verifier", verdict="FAIL", completed_ts=now - 30))
+        with HM.state_lock(s3):
+            HM.reopen_row(s3, {"ag1"})
+        r3 = HM.ledger_rows(s3)[0]
+        st3 = HM.load_state(s3)
+        HM.close_row(r3, "STATUS: done\nCONFIDENCE: high\nVERDICT: FAIL\nFAILED:\n- a.py:1 still broken\n", st3, s3, str(root))
+        f3 = (st3.get("loop") or {}).get("fails", {}).get("Verify on X")
+        r3b = dict(r3, status="pending"); r3b.pop("verdict", None)
+        HM.close_row(r3b, "STATUS: done\nCONFIDENCE: high\nVERDICT: PASS\n", st3, s3, str(root))
+        check("G3: a resumed Verify's old verdict is dropped: its FAIL counts (loop 1), its PASS clears the loop", r3.get("verdict") == "FAIL" and f3 == 1 and not (st3.get("loop") or {}).get("fails"))
+        jrow = dict(wrow, agent_id="ex1", side="Explain", agent="abofles:abofles-explainer", verdict="EXPLAINED")
+        ledger(s3, jrow)
+        with HM.state_lock(s3):
+            HM.reopen_row(s3, {"ex1"})
+        check("G3: ... an Explainer's verdict stays on its reopened row (sendmsg unlocked its question already)", HM.ledger_rows(s3)[0].get("verdict") == "EXPLAINED")
+
+        # G4: gate agents take no Parallel slot, and an Explainer counts a round only when it starts
+        rp = F.mkroot(["Parallel = 1", "Agents = auto"])
+        s4 = "b7g4aaaa-1111-2222-3333-444444444444"
+        HM.save_state(s4, {"started": now - 100, "root": str(rp), "cwd": str(rp), "gate": "auto", "task_started": now - 50, "denied_ts": now})
+        ledger(s4, dict(wrow, status="pending", agent_id="bg1"))
+        ex = lambda i: {"session_id": s4, "cwd": str(rp), "tool_name": "Agent", "tool_use_id": f"tu{i}", "tool_input": {"subagent_type": "abofles:abofles-explainer", "model": "opus", "effort": "medium", "run_in_background": True,
+                        "prompt": "abofles: X / Explain · T3\nExplain the question about the thing in a.py for the user please now.\nLine cap: 20"}}
+        o4 = call(HM.pre, ex(0))
+        check("G4: a background Explainer is not refused by the Parallel cap, and counts one Explainer round", "already running" not in reason(o4) and (HM.load_state(s4).get("loop") or {}).get("explain") == 1)
+        o4w = call(HM.pre, {"session_id": s4, "cwd": str(rp), "tool_name": "Agent", "tool_use_id": "tw", "tool_input": {"subagent_type": "abofles:abofles-worker", "model": "opus", "effort": "medium", "run_in_background": True,
+                            "prompt": "abofles: X / Work · T3\nEdit a.py so the tests pass; done when `pytest` passes fully ok.\nLine cap: 20"}})
+        check("G4: ... a background work agent at the cap is still refused, and adds no Explainer round", "already running" in reason(o4w) and (HM.load_state(s4).get("loop") or {}).get("explain") == 1)
+
+        # G5 / G6: the Stop keeps every unlock it demands; only its own unanswered demand spends one
+        s5 = "b7g5aaaa-1111-2222-3333-444444444444"
+        seed(s5, judge_ok=2, judge_ok_ts=now - 5, spawns_since_receipt=1, task_units=1.0, task_base=2.0, judged_ts=now - 5)
+        ledger(s5, wrow)
+        txt5 = HM.receipt_header(HM.load_state(s5)) + "\n- `done` → x\n- `why` → y\n- `check` → z\n- `open` → none\n"
+        o5 = call(HM.receipt, {"session_id": s5, "cwd": str(root), "last_assistant_message": txt5})
+        check("G5: a closing Stop that demands the question keeps both unlocks (not 1)", "still unasked" in json.dumps(o5 or {}) and HM.load_state(s5).get("judge_ok") == 2)
+        call(HM.receipt, {"session_id": s5, "cwd": str(root), "last_assistant_message": "I answered in chat instead.", "stop_hook_active": True})
+        check("G6: ... the second Stop after that demand, with no question asked, spends the unlock", HM.load_state(s5).get("judge_ok", 0) == 0)
+        s6 = "b7g6aaaa-1111-2222-3333-444444444444"
+        seed(s6, judge_ok=1, judge_ok_ts=now - 5, judged_ts=now - 5)
+        ledger(s6)
+        call(HM.receipt, {"session_id": s6, "cwd": str(root), "last_assistant_message": "Here is the question in prose.", "stop_hook_active": True})
+        check("G6: an unlock made after a Stop refused for another reason is not spent by the next stop_hook_active Stop", HM.load_state(s6).get("judge_ok") == 1)
+
+        # G7: a run that fails inside main() is no whole run: run.py keeps the old last-good copy and says so
+        hd = Path(F.hh, "hk7"); hd.mkdir(); lg = Path(F.hh, "lastgood7")
+        for f_ in ("abofles_hook.py", "run.py", "workflow.json"):
+            shutil.copy2(HOOK.parent / f_, hd / f_)
+        src7 = (hd / "abofles_hook.py").read_text()
+        (hd / "abofles_hook.py").write_text(src7.replace("def pre(data):\n", "def pre(data):\n    raise RuntimeError('boom7')\n", 1))
+        env7 = dict(os.environ, ABOFLES_LAST_GOOD=str(lg))
+        in7 = json.dumps({"session_id": "lg7", "cwd": str(F.hh), "tool_name": "Agent", "tool_input": {"subagent_type": "abofles:abofles-reader", "prompt": "abofles: Unit Test / Read · T2\nq\nLine cap: 40", "model": "haiku"}})
+        g7 = subprocess.run([sys.executable, str(hd / "run.py"), "pre"], input=in7, capture_output=True, text=True, env=env7)
+        check("G7: a hook that raises inside main() fails open, keeps no last-good copy of itself and warns on stderr",
+              g7.returncode == 0 and not (lg / "abofles_hook.py").exists() and "boom7" in g7.stderr and "last good copy was kept" in g7.stderr)
+        (hd / "abofles_hook.py").write_text(src7)
+        g7b = subprocess.run([sys.executable, str(hd / "run.py"), "pre"], input=in7, capture_output=True, text=True, env=env7)
+        check("G7: ... the fixed file run whole becomes the last-good copy", g7b.returncode == 0 and (lg / "abofles_hook.py").exists() and not g7b.stderr)
+
+        # G8 / G9: plain words are no counter; a comparison on a probe's count bounds nothing
+        check("G8: `for` in plain words and `x--y` in a path are no loop bound: the self-matching loop is still caught",
+              HM.poll_self_match("until ! pgrep -f mytest; do sleep 5; echo waiting for it; done") and HM.poll_self_match("while pgrep -f mytest; do sleep 5; done; rm -rf x--y"))
+        check("G8: ... a real counter, `((n++))`, a `for x in` loop and `seq` still bound it",
+              not HM.poll_self_match("i=0; until ! pgrep -f mytest || [ $i -ge 10 ]; do sleep 1; i=$((i+1)); done") and not HM.poll_self_match("until ! pgrep -f mytest; do sleep 1; ((n++)); done")
+              and not HM.poll_self_match("for x in 1 2 3; do until ! pgrep -f mytest; do sleep 1; done; done") and not HM.poll_self_match("for i in $(seq 5); do pgrep -f mytest && sleep 1; done"))
+        check("G9: `$n -gt 0` whose n comes from pgrep is no counter: the loop is caught", bool(HM.poll_self_match("n=1; while [ $n -gt 0 ]; do n=$(pgrep -fc mytest); sleep 2; done")))
+        check("G9: ... a background poll on it is unbounded", HM.poll_unbounded({"tool_input": {"run_in_background": True, "command": "n=1; while [ $n -gt 0 ]; do n=$(pgrep -fc srv); sleep 2; done"}}))
+
+        # G10: a SendMessage whose response carries the reply does not reopen the row: the reply in hand is graded
+        s10 = "b7g10aaa-1111-2222-3333-444444444444"
+        seed(s10, gate_agents=["jq1"])
+        ledger(s10, dict(wrow, agent_id="jq1", side="Judge", agent="abofles:abofles-judge", gate="judge", verdict="ASK", completed_ts=now - 30))
+        ask10 = "STATUS: done\nCONFIDENCE: high\nVERDICT: ASK\nQUESTION: In IQD or per currency?\nEVIDENCE:\n- a.cs:1 — x\nWHY: money\nOPTIONS:\n- A — means: m · then: t · pick when: p\n- B — means: m · then: t · pick when: p\nRECOMMEND: A — r"
+        o10 = call(HM.sendmsg, {"session_id": s10, "cwd": str(root), "tool_name": "SendMessage", "tool_input": {"to": "jq1", "message": "reword"}, "tool_response": {"success": True, "resumedAgentId": "jq1", "reply": ask10}})
+        check("G10: a reply in hand to a finished Judge unlocks its question and leaves the row closed (not pending forever)",
+              HM.load_state(s10).get("judge_ok") == 1 and HM.ledger_rows(s10)[0].get("status") == "done" and "no question unlocked yet" not in ctx(o10))
+
+        # G11: post() reads back the gate claim pre() made, so a state change in between does not turn the gate agent into work
+        s11 = "b7g11aaa-1111-2222-3333-444444444444"
+        seed(s11, denied_ts=now)
+        ti11 = {"subagent_type": "general-purpose", "model": "opus", "effort": "medium", "prompt": "abofles: X / Judge · T3\nJudge the question about the cap in a.cs for the user now please.\nLine cap: 30"}
+        call(HM.pre, {"session_id": s11, "cwd": str(root), "tool_name": "Agent", "tool_use_id": "tg11", "tool_input": ti11})
+        claimed = (HM.load_state(s11).get("inflight_ids") or {}).get("tg11", {}).get("gate")
+        st11 = HM.load_state(s11); st11.pop("denied_ts", None); HM.save_state(s11, st11)  # a qgate ask spent the unlock meanwhile
+        call(HM.post, {"session_id": s11, "cwd": str(root), "tool_name": "Agent", "tool_use_id": "tg11", "tool_input": ti11,
+                       "tool_response": {"status": "completed", "agentId": "g11", "content": [{"type": "text", "text": "STATUS: done\nCONFIDENCE: high\nVERDICT: ANSWERED\nQUESTION: q\nANSWER: a\nEVIDENCE:\n- a.cs:1 — x"}]}})
+        row11 = HM.ledger_rows(s11)[-1]; st11 = HM.load_state(s11)
+        check("G11: the gate claim pre() stored for the call is read back in post: still a Judge row, counted as a gate run, no slot given back that it never took",
+              claimed == "judge" and row11.get("gate") == "judge" and st11.get("task_judges") == 1 and st11.get("inflight", 0) == 0)
+
+        # G12: temp files older than a day are pruned; a young one and another tool's file are kept
+        old_t = time.time() - 2 * 86400
+        t_state, t_young, t_memo, t_other = HM.STATE_DIR / "x.json.123.tmp", HM.STATE_DIR / "y.json.124.tmp", HM.memo_path(str(root)).with_name("abofles-memo.md.125.tmp"), HM.memo_path(str(root)).with_name("other-tool.tmp")
+        t_memo.parent.mkdir(parents=True, exist_ok=True)
+        for f_ in (t_state, t_young, t_memo, t_other):
+            f_.write_text("x")
+        for f_ in (t_state, t_memo, t_other):
+            os.utime(f_, (old_t, old_t))
+        HM.prune_tmp(str(root))
+        check("G12: prune_tmp drops the state's and the memo's old temps, keeps a young one and another tool's file", not t_state.exists() and not t_memo.exists() and t_young.exists() and t_other.exists())
+
+        # G13: a headed stop while the agent's own background command runs keeps the row pending; the notification lets the next stop close it
+        s13 = "b7g13aaa-1111-2222-3333-444444444444"
+        tpm = Path(F.hh, "main13.jsonl"); tpm.write_text("")
+        seed(s13, transcript_path=str(tpm))
+        ledger(s13, dict(wrow, agent_id="bg13", status="pending", confidence=None))
+        at13 = tpm.parent / s13 / "subagents" / "agent-bg13.jsonl"; at13.parent.mkdir(parents=True, exist_ok=True)
+        good13 = "STATUS: partial\nCONFIDENCE: medium\nCHANGED:\n- a.py — waiting on the build\nRAN: build running\nLEFT: build"
+        at13.write_text(json.dumps({"type": "user", "timestamp": iso, "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "b1", "content": "Command running in background with ID: bsh13"}]}}) + "\n"
+                        + json.dumps({"type": "assistant", "timestamp": iso, "message": {"role": "assistant", "content": [{"type": "text", "text": good13}], "stop_reason": "end_turn"}}) + "\n")
+        call(HM.stop, {"session_id": s13, "agent_id": "bg13", "agent_type": "abofles:abofles-worker", "last_assistant_message": good13})
+        check("G13: a headed interim stop while the agent's background command runs leaves the row pending", HM.ledger_rows(s13)[0].get("status") == "pending")
+        with open(at13, "a") as fh_:
+            fh_.write(json.dumps({"type": "attachment", "attachment": {"prompt": "<task-notification>\n<task-id>bsh13</task-id>\n</task-notification>"}}) + "\n")
+        call(HM.stop, {"session_id": s13, "agent_id": "bg13", "agent_type": "abofles:abofles-worker", "last_assistant_message": good13})
+        check("G13: ... once its notification is in, the next stop closes the row", HM.ledger_rows(s13)[0].get("status") == "partial")
+
+        # G14: the route line hand-out — none when this message already holds the line (in the model's own words, even after the last spawn's
+        # offset); with modifiers the hook can know (Parallel for a second Agent call in the message, Project Override), else a note to add them
+        T14 = "Agent Orchestration Design (routing, budgets, handoffs)"
+        s14 = "b7g14aaa-1111-2222-3333-444444444444"
+        pr14 = f"abofles: {T14} / Work · T3\nEdit hooks/a.py so the tests pass; done when `pytest` passes fully ok.\nLine cap: 30"
+        tool14 = lambda i, eff="high": {"type": "tool_use", "id": f"tu14{i}", "name": "Agent", "input": {"subagent_type": "abofles:abofles-worker", "model": "opus", "effort": eff, "prompt": pr14}}
+        tp14 = Path(F.hh, "g14.jsonl")
+        def g14(texts, tools, eff="high", rootx=root, offset_end=True):
+            ents = [{"type": "assistant", "timestamp": iso, "message": {"id": "msg14", "role": "assistant", "content": [{"type": "text", "text": t}]}} for t in texts]
+            ents += [{"type": "assistant", "timestamp": iso, "message": {"id": "msg14", "role": "assistant", "content": [t]}} for t in tools]
+            tp14.write_text("".join(json.dumps(e) + "\n" for e in ents))
+            HM.save_state(s14, {"started": now - 100, "root": str(rootx), "cwd": str(rootx), "gate": "auto", "task_started": now - 50, "transcript_path": str(tp14),
+                                "last_spawn_offset": tp14.stat().st_size if offset_end else 0, "spawns_since_receipt": 1, "spawns": 1})
+            ledger(s14, dict(wrow, topic=T14))
+            return ctx(call(HM.pre, {"session_id": s14, "cwd": str(rootx), "tool_name": "Agent", "tool_use_id": "tu140", "transcript_path": str(tp14), "tool_input": tool14(0, eff)["input"]}))
+        c14a = g14([f"- 🛠️ Work → {T14} · Opus 5.5 · High · Cap 30 · 🟠 Sensitive · User: Opus asked"], [tool14(0), tool14(1)])
+        check("G14: a route line the model printed in this message (its own wording, before the last spawn's offset) gets no hand-out", "route line" not in c14a)
+        c14b = g14(["Starting both now."], [tool14(0), tool14(1)])
+        check("G14: ... not printed, with a second Agent call in the message: the hand-out carries Parallel", f"print this route line now: 🛠️ `Work` → **{T14}** · Opus 5.5 · High · Cap 30 · 🟠 Sensitive · Parallel" in c14b and "add the modifier" not in c14b)
+        c14c = g14([], [tool14(0, "xhigh")], eff="xhigh")
+        check("G14: ... a call off its cell with no modifier in the header: the hand-out says to add the one that says why", "print this route line now:" in c14c and "add the modifier that says why" in c14c and "User: <what the user asked>" in c14c)
+        ro = F.mkroot([f"{T14} / Work = opus·xhigh", "Agents = auto"])
+        c14d = g14([], [tool14(0, "xhigh")], eff="xhigh", rootx=ro)
+        check("G14: ... a call on the project's own cell gets ` · Project Override` in the handed-out line", "· 🟠 Sensitive · Project Override" in c14d and "add the modifier" not in c14d)
+
+        # B1–B3: one saving wording — never a negative saving
+        check("B1-B3: saving_text words a saving and an over cost the one way (bill, status, receipt header, units)",
+              HM.saving_text(1.0, 2.2) == "saved $1.20 (55%)" and HM.saving_text(3.0, 2.0) == "50% over cost ($1.00)" and HM.saving_text(3.0, 2.0, header=True) == "Cost +50% ($1.00)"
+              and HM.saving_text(1.0, 2.0, header=True) == "Saved 50% ($1.00)" and HM.saving_text(30, 20, money=False) == "50% over cost" and HM.saving_text(0, 0, money=False, pct=-12) == "12% over cost"
+              and HM.saving_text(0, 0, header=True, money=False, pct=7) == "Saved 7%")
+        # B4–B7 through the scripts: an over-cost ledger, a row priced at a stale transcript size, rows with different base models
+        sB = "b7billaa-1111-2222-3333-444444444444"
+        mainB = Path(F.hh, "mainB.jsonl"); mainB.write_text("")
+        HM.save_state(sB, {"started": now - 100, "root": str(root), "cwd": str(root), "task_started": now + 1000, "transcript_path": str(mainB), "main_model": "opus"})
+        atB = mainB.parent / sB / "subagents" / "agent-bB1.jsonl"; atB.parent.mkdir(parents=True, exist_ok=True)
+        atB.write_text(json.dumps({"type": "assistant", "message": {"id": "m1", "model": "claude-fable-5-2", "usage": {"input_tokens": 1000, "output_tokens": 100000}}}) + "\n")
+        sp = HM.spend_of(HM.load_state(sB), sB, "bB1", "fable", "sonnet")
+        ledger(sB, {"ts": now - 40, "agent_id": "bB1", "topic": "X", "side": "Plan", "model": "fable", "effort": "high", "status": "done", "confidence": "high",
+                    "tokens": 5, "usd": 0.0001, "base_usd": 0.0001, "priced_size": 1, "base_model": "sonnet"},
+               {"ts": now - 30, "agent_id": "bB2", "topic": "X", "side": "Read", "model": "haiku", "effort": "low", "status": "done", "confidence": "high"})
+        check("B6: spend_of prices the base at the row's base_model, not the main model now", sp and abs(sp[2] - HM.usd("sonnet", sp[0])) < 1e-9 and sp[2] < HM.usd("opus", sp[0]))
+        envB = dict(os.environ, ABOFLES_SESSION=sB)
+        sc = lambda name, *a: subprocess.run([sys.executable, "-X", "utf8", str(Path(__file__).resolve().parent / name), *a], cwd=str(root), capture_output=True, text=True, env=envB).stdout
+        bo, so, ho = sc("bill.py"), sc("status.py"), sc("bill.py", "--history")
+        check("B1-B3: bill and status print an over cost as `N% over cost ($X)`, never `saved $-X (-N%)`",
+              "over cost ($" in bo and "over cost ($" in so and "saved $-" not in bo + so and "(-" not in bo + so and "over cost" in ho and "saved -" not in ho.replace("saved -\n", ""))
+        check("B4/B5: status re-prices a row priced at a stale transcript size, as bill does (the same tokens on both)", "101K tokens" in so and "101K tokens" in bo)
+        check("B7: the 'Same tokens on' label names the rows' base model (Sonnet 5.5 here), not the --baseline", "Same tokens on Sonnet 5.5" in bo and "vs all Sonnet 5.5" in so)
+        check("B7: ... rows priced at different base models are named as such (bill --all)", HM.base_label_of([{"tokens": 1, "base_model": "opus"}, {"tokens": 1, "base_model": "sonnet"}]) == "each session's main model"
+              and HM.base_label_of([{"tokens": 1}], "opus") == "Opus 5.5")
+        check("B14: the over-cost note names no T4-only reason; B15: the all-Opus note names Matrix = quality",
+              "T4 agents" not in bo and "agents ran above" in bo and "no Read/T1–T2" not in (Path(__file__).resolve().parent / "bill.py").read_text() and "Matrix = quality" in (Path(__file__).resolve().parent / "bill.py").read_text())
+        check("B4/B5: one re-price rule — a row of the open task or one priced before; an old never-priced row is not read",
+              HM.reprice_due({"ts": 5}, {"task_started": 1}) and HM.reprice_due({"ts": 0, "priced_size": 3}, {"task_started": 9}) and not HM.reprice_due({"ts": 0}, {"task_started": 9}))
+        # B6 at post(): the row stores the base model of its start
+        s6b = "b7b6aaaa-1111-2222-3333-444444444444"
+        seed(s6b, main_model="sonnet")
+        call(HM.post, dict(agent("haiku", "low", resp="STATUS: done\nCONFIDENCE: high\nFACTS:\n- none\nGAPS: none", cwd=str(root)), session_id=s6b))
+        check("B6: post() stores base_model on the ledger row", HM.ledger_rows(s6b)[-1].get("base_model") == "sonnet")
+        # B17: bill.py and status.py take the tables from the hook
+        for name in ("bill.py", "status.py"):
+            src_ = (Path(__file__).resolve().parent / name).read_text()
+            check(f"B17: {name} imports PRICE and EFFORT from the hook, no copy of the tables", 'PRICE = {"haiku"' not in src_ and 'EFFORT = {"low"' not in src_ and "PRICE, EFFORT, units as cost" in src_)
+        # B8–B16: the docs
+        doc = lambda rel: (HOOK.parent.parent / rel).read_text(encoding="utf-8")
+        check("B8/B9: the examples' units add up (README 290 u, receipt-and-example 300 u)", "Verify ✓ · 290 u" in doc("README.md") and "Verify ✓ · 300 u" in doc("skills/abofles/references/receipt-and-example.md"))
+        check("B10: SKILL.md rule 12 names every GATE_IDS id", all(f"`{i}`" in doc("skills/abofles/SKILL.md") for i in HM.GATE_IDS))
+        check("B11/B12: the Session cap docs name the deny and the Verify exemption", "a Verify" in doc("skills/abofles/references/overrides.md").split("`Session cap = N`")[1][:300]
+              and "denied" in doc("skills/abofles/references/memo-resume.md").split("**Session cap.**")[1][:400] and "a Verify" in doc("skills/abofles/references/memo-resume.md").split("**Session cap.**")[1][:400])
+        check("B13: route.md has the model build the `main:` line, with no `fits` form", "built by you" in doc("commands/route.md") and "fits" not in doc("commands/route.md").split("1. The `main:` line")[1].split("\n2.")[0].replace("A setting that fits gets no", ""))
+        check("B16: the example's `main:` line carries its tier", "for this 🔴 Critical task (now Opus 5.5 · Medium)" in doc("skills/abofles/references/receipt-and-example.md"))
+    finally:
+        F.close()
+
+
+def close_check_tests(check):
+    """P1 close check: close_git facts and lines (no git, detached HEAD, no upstream, a worktree, a timeout, a dirty tree, an unpushed commit, a stash),
+    the hooks' records (connector actions, outside writes, edit and Verify times), the read-only claim lookup and `memo.py close-check [--json]` end to end.
+    Temp dirs only: HOME, the state dir and every repository are fixtures."""
+    F = _MemoFixture("closecheck"); HM = F.HM
+    gitc = lambda d, *a: subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *a], cwd=str(d), capture_output=True, text=True)
+    spec = _ilu.spec_from_file_location("memo_close_t", F.memopy); MM = _ilu.module_from_spec(spec); spec.loader.exec_module(MM)
+    home = Path(F.hh, "home"); home.mkdir()
+    env = dict(os.environ, HOME=str(home), ABOFLES_SCRATCH_DIRS="")
+    def cc(root, sid, *a):
+        return subprocess.run([sys.executable, F.memopy, "close-check", *a, "--session", sid], cwd=str(root), capture_output=True, text=True, env=env)
+    def repo(name, push=True, extra=False):
+        bare = Path(F.hh, name + ".git"); subprocess.run(["git", "init", "-q", "--bare", str(bare)], capture_output=True)
+        w = F.mkroot(name=name); gitc(w, "commit", "-q", "--allow-empty", "-m", "c1"); gitc(w, "remote", "add", "origin", str(bare))
+        gitc(w, "push", "-q", "-u", "origin", "HEAD")
+        if not push:
+            gitc(w, "commit", "-q", "--allow-empty", "-m", "c2")
+        return w
+    states = lambda ls, src="git": [l["state"] for l in ls if l["src"] == src]
+    try:
+        # ── close_git: one fixture per case ──
+        Ng = F.mkroot(git=False)
+        lg = MM.close_git_lines(MM.close_git(str(Ng)), "plain")
+        check("close git: a folder with no git repository is ✓ `nothing to check` (8A.12)", states(lg) == ["✓"] and "no git repository — nothing to check" in lg[0]["text"])
+        Wc = repo("cc_clean")
+        fc = MM.close_git(str(Wc)); lc = MM.close_git_lines(fc, "clean")
+        check("close git: a clean pushed repository is one ✓ line", states(lc) == ["✓"] and fc["ahead"] == 0 and fc["upstream"] and not fc["dirty"])
+        Wn = F.mkroot(name="cc_noup"); gitc(Wn, "commit", "-q", "--allow-empty", "-m", "c1")
+        ln = MM.close_git_lines(MM.close_git(str(Wn)), "noup")
+        check("close git: a branch with no upstream is ⛔", states(ln) == ["⛔"] and "no upstream" in ln[0]["text"] and "abofles-git" in ln[0]["fix"])
+        Wd = repo("cc_det"); gitc(Wd, "checkout", "-q", "--detach")
+        fd = MM.close_git(str(Wd)); ld = MM.close_git_lines(fd, "det")
+        gitc(Wd, "commit", "-q", "--allow-empty", "-m", "lost")
+        ld2 = MM.close_git_lines(MM.close_git(str(Wd)), "det")
+        check("close git: a detached HEAD is caught: ⚠ when a branch holds its commit, ⛔ with a commit no branch holds",
+              fd["detached"] and states(ld) == ["⚠"] and "detached HEAD" in ld[0]["text"] and states(ld2) == ["⛔"] and "no branch holds" in ld2[0]["text"])
+        Ws = repo("cc_seed", push=False)
+        Path(Ws, "stashed.txt").write_text("s"); gitc(Ws, "stash", "-q", "-u"); Path(Ws, "dirty.txt").write_text("d")
+        fs = MM.close_git(str(Ws)); ls = MM.close_git_lines(fs, "seed")
+        byid = {l["id"].rsplit(":", 1)[-1]: l["state"] for l in ls}
+        check("close git: a seeded dirty tree, an unpushed commit and a stash are each caught (⛔ dirty, ⛔ unpushed, ⚠ stash), no ✓",
+              fs["dirty"] == 1 and fs["ahead"] == 1 and fs["stash"] == 1 and byid.get("dirty") == "⛔" and byid.get("ahead") == "⛔" and byid.get("stash") == "⚠" and "✓" not in states(ls))
+        Wt = repo("cc_wtmain"); WT = Path(F.hh, "cc_wt"); gitc(Wt, "worktree", "add", "-q", "-b", "feat-wt", str(WT)); Path(WT, "wip.txt").write_text("w")
+        ft = MM.close_git(str(Wt))
+        check("close git: a worktree is listed with its branch", [w["branch"] for w in ft["worktrees"]] == ["feat-wt"] and os.path.realpath(ft["worktrees"][0]["path"]) == os.path.realpath(WT))
+        real_run = MM.subprocess.run
+        def slow(cmd, *a, **kw):
+            if cmd[:2] == ["git", "--no-optional-locks"] and "status" in cmd:
+                raise subprocess.TimeoutExpired(cmd, kw.get("timeout"))
+            return real_run(cmd, *a, **kw)
+        calls = []
+        def spy(cmd, *a, **kw):
+            calls.append((cmd, kw.get("timeout")))
+            return real_run(cmd, *a, **kw)
+        try:
+            MM.subprocess.run = slow
+            fto = MM.close_git(str(Wc)); lto = MM.close_git_lines(fto, "slow")
+            MM.subprocess.run = spy
+            MM.close_git(str(Ws)); MM.close_branch(str(Ws), "main")
+        finally:
+            MM.subprocess.run = real_run
+        check("close git: a timeout is `not checked`, never ✓", fto["timeout"] and "not checked" in states(lto) and "✓" not in states(lto))
+        check("close git: every git call is read-only with a 2 s timeout, never a fetch (no commit, push, branch write)",
+              calls and all(c[0][:2] == ["git", "--no-optional-locks"] and c[1] == 2 for c in calls)
+              and not any(set(c[0]) & {"fetch", "commit", "push", "pull", "checkout", "switch", "merge", "reset", "gc"} for c in calls)
+              and not any("stash" in c[0] and c[0][c[0].index("stash") + 1:2 + c[0].index("stash")] != ["list"] for c in calls))
+
+        # ── the hooks' records: connector actions, outside writes, edit and Verify times ──
+        R = repo("cc_proj"); S = "close001-aaaa-bbbb-cccc"
+        F.mkstate(S, R)
+        F.hrun("guard", {"session_id": S, "cwd": str(R), "tool_name": "mcp__jira__createJiraIssue", "tool_input": {}})
+        F.hrun("guard", {"session_id": S, "cwd": str(R), "tool_name": "mcp__scheduled-tasks__create_scheduled_task", "tool_input": {}, "agent_id": "sub1", "agent_type": "abofles:abofles-worker"})
+        F.hrun("guard", {"session_id": S, "cwd": str(R), "tool_name": "mcp__jira__getJiraIssue", "tool_input": {}})
+        F.hrun("guard", {"session_id": S, "cwd": str(R), "tool_name": "mcp__ccd_turn__update_plan", "tool_input": {}})
+        acts = [a["tool"] for a in HM.load_state(S).get("actions") or []]
+        check("close record: guard records an mcp__ write (a subagent's too) before its early return; a read and the app's own tools are not recorded",
+              acts == ["mcp__jira__createJiraIssue", "mcp__scheduled-tasks__create_scheduled_task"] and all(a.get("ts") for a in HM.load_state(S)["actions"]))
+        Out = Path(F.hh, "outside", "notes.md"); Out.parent.mkdir()
+        F.hrun("edit", {"session_id": S, "cwd": str(R), "tool_name": "Write", "tool_input": {"file_path": str(Out)}})
+        F.hrun("edit", {"session_id": S, "cwd": str(R), "tool_name": "Edit", "tool_input": {"file_path": str(R / "a.py")}})
+        st1 = HM.load_state(S)
+        check("close record: edit() keeps a write in no repository in st outside and the edit time per work root in st edit_ts",
+              st1.get("outside") == [os.path.realpath(Out)] and set(st1.get("edit_ts") or {}) == {str(R)} and not st1.get("verify_ts"))
+        HM.memo_now(str(R), "Task      cap\nVerify    `python3 scripts/check_cap.py` passes", S)
+        F.hrun("guard", {"session_id": S, "cwd": str(R), "tool_name": "Bash", "tool_input": {"command": f"python3 {R}/scripts/check_cap.py"}})
+        pre_v = HM.load_state(S).get("verify_ts")  # 8A.21: PreToolUse stamps nothing, the command has not run yet
+        F.hrun("post_bash", {"session_id": S, "cwd": str(R), "tool_name": "Bash", "tool_input": {"command": "ls scripts"}, "tool_response": {"stdout": ""}})
+        F.hrun("post_bash", {"session_id": S, "cwd": str(R), "tool_name": "Bash", "tool_input": {"command": f"python3 {R}/scripts/check_cap.py"}, "tool_response": {"exitCode": 1}})
+        no_v = HM.load_state(S).get("verify_ts") or pre_v
+        lv = json.loads(cc(R, S, "--json").stdout)["lines"]
+        F.hrun("post_bash", {"session_id": S, "cwd": str(R), "tool_name": "Bash", "tool_input": {"command": f"cd {R} && python3 {R}/scripts/check_cap.py 2>&1 | tail -3"}, "tool_response": {"stdout": "ok"}})
+        vt = HM.load_state(S).get("verify_ts")
+        check("close record: a Bash command that ran the Now's Verify line after an edit stamps verify_ts at PostToolUse; PreToolUse, another command or a failed run does not",
+              not no_v and vt and vt >= HM.load_state(S)["edit_ts"][str(R)])
+        check("close check: an edit after the last Verify run is ⚠ naming the Verify command; after the run it is ✓",
+              [l["state"] for l in lv if l["src"] == "verify"] == ["⚠"] and "check_cap.py" in [l for l in lv if l["src"] == "verify"][0]["fix"]
+              and [l["state"] for l in json.loads(cc(R, S, "--json").stdout)["lines"] if l["src"] == "verify"] == ["✓"])
+
+        # ── close-check end to end: Needs you, claims, sub sessions, actions, outside, memory, Close: rules ──
+        HM.memo_needs(str(R), S, "owner decision: cap in IQD only?", str(R))
+        HM.memo_needs(str(R), "other999-xxxx", "owner decision: someone else's?", str(R))
+        R.joinpath("CLAUDE.md").write_text("## abofles overrides\n- Close: docs = README lists every new flag\n- Resume = project\n")
+        gitc(R, "add", "CLAUDE.md"); gitc(R, "commit", "-q", "-m", "rules"); gitc(R, "push", "-q")
+        Path(R, "a.py").write_text("x = 1\n")  # the tree is dirty again: the edit the session made
+        claimpy = str(Path(__file__).resolve().parent / "claims.py")
+        subprocess.run([sys.executable, claimpy, "claim", "--session", S, "--branch", "main"], cwd=str(R), capture_output=True, text=True)
+        store = Path(R, ".git", "abofles-claims.json"); before = store.read_bytes()
+        import importlib
+        sys.path.insert(0, str(Path(__file__).resolve().parent)); CL = importlib.import_module("claims")
+        check("claims: live_claim finds this session's live claim read-only (the store unchanged), None for another session, False outside git",
+              (CL.live_claim(str(R), S) or {}).get("branch") == "main" and CL.live_claim(str(R), "nobody-else") is None and CL.live_claim(str(Ng), S) is False
+              and store.read_bytes() == before)
+        # a sub session whose branch is pushed nowhere and merged nowhere
+        gitc(R, "branch", "sub-feat"); gitc(R, "checkout", "-q", "sub-feat"); gitc(R, "commit", "-q", "--allow-empty", "-m", "sub work"); gitc(R, "checkout", "-q", "main")
+        recs = Path(home, "Library", "Application Support", "Claude", "claude-code-sessions", "a", "b"); recs.mkdir(parents=True)
+        recs.joinpath("local_sub1.json").write_text(json.dumps({"sessionId": "local_sub1", "cliSessionId": "subcli01", "cwd": str(R), "branch": "sub-feat", "isArchived": False,
+                                                                 "spawnedFrom": {"sessionId": "local_me01", "name": "cap tests"}}))
+        recs.joinpath("local_sub2.json").write_text(json.dumps({"sessionId": "local_sub2", "cwd": str(R), "branch": "gone", "isArchived": True, "spawnedFrom": {"sessionId": "local_me01", "name": "old"}}))
+        # auto-memory next to the transcript: one indexed file, one the index misses
+        tdir = Path(home, ".claude", "projects", "-cc-proj"); mem = tdir / "memory"; mem.mkdir(parents=True)
+        mem.joinpath("MEMORY.md").write_text("- [Cap](cap-rule.md) — cap\n"); mem.joinpath("cap-rule.md").write_text("x"); mem.joinpath("lost-rule.md").write_text("y")
+        tp = tdir / f"{S}.jsonl"; tp.write_text("")
+        with HM.state_lock(S):
+            stx = HM.load_state(S); stx.update(local_id="local_me01", transcript_path=str(tp)); HM.save_state(S, stx)
+        snap0 = {k: v for k, v in F.snap(R).items() if "abofles-memo" in k}
+        r = cc(R, S, "--json")
+        d = json.loads(r.stdout); L = d["lines"]
+        by = lambda src: [l for l in L if l["src"] == src]
+        check("close check --json: exit 0, every line has id, state, src, text, fix and a known state", r.returncode == 0 and L
+              and all(set(l) - {"key"} == {"id", "state", "src", "text", "fix"} and l["state"] in ("⛔", "⚠", "✓", "not checked") for l in L))
+        check("close check: this session's own Needs-you item is a ⚠ line with its resolve command; another session's is not listed",
+              [l["state"] for l in by("needs")] == ["⚠"] and "cap in IQD" in by("needs")[0]["text"] and "resolve" in by("needs")[0]["fix"] and "someone else" not in r.stdout)
+        check("close check: this session's live claim is ⚠ with the exact claims.py release command", [l["state"] for l in by("claim")] == ["⚠"]
+              and "claims.py" in by("claim")[0]["fix"] and f"release --session {S} --repo {R}" in by("claim")[0]["fix"])
+        check("close check: an open sub session's unpushed, unmerged branch is ⛔; an archived one is not listed",
+              [l["state"] for l in by("sub")] == ["⛔"] and "sub-feat" in by("sub")[0]["text"] and "not merged into main" in by("sub")[0]["text"] and "no upstream" in by("sub")[0]["text"])
+        check("close check: the dirty work repository is ⛔ (its id names the repository)", any(l["state"] == "⛔" and l["id"] == f"git:{R}:dirty" for l in by("git")))
+        acl = by("action")
+        check("close check: each connector action is ⚠ 'confirm its outcome'; a scheduled-task call gets its own line",
+              len(acl) == 2 and all(l["state"] == "⚠" for l in acl) and any("createJiraIssue ×1" in l["text"] and l["fix"] == "confirm its outcome" for l in acl)
+              and any(l["text"].startswith("scheduled task call mcp__scheduled-tasks__create_scheduled_task") for l in acl))
+        check("close check: a write outside the work roots is ⚠ with its path", [l["state"] for l in by("outside")] == ["⚠"] and str(os.path.realpath(Out)) in by("outside")[0]["text"])
+        mm = {l["id"]: l["state"] for l in by("memory")}
+        check("close check: memory files changed this session are listed (✓), a *.md missing from MEMORY.md is ⚠",
+              mm.get("memory:changed") == "✓" and "lost-rule.md" in [l for l in by("memory") if l["id"] == "memory:changed"][0]["text"]
+              and mm.get("memory:index:lost-rule.md") == "⚠" and "memory:index:cap-rule.md" not in mm)
+        check("close check: a `Close:` rule line is `not checked` until the agent judges it; the script never runs it",
+              [(l["state"], l["text"].split(" (")[0]) for l in by("rule")] == [("not checked", "rule docs: README lists every new flag")])
+        sc = HM.load_state(S).get("close") or {}
+        snap1 = {k: v for k, v in F.snap(R).items() if "abofles-memo" in k}
+        check("close check: the inventory is kept in the session state (lines, ts, the verdict); of the memo files only this session's file changed (its Close section)",
+              sc.get("lines") == L and sc.get("ts") and sc.get("verdict") == "⛔" == d.get("verdict")
+              and {k for k in set(snap0) | set(snap1) if snap0.get(k) != snap1.get(k)} <= {str(HM.session_memo_path(str(R), S)), str(HM.memo_path(str(R)))}
+              and HM.sess_read(str(R), S)["Close"].startswith("Verdict ⛔ · "))
+        txt = cc(R, S).stdout
+        check("close check text: one line per finding with its state, fixes indented, then the Verdict line with the counts",
+              txt.startswith("Close check · cc_proj · session close001") and "⛔" in txt and "→ " in txt and any(x.startswith("Verdict ⛔ · ⛔ ") for x in txt.splitlines())
+              and f"[git:{R}:dirty]" in txt
+              and "not checked 1" in txt and "✅ only with no `not checked` line" in txt)
+        # a worktree of a work repository is checked as well
+        S2 = "close002-aaaa-bbbb-cccc"; F.mkstate(S2, Wt, work={str(Wt): 1, str(WT): 1}, actions=[], outside=[])  # 8B.5: a worktree a work key is in
+        l2 = json.loads(cc(Wt, S2, "--json").stdout)["lines"]
+        check("close check: a work repository's worktree gets its own git lines (its dirty file ⛔, its no-upstream branch ⛔)",
+              any(l["state"] == "⛔" and "worktree cc_wt (feat-wt)" in l["text"] and "uncommitted" in l["text"] for l in l2)
+              and any(l["state"] == "⛔" and "feat-wt has no upstream" in l["text"] for l in l2))
+        # no hook records: the transcript's tool_use entries stand in; an unreadable transcript is `not checked`
+        S3 = "close003-aaaa-bbbb-cccc"; t3 = Path(F.hh, "t3.jsonl"); ts = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())
+        row = lambda name, inp: json.dumps({"type": "assistant", "timestamp": ts, "message": {"content": [{"type": "tool_use", "id": "t1", "name": name, "input": inp}]}})
+        t3.write_text("\n".join([row("mcp__slack__send_message", {}), row("mcp__slack__search_messages", {}), row("Write", {"file_path": str(Path(F.hh, "outside", "t3.txt"))}),
+                                 row("Edit", {"file_path": str(Wc / "in.py")}), "{broken"]) + "\n")
+        F.mkstate(S3, Wc, transcript_path=str(t3), started=int(time.time()) - 60)
+        l3 = json.loads(cc(Wc, S3, "--json").stdout)["lines"]
+        check("close check: with no hook records the transcript's tool_use entries give the actions and the outside writes (a read and an in-repo edit left out)",
+              [l["text"].split(" ×")[0] for l in l3 if l["src"] == "action"] == ["mcp__slack__send_message"]
+              and [l["text"] for l in l3 if l["src"] == "outside"] == [f"written outside the work roots: {os.path.realpath(Path(F.hh, 'outside', 't3.txt'))}"])
+        S4 = "close004-aaaa-bbbb-cccc"; F.mkstate(S4, Wc, transcript_path=str(Path(F.hh, "missing.jsonl")))
+        l4 = json.loads(cc(Wc, S4, "--json").stdout)["lines"]
+        check("close check: an unreadable transcript (and no hook record) is `not checked`", any(l["id"] == "transcript" and l["state"] == "not checked" for l in l4))
+        rn = subprocess.run([sys.executable, F.memopy, "close-check", "--session", "1a2b3c4d-0000-4000-8000-000000000000"], cwd=str(Ng), capture_output=True, text=True, env=env)
+        check("close check: no session state -> exit 4, nothing written", rn.returncode == 4 and "no session" in rn.stdout)
+        check("close check: usage error -> exit 2", cc(R, S, "--bogus").returncode == 2)
+    finally:
+        F.close()
+
+
+def owner_transcript(path, *asks):
+    """A transcript at `path` whose owner prompts are `asks` (now): what close-waive matches the owner's words against."""
+    iso = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())
+    Path(path).write_text("".join(json.dumps({"type": "user", "timestamp": iso, "message": {"content": a}}) + "\n" for a in asks))
+    return str(path)
+
+
+CLOSE_READY_FIXTURES = (  # P0 step 7: closing phrases from real final replies, scrubbed (no project names, no paths)
+    "Yes, it's safe to archive. Nothing from this session is left.",
+    "Everything is written up, and this chat is ready to archive.",
+    "The session is ready to archive.",
+    "سجلت الإيصال، والسشن جاهزة للأركايف.",
+    "حدّثت الميمو والمموري، والسشن جاهزة للأرشيف.",
+)
+
+
+def close_verdict_tests(check):
+    """P2 close check: the stored verdict (lines, verdict, ts, fp), the Close section of the session file (an old file round-trips byte for byte), the
+    fingerprint going stale after an edit and a new turn, close-waive, `Close git` by rule, the Stop phrase guard, `Close check = auto` and its cap,
+    and both archive gates on a stored ⛔. Temp dirs only: HOME, the state dir, the ledgers and every repository are fixtures."""
+    F = _MemoFixture("closeverdict"); HM = F.HM
+    gitc = lambda d, *a: subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *a], cwd=str(d), capture_output=True, text=True)
+    spec = _ilu.spec_from_file_location("memo_verdict_t", F.memopy); MM = _ilu.module_from_spec(spec); spec.loader.exec_module(MM)
+    home = Path(F.hh, "home"); home.mkdir()
+    ucm = Path(F.hh, "user-claude.md"); ucm.write_text("## abofles overrides\n- Close agent = off\n")  # the script's verdict alone (8A.1: under on, ✅ waits for the agent)
+    env = dict(os.environ, HOME=str(home), ABOFLES_SCRATCH_DIRS="", ABOFLES_USER_CLAUDE_MD=str(ucm))
+    def cli(root, sid, *a):
+        return subprocess.run([sys.executable, F.memopy, *a, "--session", sid], cwd=str(root), capture_output=True, text=True, env=env)
+    def hk(mode, payload):  # a hook run with the temp HOME: the auto check reads no real app records or auto-memory
+        r = subprocess.run([sys.executable, str(HOOK), mode], input=json.dumps(payload), capture_output=True, text=True, env=dict(env, ABOFLES_LEDGER_DIR=F.led))
+        assert r.returncode == 0, r.stderr
+        return json.loads(r.stdout) if r.stdout.strip() else None
+    def repo(name, push=True, overrides=None):
+        bare = Path(F.hh, name + ".git"); subprocess.run(["git", "init", "-q", "--bare", str(bare)], capture_output=True)
+        w = F.mkroot(name=name, overrides=overrides); gitc(w, "add", "-A"); gitc(w, "commit", "-q", "--allow-empty", "-m", "c1")
+        gitc(w, "remote", "add", "origin", str(bare)); gitc(w, "push", "-q", "-u", "origin", "HEAD")
+        if not push:
+            gitc(w, "commit", "-q", "--allow-empty", "-m", "c2")
+        return w
+    recs = Path(home, "Library", "Application Support", "Claude", "claude-code-sessions", "a", "b"); recs.mkdir(parents=True)
+    recs.joinpath("local_other.json").write_text(json.dumps({"sessionId": "local_other", "cwd": str(F.hh), "isArchived": False}))
+    mk = lambda sid, root, **kw: F.mkstate(sid, root, local_id="local_" + sid[:8], **kw)  # the app's records are readable: no sub session of its own
+    stop = lambda sid, root, text, active=False: hk("receipt", {"session_id": sid, "cwd": str(root), "stop_hook_active": active, "last_assistant_message": text})
+    blocked = lambda out: bool(out) and out.get("decision") == "block" and "ready" in (out.get("reason") or "") and "close-check" in (out.get("reason") or "")
+    try:
+        # ── step 26: the Close section; an old session file round-trips byte for byte ──
+        R0 = F.mkroot(name="cv_round"); S0 = "round001"
+        for _ in range(3):  # the `Updated:` stamp is the minute of the write: try again when the minute turned between the two
+            stamp = time.strftime("%Y-%m-%d %H:%M")
+            old = (f"# Session {S0} — cv_round · [memo](../abofles-memo.md)\nUpdated: {stamp}\nActive: 2026-11-01 09:00\nProject: {R0}\n"
+                   "\n## Now\nWritten   2026-11-01 09:00\nTask      cap\n## Close (a heading in a hand-written Now)\n"
+                   "\n## Journal\n- 11-01 09:00 · 🧾 receipt\n\n## Decisions\n- 11-01 09:00 · cap? → IQD only\n")
+            p0 = HM.session_memo_path(str(R0), S0); p0.parent.mkdir(parents=True, exist_ok=True); p0.write_text(old)
+            sec0 = HM.sess_read(str(R0), S0)
+            HM.sess_write(str(R0), S0, sec0)
+            if time.strftime("%Y-%m-%d %H:%M") == stamp:
+                break
+        check("close section: an old session file with no Close section round-trips byte for byte (read, then written back)",
+              p0.read_bytes() == old.encode() and sec0["Close"] == "" and "## Close (a heading" in sec0["Now"])
+        sec0["Close"] = "Verdict ⛔ · 2026-11-24 10:00 · ⛔ 1\n- ⛔ git · x: 1 uncommitted file"
+        HM.sess_write(str(R0), S0, sec0)
+        t0 = p0.read_text()
+        check("close section: a Close section is written last and read back; an empty one is left out",
+              t0.rstrip().endswith("- ⛔ git · x: 1 uncommitted file") and t0.index("## Decisions") < t0.index("\n## Close\n")
+              and HM.sess_read(str(R0), S0)["Close"] == sec0["Close"] and HM.close_blocked(HM.sess_read(str(R0), S0)["Close"])
+              and "\n## Close\n" not in HM._sess_text(str(R0), S0, dict(sec0, Close="")))
+
+        # ── steps 25, 28: close-check stores lines, verdict, ts, fp; the Close section; ✅ only with every line checked and none open ──
+        Wc = repo("cv_clean"); S1 = "cvclean1-aaaa-bbbb"
+        mk(S1, Wc, work={str(Wc): 1}, actions=[], outside=[], turn_ts=time.time())
+        r1 = cli(Wc, S1, "close-check")
+        c1 = HM.load_state(S1).get("close") or {}
+        check("close verdict: a clean pushed session is ✅; the text ends on its Verdict line",
+              r1.returncode == 0 and c1.get("verdict") == "✅" and any(x.startswith("Verdict ✅ · ") for x in r1.stdout.splitlines()))
+        check("close verdict: st close keeps lines, verdict, ts, fp, turn_ts, stale (False), git_rule; fp matches now",
+              set(c1) == {"lines", "verdict", "ts", "fp", "turn_ts", "stale", "git_rule", "agent"} and c1["agent"] == "off" and isinstance(c1["lines"], list) and isinstance(c1["ts"], int)
+              and len(c1["fp"]) == 40 and c1["stale"] is False and c1["git_rule"] == "pushed" and c1["fp"] == HM.close_fp(str(Wc), HM.load_state(S1), S1)
+              and HM.close_fresh(str(Wc), HM.load_state(S1), S1))
+        check("close verdict: close_verdict — ✅ only with no `not checked` and no unwaived line; a waive settles ⛔, ⚠ and `not checked` (8A.12); agent no holds ✅ back",
+              HM.close_verdict([{"state": "✓"}]) == "✅" and HM.close_verdict([{"state": "✓"}, {"state": "not checked"}]) == "not checked"
+              and HM.close_verdict([{"state": "⚠"}, {"state": "⛔"}]) == "⛔" and HM.close_verdict([{"state": "⛔", "waived": {"trace": "ok"}}]) == "✅"
+              and HM.close_verdict([{"state": "not checked", "waived": {"trace": "ok"}}]) == "✅" and HM.close_verdict([{"state": "⚠"}, {"state": "not checked"}]) == "⚠"
+              and HM.close_verdict([{"state": "✓"}], "no") == "not checked" and HM.close_verdict([{"state": "✓"}], "yes") == "✅" and HM.close_verdict([{"state": "⛔"}], "no") == "⛔")
+        Wd = repo("cv_dirty"); S2 = "cvdirty1-aaaa-bbbb"
+        mk(S2, Wd, work={str(Wd): 1}, actions=[], outside=[], turn_ts=time.time(),
+           transcript_path=owner_transcript(Path(F.hh, "cv_dirty.jsonl"), "Fine, leave the scratch file as it is.", "and the stash too"))
+        Path(Wd, "a.py").write_text("x = 1\n")
+        r2 = cli(Wd, S2, "close-check", "--json"); d2 = json.loads(r2.stdout)
+        cs2 = HM.sess_read(str(Wd), S2)["Close"]
+        check("close verdict: a dirty tree gives a ⛔ verdict, in the JSON, the state and the session file's Close section (Verdict line, the ⛔ line)",
+              d2["verdict"] == "⛔" and HM.load_state(S2)["close"]["verdict"] == "⛔" and cs2.startswith("Verdict ⛔ · ") and "- ⛔ git · cv_dirty: 1 uncommitted file" in cs2
+              and HM.close_blocked(cs2))
+
+        # ── step 27, 34a: the fingerprint goes stale after an edit and at a new turn ──
+        fp_before = HM.load_state(S1)["close"]["fp"]
+        Out = Path(F.hh, "cv_outside.md"); Out.write_text("o")
+        hk("edit", {"session_id": S1, "cwd": str(Wc), "tool_name": "Write", "tool_input": {"file_path": str(Out)}})
+        st_out = HM.load_state(S1)["close"]
+        Path(Wc, "new.py").write_text("y = 2\n")
+        hk("edit", {"session_id": S1, "cwd": str(Wc), "tool_name": "Write", "tool_input": {"file_path": str(Wc / "new.py")}})
+        st_ed = HM.load_state(S1)
+        check("close stale: a write outside the work repositories makes the verdict stale too (the outside list is in the fingerprint, 8A.11)",
+              st_out.get("stale") is True and st_out["fp"] == fp_before)
+        check("close stale: an edit in a work repository makes the stored verdict stale (the fingerprint moved); close_fresh is False",
+              st_ed["close"].get("stale") is True and st_ed["close"]["verdict"] == "✅" and HM.close_fp(str(Wc), st_ed, S1) != fp_before and not HM.close_fresh(str(Wc), st_ed, S1))
+        S3 = "cvturn01-aaaa-bbbb"; mk(S3, Wc, work={str(Wc): 1}, actions=[], outside=[], turn_ts=time.time())
+        cli(Wc, S3, "close-check")
+        hk("prompt", {"session_id": S3, "cwd": str(Wc), "prompt": "and now?"})
+        check("close stale: a new turn makes the stored verdict stale (turn_ts is in the fingerprint)", HM.load_state(S3)["close"].get("stale") is True)
+        gitc(Wc, "add", "-A"); gitc(Wc, "commit", "-q", "-m", "c2")
+        S4 = "cvhead01-aaaa-bbbb"; mk(S4, Wc, work={str(Wc): 1}, actions=[], outside=[], turn_ts=time.time())
+        gitc(Wc, "push", "-q"); cli(Wc, S4, "close-check"); fp4 = HM.load_state(S4)["close"]["fp"]
+        gitc(Wc, "commit", "-q", "--allow-empty", "-m", "c3")
+        check("close stale: a commit with no edit (HEAD moved) changes the fingerprint", HM.close_fp(str(Wc), HM.load_state(S4), S4) != fp4 and not HM.close_fresh(str(Wc), HM.load_state(S4), S4))
+        gitc(Wc, "push", "-q")
+
+        # ── step 29, 34b: close-waive keeps its line ──
+        lid = next(l["id"] for l in d2["lines"] if l["state"] == "⛔")
+        rw = cli(Wd, S2, "close-waive", lid, "--trace", "owner: leave the scratch file")
+        c2 = HM.load_state(S2)["close"]; hit = next(l for l in c2["lines"] if l["id"] == lid)
+        cs2b = HM.sess_read(str(Wd), S2)["Close"]
+        check("close waive: the line stays (same state and text), marked accepted by you with the owner's words; the verdict is counted again (✅)",
+              rw.returncode == 0 and len(c2["lines"]) == len(d2["lines"]) and hit["state"] == "⛔" and hit["waived"]["trace"] == "owner: leave the scratch file"
+              and c2["verdict"] == "✅" and "accepted by you" in rw.stdout and "Verdict ✅" in rw.stdout)
+        check("close waive: the Close section keeps the line with `accepted by you`; no stored ⛔ verdict is left; the Journal has a trace line",
+              f'- ⛔ git · cv_dirty: 1 uncommitted file · accepted by you: "owner: leave the scratch file"' in cs2b and cs2b.startswith("Verdict ✅") and not HM.close_blocked(cs2b)
+              and "close check: accepted by you" in HM.sess_read(str(Wd), S2)["Journal"])
+        tw = cli(Wd, S2, "close-check")
+        check("close waive: a new close-check keeps the waive of an unchanged line, and the text shows it",
+              'accepted by you: "owner: leave the scratch file"' in tw.stdout and HM.load_state(S2)["close"]["verdict"] == "✅"
+              and next(l for l in HM.load_state(S2)["close"]["lines"] if l["id"] == lid).get("waived"))
+        check("close waive: refusals — already accepted exit 3, no such id exit 1, no --trace exit 2",
+              cli(Wd, S2, "close-waive", lid, "--trace", "owner: leave the scratch file").returncode == 3 and cli(Wd, S2, "close-waive", "git:nope", "--trace", "owner: leave the scratch file").returncode == 1
+              and cli(Wd, S2, "close-waive", lid).returncode == 2)
+        S5 = "cvnochk1-aaaa-bbbb"; mk(S5, Wc, work={str(Wc): 1}, turn_ts=time.time(), transcript_path=str(Path(F.hh, "missing.jsonl")))
+        d5 = json.loads(cli(Wc, S5, "close-check", "--json").stdout)
+        r5 = cli(Wc, S5, "close-waive", "transcript", "--trace", "fine")
+        check("close waive: with no readable transcript nothing can be accepted (exit 5: no owner words to match); its verdict stays `not checked`",
+              d5["verdict"] == "not checked" and r5.returncode == 5 and HM.load_state(S5)["close"]["verdict"] == "not checked")
+
+        # ── step 30: Close git = local | committed turn the matching git lines into ⚠ by rule ──
+        def rule_states(rule):
+            w = repo(f"cv_rule_{rule}", push=False, overrides=[f"Close git = {rule}"] if rule else None); Path(w, "d.py").write_text("d")
+            sid = f"cvrule{rule or 'none'}"[:12] + "-aaaa"; mk(sid, w, work={str(w): 1}, actions=[], outside=[], turn_ts=time.time())
+            d = json.loads(cli(w, sid, "close-check", "--json").stdout)
+            return {l["id"].rsplit(":", 1)[-1]: (l["state"], l.get("by_rule"), l["text"]) for l in d["lines"] if l["src"] == "git"}, d
+        g0, d0 = rule_states(None); gc, dc = rule_states("committed"); gl, dl = rule_states("local")
+        check("close git rule: pushed (default) keeps the dirty tree and the unpushed commit ⛔",
+              g0["dirty"][0] == "⛔" and g0["ahead"][0] == "⛔" and d0["git_rule"] == "pushed" and d0["verdict"] == "⛔")
+        check("close git rule: committed turns the unpushed commit into ✓ by rule (8A.13), the dirty tree stays ⛔",
+              gc["ahead"][:2] == ("✓", "Close git = committed") and "by rule (Close git = committed)" in gc["ahead"][2] and gc["dirty"][0] == "⛔" and dc["verdict"] == "⛔")
+        check("close git rule: local turns the dirty tree and the unpushed commit into ✓ by rule: local reaches ✅ with no waive (8A.13)",
+              gl["dirty"][:2] == ("✓", "Close git = local") and gl["ahead"][:2] == ("✓", "Close git = local") and dl["verdict"] == "✅" and dl["git_rule"] == "local")
+
+        # ── step 31, 34c, 34d: the Stop phrase guard ──
+        Sp = "cvphrase-aaaa-bbbb"; mk(Sp, Wc, work={str(Wc): 1}, actions=[], outside=[], turn_ts=time.time())
+        o1 = stop(Sp, Wc, "Memo and memory are updated. The session is ready to archive.")
+        o2 = stop(Sp, Wc, "Memo and memory are updated. The session is ready to archive.", active=True)
+        check("close phrase: a ready phrase with no close check refuses the Stop once, naming close-check", blocked(o1) and "no close check ran" in o1["reason"])
+        check("close phrase: ... the second Stop of that turn goes through", not blocked(o2))
+        check("close phrase: every P0 fixture phrase (English and Arabic) is caught", all(HM.close_ready_phrase(t) for t in CLOSE_READY_FIXTURES))
+        hk("prompt", {"session_id": Sp, "cwd": str(Wc), "prompt": "and the Arabic one?"})
+        check("close phrase: a P0 Arabic fixture refuses the Stop through the hook (a new turn)", blocked(stop(Sp, Wc, CLOSE_READY_FIXTURES[3])))
+        negated = ("It is not ready to archive: two pushes are left.", "This session isn't ready to archive yet.", "Not safe to archive — a stash is open.",
+                   "It's not yet ready to archive.", "السشن مو جاهزة للأركايف بعد.", "مو جاهز للأركايف", "غير جاهز للأرشفة", "الشغل مش جاهز للأرشيف",
+                   'Claude said "ready to archive" without a verdict.', 'يرفض إذا Claude كال "جاهز للأركايف" بدون حكم', "Is it ready to archive?")
+        check("close phrase: negated, quoted and asked phrases do not trigger", not any(HM.close_ready_phrase(t) for t in negated)
+              and not blocked(stop(Sp, Wc, negated[0])) and not blocked(stop(Sp, Wc, negated[4])))
+        hk("prompt", {"session_id": Sp, "cwd": str(Wc), "prompt": "check it"})
+        cli(Wc, Sp, "close-check")
+        check("close phrase: a fresh ✅ verdict lets the ready phrase through", HM.load_state(Sp)["close"]["verdict"] == "✅" and not blocked(stop(Sp, Wc, CLOSE_READY_FIXTURES[2])))
+        Sq = "cvphras2-aaaa-bbbb"; mk(Sq, Wd, work={str(Wd): 1}, actions=[], outside=[], turn_ts=time.time()); cli(Wd, Sq, "close-check")
+        oq = stop(Sq, Wd, CLOSE_READY_FIXTURES[0])
+        check("close phrase: a stored ⛔ verdict refuses the ready phrase and says so", blocked(oq) and "says ⛔" in oq["reason"])
+        Path(Wc, "late.py").write_text("z"); hk("edit", {"session_id": Sp, "cwd": str(Wc), "tool_name": "Write", "tool_input": {"file_path": str(Wc / "late.py")}})
+        os_ = stop(Sp, Wc, CLOSE_READY_FIXTURES[1])
+        check("close phrase: a ✅ verdict gone stale (an edit after it) refuses the ready phrase", blocked(os_) and "stale" in os_["reason"])
+        gitc(Wc, "add", "-A"); gitc(Wc, "commit", "-q", "-m", "late"); gitc(Wc, "push", "-q")
+
+        # ── step 32, 34e: Close check = auto runs the script at Stop, 2 s cap per repository ──
+        Wa = repo("cv_auto", overrides=["Close check = auto"]); Sa = "cvauto01-aaaa-bbbb"
+        mk(Sa, Wa, work={str(Wa): 1}, actions=[], outside=[], turn_ts=time.time()); F.put_main(Wa)  # a project with a memo: auto writes its Close section
+        Path(Wa, "w.py").write_text("w")
+        oa = stop(Sa, Wa, "Done with the cap.")
+        ca = HM.load_state(Sa).get("close") or {}
+        check("close auto: `Close check = auto` stores the Stop's inventory with its verdict and the Close section (script only, no agent)",
+              ca.get("verdict") == "⛔" and any(l["id"].endswith(":dirty") for l in ca.get("lines") or []) and HM.close_blocked(HM.sess_read(str(Wa), Sa)["Close"])
+              and ca.get("fp") and not blocked(oa) and HM.close_check_mode(str(Wa)) == "auto")
+        Sk = "cvask001-aaaa-bbbb"; mk(Sk, Wc, work={str(Wc): 1}, actions=[], outside=[], turn_ts=time.time())
+        stop(Sk, Wc, "Done.")
+        check("close auto: `Close check` defaults to ask — a Stop runs no check", HM.close_check_mode(str(Wc)) == "ask" and "close" not in HM.load_state(Sk))
+        Wb = repo("cv_slow1"); Wb2 = repo("cv_slow2")
+        real_run = MM.subprocess.run
+        calls = []
+        def sleepy(cmd, *a, **kw):  # every git call hangs for up to 0.7 s: eight of them would take over 5 s per repository
+            if cmd[:2] == ["git", "--no-optional-locks"]:
+                t = kw.get("timeout")
+                calls.append(t)
+                time.sleep(min(t, 0.7))
+                if t <= 0.7:
+                    raise subprocess.TimeoutExpired(cmd, t)
+            return real_run(cmd, *a, **kw)
+        stc = {"started": int(time.time()), "root": str(Wb), "work": {str(Wb): 1, str(Wb2): 1}, "actions": [], "outside": []}
+        try:
+            MM.subprocess.run = sleepy
+            t0_ = time.monotonic(); la = MM.close_inventory(str(Wb), stc, "cvslow01", cap=HM.CLOSE_AUTO_CAP); el = time.monotonic() - t0_
+        finally:
+            MM.subprocess.run = real_run
+        gl_ = [l for l in la if l["src"] == "git"]
+        check("close auto: the cap holds — two slow repositories end within 2 s each, no call past it, their git lines `not checked`, never ✓",
+              el < 2 * HM.CLOSE_AUTO_CAP + 1.0 and calls and all(t <= HM.CLOSE_AUTO_CAP for t in calls) and gl_ and "✓" not in [l["state"] for l in gl_]
+              and any(l["state"] == "not checked" and "ran past" in l["text"] for l in gl_) and MM.close_record_of(la, str(Wb), stc, "cvslow01", fp=False)["verdict"] != "✅")
+
+        # ── step 33: both archive gates refuse on a stored ⛔ in the session's Close section ──
+        R9 = F.mkroot(name="cv_arch"); C9 = "caller09-aaaa-bbbb"
+        blk = f"Verdict ⛔ · {time.strftime('%Y-%m-%d %H:%M', time.localtime(time.time() - 86400))} · ⛔ 1 · ⚠ 0 · ✓ 2 · not checked 0\n- ⛔ git · repo: 2 unpushed commits on main"
+        F.put_sess(R9, "blocked9", now="Written   2020-01-01 00:00\nTask      none — between tasks", age=10)
+        s9 = HM.sess_read(str(R9), "blocked9"); s9["Close"] = blk; HM.sess_write(str(R9), "blocked9", s9)
+        p9 = HM.session_memo_path(str(R9), "blocked9"); t9 = time.time() - 10 * 86400; os.utime(p9, (t9, t9))
+        F.put_sess(R9, "waived09", now="Written   2020-01-01 00:00\nTask      none — between tasks", age=10)
+        s9w = HM.sess_read(str(R9), "waived09"); s9w["Close"] = "Verdict ✅ · 2026-11-20 10:00 · ⛔ 1\n- ⛔ git · repo: dirty · accepted by you: \"fine\""
+        HM.sess_write(str(R9), "waived09", s9w); pw = HM.session_memo_path(str(R9), "waived09"); os.utime(pw, (t9, t9))
+        a9 = HM.memo_apply(str(R9), "archive_session", C9, curator=True, target="blocked9")
+        check("close gate: archive-session is refused for a session with a stored ⛔ verdict", not a9 and a9.code == "refused" and "⛔" in a9.reason)
+        h9 = HM.memo_health(str(R9), sid=C9)
+        check("close gate: auto-archive skips an idle session with a stored ⛔ verdict; one whose ⛔ line was accepted goes",
+              sorted(p.stem for p in HM.session_files(str(R9))) == ["blocked9"] and "waived09" in HM.archived_sids(str(R9)) and h9["archived_sessions"] == 1)
+        f9 = HM.memo_apply(str(R9), "archive_session", C9, curator=True, target="blocked9", force=True, trace="owner: archive it anyway")
+        check("close gate: --force --trace (the owner's word) still archives it, the Close section kept in the archived file",
+              bool(f9) and "blocked9" in HM.archived_sids(str(R9)) and "Verdict ⛔" in (HM.archive_dir(str(R9)) / "blocked9.md").read_text())
+    finally:
+        F.close()
+
+def close_agent_tests(check):
+    """P3 close check: the abofles-close agent (exempt from receipt and budget, no gate row, no loop count, read-only in guard, `Close agent = off`),
+    `memo.py close-digest`, `memo.py close-add` (append only, a judged `Close:` rule, a chat decision missing from the memo, the fingerprint after
+    the agent's own ledger row), the sub-session line with no app records, and `Close git` in the auto-archive git check. Temp dirs only."""
+    F = _MemoFixture("closeagent"); HM = F.HM
+    gitc = lambda d, *a: subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *a], cwd=str(d), capture_output=True, text=True)
+    home = Path(F.hh, "home"); home.mkdir()
+    env = dict(os.environ, HOME=str(home), ABOFLES_SCRATCH_DIRS="")
+    def cli(root, sid, *a, home_=None):
+        return subprocess.run([sys.executable, F.memopy, *a, "--session", sid], cwd=str(root), capture_output=True, text=True, env=dict(env, HOME=str(home_ or home)))
+    def hk(mode, payload):
+        r = subprocess.run([sys.executable, str(HOOK), mode], input=json.dumps(payload), capture_output=True, text=True, env=dict(env, ABOFLES_LEDGER_DIR=F.led))
+        assert r.returncode == 0, r.stderr
+        try:
+            return json.loads(r.stdout) if r.stdout.strip() else None
+        except ValueError:
+            return r.stdout  # plain-text hook output (SessionStart)
+    def repo(name, push=True, overrides=None):
+        bare = Path(F.hh, name + ".git"); subprocess.run(["git", "init", "-q", "--bare", str(bare)], capture_output=True)
+        w = F.mkroot(name=name, overrides=overrides); gitc(w, "add", "-A"); gitc(w, "commit", "-q", "--allow-empty", "-m", "c1")
+        gitc(w, "remote", "add", "origin", str(bare)); gitc(w, "push", "-q", "-u", "origin", "HEAD")
+        if not push:
+            gitc(w, "commit", "-q", "--allow-empty", "-m", "c2")
+        return w
+    recs = Path(home, "Library", "Application Support", "Claude", "claude-code-sessions", "a", "b"); recs.mkdir(parents=True)
+    recs.joinpath("local_other.json").write_text(json.dumps({"sessionId": "local_other", "cwd": str(F.hh), "isArchived": False}))
+    mk = lambda sid, root, **kw: F.mkstate(sid, root, local_id="local_" + sid[:8], **kw)
+    denies = lambda o: isinstance(o, dict) and o.get("hookSpecificOutput", {}).get("permissionDecision") == "deny"
+    CLOSE = "abofles:abofles-close"
+    def spawn(sid, root, stype=CLOSE, model="sonnet", effort="medium", prompt=None, resp=None):
+        ti = {"subagent_type": stype, "prompt": prompt or f"abofles: Close Check / Verify · T2\nSession id: {sid}.\nLine cap: 30", "description": "Close check",
+              "model": model, "effort": effort, "run_in_background": False}
+        return {"session_id": sid, "cwd": str(root), "tool_name": "Agent", "tool_input": ti, "tool_use_id": f"tu{time.time_ns()}", **({"tool_response": resp} if resp is not None else {})}
+    reply = {"status": "completed", "agentId": "close1", "content": [{"type": "text", "text": "STATUS: done\nCONFIDENCE: high\nLINES:\n- none\nNOTE: none"}]}
+    worker_done = {"status": "completed", "agentId": "w1", "content": [{"type": "text", "text": "STATUS: done\nCONFIDENCE: high\nCHANGED:\n- a — b\nRAN: none\nLEFT: none"}]}
+    try:
+        # ── step 38, 44a: the close agent is exempt from receipt and budget ──
+        Rb = repo("ca_budget", overrides=["Agents = 1"]); Sb = "cabudg01-aaaa-bbbb-cccc"
+        hk("start", {"session_id": Sb, "cwd": str(Rb), "source": "startup"}); cli(Rb, Sb, "close-check")  # 8A.9: the agent judges this turn's check only
+        wk = spawn(Sb, Rb, "abofles:abofles-worker", prompt="abofles: Unit Test / W · T2\nq\nLine cap: 40")
+        hk("pre", wk); hk("post", dict(wk, tool_response=worker_done))
+        oc = hk("pre", spawn(Sb, Rb)); hk("post", spawn(Sb, Rb, resp=reply))
+        sb = HM.load_state(Sb); rows = HM.ledger_rows(Sb); crow = next((r for r in rows if r.get("agent") == CLOSE), {})
+        check("close agent: a fixed budget of 1 spent by a worker still lets the close agent run; it takes none (budget_used 1, spawns_since_receipt 1)",
+              not denies(oc) and HM.budget_used(sb) == 1 and sb.get("spawns_since_receipt") == 1 and denies(hk("pre", wk)))
+        check("close agent: its ledger row is marked close, no gate, no review, never pending; the guide raises no escalation for it",
+              crow.get("close") is True and not crow.get("gate") and not crow.get("review") and not HM.row_pending(dict(crow, status="pending"))
+              and not any(str(i.get("id", "")).startswith("esc:") for i in HM.guide_entries(str(Rb), sb, Sb)))
+        Sr = "carcpt01-aaaa-bbbb-cccc"; hk("start", {"session_id": Sr, "cwd": str(Rb), "source": "startup"}); cli(Rb, Sr, "close-check")
+        hk("pre", spawn(Sr, Rb)); hk("post", spawn(Sr, Rb, resp=reply))
+        orc = hk("receipt", {"session_id": Sr, "cwd": str(Rb), "last_assistant_message": "Close check recorded.", "stop_hook_active": False})
+        check("close agent: a turn that only started the close agent is not asked for a receipt", not (isinstance(orc, dict) and orc.get("decision") == "block") and not HM.load_state(Sr).get("receipt_owed"))
+        Sg = "cagate01-aaaa-bbbb-cccc"; Rg = repo("ca_gate"); hk("start", {"session_id": Sg, "cwd": str(Rg), "source": "startup"}); cli(Rg, Sg, "close-check")
+        check("close agent: the agent gate (unanswered) denies a worker, never the close agent",
+              denies(hk("pre", spawn(Sg, Rg, "abofles:abofles-worker", prompt="abofles: Unit Test / W · T2\nq\nLine cap: 40"))) and not denies(hk("pre", spawn(Sg, Rg))))
+        stl = {"loop": {}}
+        HM.loop_count_verdict(stl, {"side": "Verify", "topic": "Close Check", "verdict": "FAIL", "close": True})
+        check("close agent: its reply is no Loop guard round and no Judge gate row", not (stl.get("loop") or {}).get("fails") and not HM.row_gate(crow))
+        # guard: read-only Bash, no other tool
+        g = lambda tool, ti: denies(hk("guard", {"session_id": Sb, "cwd": str(Rb), "tool_name": tool, "tool_input": ti, "agent_id": "close1", "agent_type": CLOSE}))
+        mp = str(Path(HM.SCRIPTS_DIR) / "memo.py")
+        ok_cmds = ["git status --porcelain", f"cd {Rb} && git log --oneline -5 | head -3", "grep -rn Close README.md 2>/dev/null", "git branch -vv", "git stash list",
+                   "git worktree list", f"bash {HM.SCRIPTS_DIR / 'py'} {mp} close-digest --session {Sb}", "ls -la; cat CLAUDE.md", "find . -name '*.md'", "sed -n 1,20p README.md"]
+        bad_cmds = ["rm -rf x", "git commit -am x", "git push", "git branch new-one", "git stash drop", "echo x > f", "cat a | tee b", "sed -i s/a/b/ f",
+                    "find . -delete", f"python3 {mp} close-add ✓ --text x --evidence y", f"python3 {mp} close-check", "git status; touch x", "echo $(id)", "git config user.name x", "sleep 9 &"]
+        check("close agent: guard lets read-only Bash through (read tools, read-only git, memo.py close-digest), and Read / Grep / Glob",
+              not any(g("Bash", {"command": c}) for c in ok_cmds) and not g("Read", {"file_path": str(Rb / "CLAUDE.md")}) and not g("Grep", {"pattern": "x"}) and not g("Glob", {"pattern": "*"}))
+        check("close agent: guard refuses every write: rm, git writes, a redirect, tee, sed -i, find -delete, memo.py close-add / close-check, `$(`, `&`, a connector",
+              all(g("Bash", {"command": c}) for c in bad_cmds) and g("mcp__jira__createJiraIssue", {}))
+        check("close agent: the guard limit is the close agent's only (a worker's rm is not refused here)",
+              not denies(hk("guard", {"session_id": Sb, "cwd": str(Rb), "tool_name": "Bash", "tool_input": {"command": "rm -rf x"}, "agent_id": "w", "agent_type": "abofles:abofles-worker"})))
+
+        # ── 44c: Close agent = off skips the agent ──
+        Ro = repo("ca_off", overrides=["Close agent = off"]); So = "caoff001-aaaa-bbbb-cccc"
+        mk(So, Ro, work={str(Ro): 1}, actions=[], outside=[], turn_ts=time.time())
+        to = cli(Ro, So, "close-check"); jo = json.loads(cli(Ro, So, "close-check", "--json").stdout); do = cli(Ro, So, "close-digest")
+        check("close agent off: close-check says so on its last line (JSON agent off); close-digest exits 3; the hook refuses the spawn",
+              to.stdout.rstrip().splitlines()[-1].startswith("Close agent = off") and jo["agent"] == "off" == jo["agent_mode"] and do.returncode == 3 and "Close agent = off" in do.stdout
+              and denies(hk("pre", spawn(So, Ro))) and HM.close_agent_mode(str(Ro)) == "off")
+        jg = json.loads(cli(Rg, Sg, "close-check", "--json").stdout)
+        check("close agent on (default): JSON agent_mode on, agent no (not run for this check), the spawn is allowed",
+              jg["agent_mode"] == "on" and jg["agent"] == "no" and HM.close_agent_mode(str(Rg)) == "on" and not denies(hk("pre", spawn(Sg, Rg))))
+
+        # ── step 40: close-digest ──
+        Rd = repo("ca_digest", overrides=["Close: docs = README lists every new flag"]); Sd = "cadigest-aaaa-bbbb-cccc"
+        tp = Path(F.hh, "digest.jsonl"); iso = lambda t: time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(t)); t0 = time.time()
+        rowsj = [{"type": "user", "timestamp": iso(t0 - 7200), "message": {"content": "an old ask before the session"}},
+                 {"type": "user", "timestamp": iso(t0 - 50), "message": {"content": "Cap the surcharge. From now on, caps are in IQD only."}},
+                 {"type": "assistant", "timestamp": iso(t0 - 49), "message": {"content": [{"type": "text", "text": "Starting."}, {"type": "tool_use", "id": "t1", "name": "Read", "input": {"file_path": "/x"}}]}},
+                 {"type": "user", "timestamp": iso(t0 - 48), "message": {"content": [{"type": "tool_result", "tool_use_id": "t1", "content": "SECRET FILE BODY"}]}},
+                 {"type": "assistant", "timestamp": iso(t0 - 47), "message": {"content": [{"type": "tool_use", "id": "q1", "name": "AskUserQuestion", "input": {"questions": [{"question": "Cap per currency?"}]}}]}},
+                 {"type": "user", "timestamp": iso(t0 - 46), "message": {"content": [{"type": "tool_result", "tool_use_id": "q1", "content": 'Your questions have been answered: "Cap per currency?"="IQD only"'}]},
+                  "toolUseResult": {"questions": [], "answers": {"Cap per currency?": "IQD only"}}},
+                 {"type": "assistant", "timestamp": iso(t0 - 45), "message": {"content": [{"type": "text", "text": "Done: the cap is 5,000 IQD."}]}},
+                 {"type": "user", "timestamp": iso(t0 - 40), "message": {"content": "<command-message>abofles:close</command-message>"}},
+                 {"type": "user", "timestamp": iso(t0 - 30), "isSidechain": True, "message": {"content": "a subagent's prompt"}}]
+        tp.write_text("\n".join(json.dumps(r) for r in rowsj) + "\n{broken\n")
+        mk(Sd, Rd, work={str(Rd): 1}, actions=[], outside=[], turn_ts=time.time(), transcript_path=str(tp), started=int(t0 - 60))
+        cli(Rd, Sd, "close-check"); hk("pre", spawn(Sd, Rd)); hk("post", spawn(Sd, Rd, resp=reply))  # the close agent ran for the check (8A.2)
+        dj = json.loads(cli(Rd, Sd, "close-digest", "--json").stdout); dt = cli(Rd, Sd, "close-digest").stdout
+        check("close digest: the owner's asks since the start (no old ask, no envelope, no side chain), the final reply, the answer, the tool names",
+              [a[1] for a in dj["asks"]] == ["Cap the surcharge. From now on, caps are in IQD only."] and [r[1] for r in dj["replies"]] == ["Done: the cap is 5,000 IQD."]
+              and [(a[1], a[2]) for a in dj["answers"]] == [("Cap per currency?", "IQD only")] and dj["tools"] == {"Read": 1, "AskUserQuestion": 1})
+        check("close digest: never the raw tail (no tool result body); the stored rules and the memo paths are in it; text mode has its sections",
+              "SECRET FILE BODY" not in json.dumps(dj) and "SECRET" not in dt and [r["id"] for r in dj["rules"]] == ["rule:docs"] and dj["session_file"].endswith(".md")
+              and all(h in dt for h in ("## Close rules", "## Owner asks (1)", "## Final replies (1)", "## Answers (1)", "## Tools")))
+        before_digest = HM.load_state(Sd)["close"]
+        check("close digest: reads only (the stored check unchanged)", before_digest == HM.load_state(Sd)["close"] and cli(Rd, Sd, "close-digest", "--bogus").returncode == 2)
+
+        # ── step 41, 44b, 44e: close-add appends; a judged Close: rule ──
+        rec0 = HM.load_state(Sd)["close"]; script = [dict(l) for l in rec0["lines"]]
+        check("close add: before the agent, the rule line is `not checked` and so is the verdict", rec0["verdict"] == "not checked"
+              and [l["state"] for l in script if l["src"] == "rule"] == ["not checked"])
+        ra = cli(Rd, Sd, "close-add", "✓", "--rule", "docs", "--text", "README lists every new flag: 3 of 3", "--evidence", "README.md:188-190")
+        rec1 = HM.load_state(Sd)["close"]
+        check("close add: a `Close:` rule gets a judged state (✓ with evidence); the rule line itself stays; the verdict counts the judgment (✅)",
+              ra.returncode == 0 and rec1["lines"][:len(script)] == script and len(rec1["lines"]) == len(script) + 1
+              and {k: v for k, v in rec1["lines"][-1].items() if k not in ("target", "judges_text")} == {"id": "agent:rule:docs", "state": "✓", "src": "rule",
+                                        "text": "README lists every new flag: 3 of 3", "fix": "", "evidence": "README.md:188-190", "by": "agent", "judges": "rule:docs"}
+              and rec1["lines"][-1]["target"] and rec1["lines"][-1]["judges_text"] == next(l["text"] for l in script if l["id"] == "rule:docs") and rec1["agent"] == "yes"
+              and rec1["verdict"] == "✅" and "Verdict ✅" in ra.stdout and "judged by the close agent" in HM.close_body(rec1))
+        check("close add: refusals — an unknown rule exit 1, no evidence / a bad state exit 2, the same line again exit 3",
+              cli(Rd, Sd, "close-add", "✓", "--rule", "nope", "--text", "x", "--evidence", "y").returncode == 1
+              and cli(Rd, Sd, "close-add", "✓", "--text", "x").returncode == 2 and cli(Rd, Sd, "close-add", "maybe", "--text", "x", "--evidence", "y").returncode == 2
+              and cli(Rd, Sd, "close-add", "✓", "--rule", "docs", "--text", "README lists every new flag: 3 of 3", "--evidence", "README.md:188-190").returncode == 3)
+        # a chat decision missing from the memo gives a ⚠ line
+        rc = cli(Rd, Sd, "close-add", "⚠", "--src", "chat", "--text", 'said in chat, not saved: "caps are in IQD only"', "--evidence", "digest ask; not in Decisions or memory/*.md",
+                 "--fix", 'save it: /abofles:resume --note "caps are in IQD only"')
+        rec2 = HM.load_state(Sd)["close"]; cs = HM.sess_read(str(Rd), Sd)["Close"]
+        check("close add: a chat decision missing from the memo gives a ⚠ chat line with the owner's words; the verdict turns ⚠; the Close section shows it",
+              rc.returncode == 0 and rec2["lines"][-1]["state"] == "⚠" and rec2["lines"][-1]["src"] == "chat" and '"caps are in IQD only"' in rec2["lines"][-1]["text"]
+              and rec2["verdict"] == "⚠" and '- ⚠ chat · said in chat, not saved: "caps are in IQD only" · by the close agent' in cs and "judged by the close agent" in cs)
+        # close-add cannot drop a script line: a ✓ never clears a script ⛔, and every script line stays as written
+        Rx = repo("ca_dirty"); Sx = "cadirty1-aaaa-bbbb-cccc"; mk(Sx, Rx, work={str(Rx): 1}, actions=[], outside=[], turn_ts=time.time()); Path(Rx, "w.py").write_text("w")
+        cli(Rx, Sx, "close-check"); sx0 = [dict(l) for l in HM.load_state(Sx)["close"]["lines"]]; hk("pre", spawn(Sx, Rx)); hk("post", spawn(Sx, Rx, resp=reply))
+        cli(Rx, Sx, "close-add", "✓", "--src", "git", "--text", "the dirty file is scratch", "--evidence", "w.py is a probe")
+        sx1 = HM.load_state(Sx)["close"]
+        check("close add: cannot drop or settle a script line — the script lines are unchanged, the ⛔ stays and the verdict stays ⛔",
+              sx1["lines"][:len(sx0)] == sx0 and len(sx1["lines"]) == len(sx0) + 1 and sx1["verdict"] == "⛔" and any(l["state"] == "⛔" and l["id"].endswith(":dirty") for l in sx1["lines"]))
+        check("close add: the agent's prompt asks for every rule judged and the chat decision line (agents/abofles-close.md)",
+              all(x in Path(HOOK).parent.parent.joinpath("agents", "abofles-close.md").read_text() for x in ("Every `Close:` rule line", "said in chat, not saved", "model: sonnet", "STATUS:")))
+
+        # ── caveat 1: close-add counts the fingerprint again: the close agent's own ledger row keeps the verdict fresh ──
+        Rf = repo("ca_fresh"); Sf = "cafresh1-aaaa-bbbb-cccc"; mk(Sf, Rf, work={str(Rf): 1}, actions=[], outside=[], turn_ts=time.time())
+        cli(Rf, Sf, "close-check"); f0 = HM.load_state(Sf)["close"]
+        early = cli(Rf, Sf, "close-add", "--none")
+        hk("pre", spawn(Sf, Rf)); hk("post", spawn(Sf, Rf, resp=reply))
+        mid = HM.load_state(Sf)["close"]
+        rf = cli(Rf, Sf, "close-add", "✓", "--src", "chat", "--text", "every decision is saved", "--evidence", "memo Decisions hold all 2")
+        f1 = HM.load_state(Sf)["close"]
+        check("close add: under Close agent = on a clean check is `not checked` (agent no); close-add before a close agent ran is refused (exit 5)",
+              f0["verdict"] == "not checked" and f0["agent"] == "no" and early.returncode == 5 and "no close agent ran" in early.stdout)
+        check("close add: the close agent's own ledger row is not in the fingerprint (8A.3); after close-add the verdict is ✅, agent yes, fresh",
+              mid["fp"] == HM.close_fp(str(Rf), HM.load_state(Sf), Sf) and rf.returncode == 0 and f1["verdict"] == "✅" and f1["agent"] == "yes" and f1["stale"] is False
+              and HM.close_fresh(str(Rf), HM.load_state(Sf), Sf) and "stale" not in rf.stdout)
+        Path(Rf, "late.py").write_text("late")  # a change of the work between the check and close-add (no edit hook saw it)
+        rl = cli(Rf, Sf, "close-add", "✓", "--src", "files", "--text", "nothing else open", "--evidence", "git status")
+        check("close add: ... a tree changed since the check makes it stale, never fresh", HM.load_state(Sf)["close"]["stale"] is True and "stale" in rl.stdout
+              and not HM.close_fresh(str(Rf), HM.load_state(Sf), Sf))
+
+        # ── caveat 2: the sub-session line with no app record store / an unreadable one ──
+        h2 = Path(F.hh, "home_noapp"); h2.mkdir()
+        Rn = repo("ca_noapp", overrides=["Close agent = off"]); Sn = "canoapp1-aaaa-bbbb-cccc"; F.mkstate(Sn, Rn, work={str(Rn): 1}, actions=[], outside=[], turn_ts=time.time())
+        dn = json.loads(cli(Rn, Sn, "close-check", "--json", home_=h2).stdout)
+        check("close sub: no app record store on the machine -> ✓ `no sub sessions (no app records)`; a clean session can reach ✅ outside the app",
+              [(l["state"], l["text"]) for l in dn["lines"] if l["src"] == "sub"] == [("✓", "no sub sessions (no app records)")] and dn["verdict"] == "✅")
+        h3 = Path(F.hh, "home_lock"); base3 = Path(h3, "Library", "Application Support", "Claude", "claude-code-sessions"); base3.mkdir(parents=True)
+        Su = "calock01-aaaa-bbbb-cccc"; F.mkstate(Su, Rn, work={str(Rn): 1}, actions=[], outside=[], turn_ts=time.time())
+        os.chmod(base3, 0)
+        try:
+            du = json.loads(cli(Rn, Su, "close-check", "--json", home_=h3).stdout)
+        finally:
+            os.chmod(base3, 0o755)
+        check("close sub: a record store that exists but cannot be read stays `not checked` (no ✅)",
+              [l["state"] for l in du["lines"] if l["src"] == "sub"] == ["not checked"] and du["verdict"] == "not checked")
+
+        # ── caveat 3: `Close git` in the auto-archive git check (memo_health) ──
+        def idle(rule, name, dirty=False, push=False, stash=False):
+            R = F.mkroot(name=f"ca_h_{name}", overrides=[f"Close git = {rule}"] if rule else None); C = f"callh{name[:3]}-aaaa"
+            W = repo(f"ca_w_{name}", push=push)
+            if stash:
+                Path(W, "s.txt").write_text("s"); gitc(W, "stash", "-q", "-u")
+            if dirty:
+                Path(W, "d.txt").write_text("d")
+            k = f"idle{name[:4]:0<4}"; F.mkstate(k, W, work={str(W): 3})
+            F.put_sess(R, k, now="Written   2020-01-01 00:00\nTask      none — between tasks", age=10)
+            HM.memo_health(str(R), sid=C)
+            return k in HM.archived_sids(str(R))
+        check("close git rule in auto-archive: committed lets an idle session with an unpushed commit go; pushed (default) keeps it",
+              idle("committed", "cunp") and not idle(None, "punp"))
+        check("close git rule in auto-archive: committed still keeps a dirty tree; local lets a dirty tree with an unpushed commit go",
+              not idle("committed", "cdir", dirty=True) and idle("local", "ldir", dirty=True))
+        check("close git rule in auto-archive: local still keeps a stash (no rule lets it stay)", not idle("local", "lsta", push=True, stash=True)
+              and HM.git_risk(str(Path(F.hh, "ca_w_lsta")), allow=HM.GIT_RISK_ALLOW["local"]) == "stash")
+    finally:
+        F.close()
+
+
+def close_8a_tests(check):
+    """Batch 8A (close core): agent lines kept across a re-check while their target holds, `agent` yes/no/off and ✅ waiting for it, close-add
+    --none and its ledger-row guard, close-waive on the owner's words / an id end / a busy lock, Left lines, first_started, auto at Stop (claims,
+    no memo, no gh), the per-turn ready gate (mid-turn text, a recorded receipt, a backticked phrase), the phrase list and negations, the close
+    agent's cell / header / check of this turn, the Bash guard, staleness from Bash and SubagentStop, settling `not checked`, waive binding,
+    the stale Close section, the archive gates' age, the guide line, unknown Close values, a CLI session, unique ids, the digest's cut — and
+    the three hook items moved from 8C.6 (qgate on a string, a pending memo row, the close agent's cost). Temp dirs only."""
+    import contextlib
+    F = _MemoFixture("close8a"); HM = F.HM
+    gitc = lambda d, *a: subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *a], cwd=str(d), capture_output=True, text=True)
+    spec = _ilu.spec_from_file_location("memo_8a_t", F.memopy); MM = _ilu.module_from_spec(spec); spec.loader.exec_module(MM)
+    home = Path(F.hh, "home"); home.mkdir()
+    recs = Path(home, "Library", "Application Support", "Claude", "claude-code-sessions", "a", "b"); recs.mkdir(parents=True)
+    recs.joinpath("local_other.json").write_text(json.dumps({"sessionId": "local_other", "cwd": str(F.hh), "isArchived": False}))
+    env = dict(os.environ, HOME=str(home), ABOFLES_SCRATCH_DIRS="")
+    def cli(root, sid, *a):
+        return subprocess.run([sys.executable, F.memopy, *a, "--session", sid], cwd=str(root), capture_output=True, text=True, env=env)
+    def hk(mode, payload):
+        r = subprocess.run([sys.executable, str(HOOK), mode], input=json.dumps(payload), capture_output=True, text=True, env=dict(env, ABOFLES_LEDGER_DIR=F.led))
+        assert r.returncode == 0, r.stderr
+        try:
+            return json.loads(r.stdout) if r.stdout.strip() else None
+        except ValueError:
+            return r.stdout
+    def repo(name, push=True, overrides=None):
+        bare = Path(F.hh, name + ".git"); subprocess.run(["git", "init", "-q", "--bare", str(bare)], capture_output=True)
+        w = F.mkroot(name=name, overrides=overrides); gitc(w, "add", "-A"); gitc(w, "commit", "-q", "--allow-empty", "-m", "c1")
+        gitc(w, "remote", "add", "origin", str(bare)); gitc(w, "push", "-q", "-u", "origin", "HEAD")
+        if not push:
+            gitc(w, "commit", "-q", "--allow-empty", "-m", "c2")
+        return w
+    mk = lambda sid, root, **kw: F.mkstate(sid, root, local_id="local_" + sid[:8], **{"actions": [], "outside": [], "turn_ts": time.time(), **kw})
+    denies = lambda o: isinstance(o, dict) and o.get("hookSpecificOutput", {}).get("permissionDecision") == "deny"
+    blocked = lambda o: isinstance(o, dict) and o.get("decision") == "block" and "close-check" in (o.get("reason") or "")
+    CLOSE = "abofles:abofles-close"
+    def spawn(sid, root, stype=CLOSE, model="sonnet", effort="medium", head="abofles: Close Check / Verify · T2", resp=None):
+        ti = {"subagent_type": stype, "prompt": f"{head}\nSession id: {sid}.\nLine cap: 30", "description": "Close check", "model": model, "effort": effort, "run_in_background": False}
+        return {"session_id": sid, "cwd": str(root), "tool_name": "Agent", "tool_input": ti, "tool_use_id": f"tu{time.time_ns()}", **({"tool_response": resp} if resp is not None else {})}
+    reply = {"status": "completed", "agentId": "close1", "content": [{"type": "text", "text": "STATUS: done\nCONFIDENCE: high\nLINES:\n- none\nNOTE: none"}]}
+    def agent_ran(sid, root):
+        hk("pre", spawn(sid, root)); hk("post", spawn(sid, root, resp=reply))
+    rec = lambda sid: HM.load_state(sid).get("close") or {}
+    try:
+        # ── 8A.1, 8A.3: ✅ waits for the agent; close-add --none; agent lines survive a bare re-check while their target holds ──
+        R1 = repo("e1_keep", overrides=["Close: docs = README lists every flag"]); S1 = "e1keep01-aaaa-bbbb-cccc"
+        mk(S1, R1, work={str(R1): 1}, transcript_path=owner_transcript(Path(F.hh, "e1.jsonl"), "keep the docs rule as it is"))
+        cli(R1, S1, "close-check"); r0 = rec(S1)
+        agent_ran(S1, R1)
+        cli(R1, S1, "close-add", "✓", "--rule", "docs", "--text", "README lists every flag", "--evidence", "README.md:1")
+        cli(R1, S1, "close-add", "⚠", "--src", "chat", "--text", 'said in chat, not saved: "keep the docs rule"', "--evidence", "digest ask")
+        r1 = rec(S1)
+        cli(R1, S1, "close-check"); r2 = rec(S1)
+        check("8A.1: under Close agent = on the check is `not checked` with agent no until the close agent's lines are recorded (agent yes)",
+              r0["agent"] == "no" and r0["verdict"] == "not checked" and r1["agent"] == "yes" and r1["verdict"] == "⚠")
+        check("8A.1: a bare close-check keeps the agent's lines and agent yes while their target is unchanged (the judged rule counts)",
+              r2["agent"] == "yes" and [l["id"] for l in r2["lines"] if l.get("by") == "agent"] == ["agent:rule:docs", "agent:1"] and r2["verdict"] == "⚠")
+        lid = next(l["id"] for l in r2["lines"] if l.get("src") == "chat")
+        cli(R1, S1, "close-waive", lid, "--trace", "owner: keep the docs rule")
+        cli(R1, S1, "close-check"); r3 = rec(S1)
+        check("8A.13: an agent line's waive is kept across a re-check; the verdict is ✅", r3["verdict"] == "✅" and next(l for l in r3["lines"] if l["id"] == lid).get("waived"))
+        cli(R1, S1, "note", "caps are per currency")  # the memo's Decisions changed: what the agent judged is not the same
+        cli(R1, S1, "close-check"); r4 = rec(S1)
+        check("8A.1: when the target changed (a new decision) the agent's lines go and agent turns no again", r4["agent"] == "no" and not [l for l in r4["lines"] if l.get("by") == "agent"]
+              and r4["verdict"] == "not checked")
+        agent_ran(S1, R1); rn = cli(R1, S1, "close-add", "--none")
+        check("8A.3: close-add --none records the agent's `- none` (no line, agent yes) and counts the verdict again",
+              rn.returncode == 0 and rec(S1)["agent"] == "yes" and len(rec(S1)["lines"]) == len(r4["lines"]) and "found nothing" in rn.stdout)
+        check("8A.3: the fingerprint's ledger count leaves the close agent's own rows out", HM.close_ledger_n(S1) == 0 and len(HM.ledger_rows(S1)) == 2)
+        check("8A.2: close-add --none with other arguments is a usage error", cli(R1, S1, "close-add", "--none", "--text", "x").returncode == 2)
+        # auto at Stop keeps them too
+        Ra = repo("e1_auto", overrides=["Close check = auto"]); Sa = "e1auto01-aaaa-bbbb-cccc"; mk(Sa, Ra, work={str(Ra): 1}); F.put_main(Ra)
+        cli(Ra, Sa, "close-check"); agent_ran(Sa, Ra)
+        cli(Ra, Sa, "close-add", "⚠", "--src", "chat", "--text", "a decision is only in chat", "--evidence", "digest")
+        hk("prompt", {"session_id": Sa, "cwd": str(Ra), "prompt": "go on"}); hk("receipt", {"session_id": Sa, "cwd": str(Ra), "last_assistant_message": "Done.", "stop_hook_active": False})
+        ra = rec(Sa)
+        check("8A.1: `Close check = auto` at Stop re-runs the stale check and keeps the agent's line and agent yes", ra.get("stale") is False and ra["agent"] == "yes"
+              and any(l.get("by") == "agent" for l in ra["lines"]) and ra["verdict"] == "⚠")
+
+        # ── 8A.2: close-waive needs the owner's own words ──
+        Rw = repo("e2_waive"); Sw = "e2waive1-aaaa-bbbb-cccc"
+        mk(Sw, Rw, work={str(Rw): 1}, transcript_path=owner_transcript(Path(F.hh, "e2.jsonl"), "Leave the probe file uncommitted for now, I will clean it up."))
+        Path(Rw, "probe.txt").write_text("p"); cli(Rw, Sw, "close-check")
+        bad = cli(Rw, Sw, "close-waive", "dirty", "--trace", "owner: ship it anyway")
+        good = cli(Rw, Sw, "close-waive", "dirty", "--trace", "owner: leave the probe file uncommitted")
+        check("8A.2: a trace that is no owner message is refused (exit 5); the owner's words are accepted (an id end `dirty` fits one line, 8A.19)",
+              bad.returncode == 5 and "not the owner's words" in bad.stdout and good.returncode == 0 and "accepted by you" in good.stdout)
+        check("8A.2: owner_said needs two words in order from one owner message", MM.owner_said("user said: probe file", [(0, "the probe file stays")])
+              and not MM.owner_said("probe", [(0, "the probe file stays")]) and not MM.owner_said("file probe", [(0, "the probe file stays")]))
+        # 8A.13: the waive is bound to the content, not the words
+        Path(Rw, "probe.txt").unlink(); Path(Rw, "other.txt").write_text("o"); cli(Rw, Sw, "close-check")
+        dl = next(l for l in rec(Sw)["lines"] if l["id"].endswith(":dirty"))
+        check("8A.13: another dirty file with the same words (`1 uncommitted file`) does not keep the waive", dl["text"].endswith("1 uncommitted file") and not dl.get("waived"))
+        # 8A.20: busy state lock -> exit 6, nothing written
+        class Busy:
+            busy = True
+            def __init__(self, sid): pass
+            def __enter__(self): return self
+            def __exit__(self, *a): pass
+        stw = HM.load_state(Sw); before = json.dumps(stw.get("close"), sort_keys=True); real_lock = MM.state_lock; buf = io.StringIO(); code = None
+        try:
+            MM.state_lock = Busy
+            with contextlib.redirect_stdout(buf):
+                try:
+                    MM.close_waive_cmd(["dirty", "--trace", "owner: leave the probe file uncommitted"], str(Rw), stw, Sw)
+                except SystemExit as e:
+                    code = e.code
+        finally:
+            MM.state_lock = real_lock
+        check("8A.20: close-waive under a busy state lock exits 6, says nothing was accepted, writes nothing",
+              code == 6 and "nothing accepted" in buf.getvalue() and "accepted by you" not in buf.getvalue() and json.dumps(HM.load_state(Sw).get("close"), sort_keys=True) == before)
+
+        # ── 8A.4 Left lines, 8A.12 settling, 8A.17 unknown values, 8A.19 ids ──
+        Rl = repo("e4_left", overrides=["Close agent = off", "Close git = pushd", "Close: docs = README lists every flag"]); Sl = "e4left01-aaaa-bbbb-cccc"
+        mk(Sl, Rl, work={str(Rl): 1}, edit_ts={str(Rl): int(time.time())}, transcript_path=owner_transcript(Path(F.hh, "e4.jsonl"), "the docs rule is fine, I checked it", "skip the verify run this time"),
+           actions=[{"tool": "mcp__scheduled-tasks__create_scheduled_task", "ts": int(time.time())}] * 2)
+        HM.memo_now(str(Rl), "Task      cap\nLeft      wire the FE badge\nLeft      BE docs page", Sl)
+        L4 = json.loads(cli(Rl, Sl, "close-check", "--json").stdout)["lines"]; t4 = cli(Rl, Sl, "close-check").stdout
+        left = [l for l in L4 if l["src"] == "left"]
+        check("8A.4: each Left line of the Now is its own ⛔", [l["state"] for l in left] == ["⛔", "⛔"] and "wire the FE badge" in left[0]["text"] and "BE docs page" in left[1]["text"])
+        check("8A.17: an unknown `Close git` value is a ⚠ `unknown value` line naming the default", any(l["id"] == "config:close-git" and l["state"] == "⚠" and "unknown value" in l["text"] and "pushed" in l["text"] for l in L4))
+        check("8A.12: a `Close:` rule under Close agent = off is ⚠ (waivable), never `not checked`", [l["state"] for l in L4 if l["src"] == "rule"] == ["⚠"])
+        ids = [l["id"] for l in L4]
+        check("8A.19: line ids are unique (two scheduled-task calls in one second), and the text prints each line's id",
+              len(ids) == len(set(ids)) and sum(1 for i in ids if i.startswith("action:")) == 2 and all(f"[{i}]" in t4 for i in ids))
+        wr = cli(Rl, Sl, "close-waive", "rule:docs", "--trace", "owner: the docs rule is fine")
+        wv = cli(Rl, Sl, "close-waive", "verify", "--trace", "skip the verify run this time")
+        check("8A.12: a rule line under off and a `not checked` line (Verify with no Verify line) are each accepted with the owner's words",
+              wr.returncode == 0 and wv.returncode == 0 and next(l for l in rec(Sl)["lines"] if l["id"] == "verify")["state"] == "not checked"
+              and next(l for l in rec(Sl)["lines"] if l["id"] == "verify").get("waived"))
+        Rn = F.mkroot(git=False, name="e12_nogit"); Sn = "e12nogit-aaaa-bbbb-cccc"; mk(Sn, Rn, transcript_path=owner_transcript(Path(F.hh, "e12.jsonl"), "x y"))
+        check("8A.12: a folder with no repository is ✓ nothing to check", [(l["state"]) for l in json.loads(cli(Rn, Sn, "close-check", "--json").stdout)["lines"] if l["src"] == "git"] == ["✓"])
+        Rq = repo("e12_rule"); Sq = "e12rule1-aaaa-bbbb-cccc"; Rq.joinpath("CLAUDE.md").write_text("## abofles overrides\n- Close: docs = README\n")
+        mk(Sq, Rq, work={str(Rq): 1}, transcript_path=owner_transcript(Path(F.hh, "e12q.jsonl"), "the docs rule is fine"))
+        cli(Rq, Sq, "close-check"); rq = cli(Rq, Sq, "close-waive", "rule:docs", "--trace", "the docs rule is fine")
+        check("8A.12: under Close agent = on a script rule line is the agent's to judge: close-waive refuses it (exit 5)", rq.returncode == 5 and "close agent judges" in rq.stdout)
+
+        # ── 8A.5 first_started ──
+        S5 = "e5first1-aaaa-bbbb-cccc"; R5 = repo("e5_first")
+        hk("start", {"session_id": S5, "cwd": str(R5), "source": "startup"}); f0 = HM.load_state(S5)["first_started"]
+        time.sleep(1.1); hk("start", {"session_id": S5, "cwd": str(R5), "source": "compact"}); s5 = HM.load_state(S5)
+        check("8A.5: a compact moves `started`, never first_started; the close check reads the session from first_started",
+              s5["first_started"] == f0 and s5["started"] > f0 and MM.session_start(s5) == f0 and MM.session_start({"started": 7}) == 7)
+
+        # ── 8A.6 auto at Stop: claims importable, no memo made, no gh ──
+        R6 = repo("e6_auto", overrides=["Close check = auto", "Close PR check = on"]); S6 = "e6auto01-aaaa-bbbb-cccc"; mk(S6, R6, work={str(R6): 1})
+        subprocess.run([sys.executable, str(Path(__file__).resolve().parent / "claims.py"), "claim", "--session", S6, "--branch", "main"], cwd=str(R6), capture_output=True, text=True)
+        hk("receipt", {"session_id": S6, "cwd": str(R6), "last_assistant_message": "Done.", "stop_hook_active": False})
+        l6 = rec(S6).get("lines") or []
+        check("8A.6: auto at Stop loads memo.py with its scripts folder (the live claim is read: ⚠, not `could not be read`)",
+              [l["state"] for l in l6 if l["src"] == "claim"] == ["⚠"])
+        check("8A.6: auto never asks gh (one `not checked` pr line) and makes no memo file in a project that has none",
+              [(l["id"], l["state"]) for l in l6 if l["src"] == "pr"] == [("pr", "not checked")] and not Path(R6, ".claude", "abofles-memo.md").exists() and not Path(R6, ".claude", "abofles-memo.d").exists())
+
+        # ── 8A.7 the ready gate: per turn, mid-turn text, a recorded receipt, a backticked phrase ──
+        R7 = repo("e7_gate"); S7 = "e7gate01-aaaa-bbbb-cccc"; tp7 = Path(F.hh, "e7.jsonl"); tp7.write_text("")
+        mk(S7, R7, work={str(R7): 1}, transcript_path=str(tp7))
+        hk("prompt", {"session_id": S7, "cwd": str(R7), "prompt": "wrap up", "transcript_path": str(tp7)})
+        with open(tp7, "a") as f:
+            f.write(json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": "Memo written. The session is ready to archive."}]}}) + "\n")
+        stop7 = lambda txt: hk("receipt", {"session_id": S7, "cwd": str(R7), "last_assistant_message": txt, "stop_hook_active": False, "transcript_path": str(tp7)})
+        o1 = stop7("Anything else?"); o2 = stop7("Anything else?")
+        check("8A.7: a ready phrase said mid-turn refuses the Stop; the next Stop of that turn goes through with no stop_hook_active (the refusal is kept in state)",
+              blocked(o1) and not blocked(o2) and HM.load_state(S7).get("close_refused") == HM.load_state(S7).get("turn_ts"))
+        hk("prompt", {"session_id": S7, "cwd": str(R7), "prompt": "and now", "transcript_path": str(tp7)})
+        o3 = stop7("Done.")
+        o4 = stop7("Done, the session is `ready to archive`.")
+        check("8A.7: the last turn's text is not this turn's; a backticked phrase is no quote: it refuses", not blocked(o3) and blocked(o4))
+        hk("prompt", {"session_id": S7, "cwd": str(R7), "prompt": "receipt", "transcript_path": str(tp7)})
+        with HM.state_lock(S7):
+            x7 = HM.load_state(S7); x7["receipt_saved"] = {"text": "🧾 receipt\n- next → nothing; ready to archive", "ts": time.time()}; HM.save_state(S7, x7)
+        check("8A.7: a receipt recorded with memo.py receipt this turn is read too", blocked(stop7("Recorded.")))
+
+        # ── 8A.8 phrases and negations ──
+        yes = ("It can be archived now.", "The session is ready to be archived.", "Ready for archive.", "All good to archive.", "You can archive now.",
+               "الشغل جاهز للارشفة", "السشن جاهزه للأرشيف", "Is it ready to archive? Yes.", "cannot say; ready to archive after push",
+               "The session is archivable now.", "تقدر تأرشف هسه", "تكدر تسوي أركايف")
+        no = ("I can't say it's ready to archive yet.", "It cannot be archived — a push is open.", "I'll check whether it is ready to archive.",
+              "Is the session ready to archive now, or later?", "Not sure it's ready to archive.", "It is not archivable yet.", "not ready to archive, push first")
+        check("8A.8: the new ready phrases are caught (can be archived, ready to be archived, ready for archive, good to archive, you can archive now, bare alef, جاهزه, a yes after the question)",
+              all(HM.close_ready_phrase(t) for t in yes))
+        check("8A.8: can't say, cannot, whether, a late `?` and `it's` inside the window do not trigger", not any(HM.close_ready_phrase(t) for t in no))
+
+        # ── 8A.9 the close agent's cell, header and check of this turn ──
+        R9 = repo("e9_cell"); S9 = "e9cell01-aaaa-bbbb-cccc"; mk(S9, R9, work={str(R9): 1})
+        d_nocheck = denies(hk("pre", spawn(S9, R9)))
+        cli(R9, S9, "close-check")
+        check("8A.9: the close agent is refused with no close check of this turn, off its Sonnet ≤ Medium cell, or without the Close Check header",
+              d_nocheck and denies(hk("pre", spawn(S9, R9, model="opus"))) and denies(hk("pre", spawn(S9, R9, effort="high")))
+              and denies(hk("pre", spawn(S9, R9, head="abofles: Docs / Verify · T2"))) and not denies(hk("pre", spawn(S9, R9)))
+              and "abofles-close" in HM.NO_FABLE)
+        hk("prompt", {"session_id": S9, "cwd": str(R9), "prompt": "next turn"})
+        check("8A.9: ... a check of an earlier turn is not this turn's", denies(hk("pre", spawn(S9, R9))))
+
+        # ── 8A.10 the close agent's Bash guard ──
+        mp = str(Path(HM.SCRIPTS_DIR) / "memo.py")
+        g = lambda c: denies(hk("guard", {"session_id": S9, "cwd": str(R9), "tool_name": "Bash", "tool_input": {"command": c}, "agent_id": "close1", "agent_type": CLOSE}))
+        bad = ["sort -o out.txt a.txt", "sort --output=x a.txt", "uniq a.txt b.txt", "sed -n 'w out' f", "sed 's/a/b/w out' f", "sed '1e date' f", "tree -o out.txt",
+               "rg --pre cat x", "git grep -O x", 'git grep -nO"sh -c touch" foo', "git grep -inO x", "sort --compress-program=sh a", "rg --hostname-bin cat x",
+               "git log --ext-diff", "git remote -v add x y", "git remote add x y", 'echo \\"x > f \\"', 'grep "$(id)" f',
+               f"python3 {mp} show --scope all", f"python3 {mp} show --scope project"]
+        ok = ["sort a.txt | uniq -c", "git grep -n pattern", "git grep -in x", "sed -n '/error/p' f", "rg -n pattern src", "git remote -v", "git remote get-url origin", 'grep ">" README.md',
+              "git log --oneline -3 2>/dev/null"]
+        check("8A.10: the guard refuses sort -o, uniq's output file, sed w/e, tree -o, rg --pre, git grep -O, --ext-diff, git remote writes, an escaped-quote redirect, `$(` in double quotes, memo show (any scope: 8D drops it)",
+              all(g(c) for c in bad))
+        check("8A.10: ... and still lets the reads through (a quoted `>`, `2>/dev/null`, git remote -v / get-url)", not any(g(c) for c in ok))
+
+        # ── 8A.11 staleness: Bash PostToolUse, SubagentStop, actions in the fingerprint, the launch root, worktrees ──
+        R11 = repo("e11_stale", overrides=["Close agent = off"]); S11 = "e11stal1-aaaa-bbbb-cccc"; mk(S11, R11, work={str(R11): 1})
+        cli(R11, S11, "close-check"); F.put_main(R11)
+        Path(R11, "made.txt").write_text("m")
+        hk("post_bash", {"session_id": S11, "cwd": str(R11), "tool_name": "Bash", "tool_input": {"command": "echo m > made.txt"}, "tool_response": {"stdout": ""}})
+        st11 = rec(S11)
+        check("8A.11: a Bash command that changed the tree marks the stored check stale (PostToolUse); 8A.14: the Close section says stale",
+              st11.get("stale") is True and "stale" in HM.sess_read(str(R11), S11)["Close"].splitlines()[0])
+        Path(R11, "made.txt").unlink(); cli(R11, S11, "close-check"); Path(R11, "sub.txt").write_text("s")
+        hk("stop", {"session_id": S11, "cwd": str(R11), "agent_id": "nope1", "agent_type": "abofles:abofles-worker"})
+        check("8A.11: a SubagentStop marks it stale too", rec(S11).get("stale") is True)
+        Path(R11, "sub.txt").unlink()
+        st_a = {"turn_ts": 1, "actions": [], "outside": []}; h0 = HM.close_fp_repos(str(R11), {"work": {str(R11): 1}})
+        check("8A.11: the fingerprint hashes the actions and outside lists", HM.close_fp_tail(h0, 0, st_a) != HM.close_fp_tail(h0, 0, dict(st_a, actions=[{"tool": "mcp__x__y", "ts": 2}]))
+              and HM.close_fp_tail(h0, 0, st_a) != HM.close_fp_tail(h0, 0, dict(st_a, outside=["/x"])))
+        Rlr = repo("e11_launch")
+        check("8A.11: close_repos keeps the launch root besides the work repositories", os.path.realpath(str(Rlr)) in HM.close_repos(str(R11), {"work": {str(R11): 1}, "root": str(Rlr)}))
+        WT = Path(F.hh, "e11_wt"); gitc(R11, "worktree", "add", "-q", "-b", "wt-x", str(WT))
+        hw0 = HM.close_repo_hash(str(R11)); Path(WT, "w.txt").write_text("w"); hw1 = HM.close_repo_hash(str(R11))
+        check("8A.11: a linked worktree's tree is in the fingerprint (a file there moves it); without worktrees it does not", hw0 != hw1
+              and HM.close_repo_hash(str(R11), worktrees=False) == HM.close_repo_hash(str(R11), worktrees=False))
+
+        # ── 8A.15 the archive gates read waives and the age ──
+        old = f"Verdict ⛔ · {time.strftime('%Y-%m-%d %H:%M', time.localtime(time.time() - 10 * 86400))} · ⛔ 1\n- ⛔ git · r: dirty"
+        new = f"Verdict ⛔ · {time.strftime('%Y-%m-%d %H:%M')} · ⛔ 1\n- ⛔ git · r: dirty"
+        check("8A.15: a stored ⛔ older than the limit no longer blocks (git_risk decides); a recent one does; a ⛔ the owner accepted does not",
+              not HM.close_blocked(old, 6) and HM.close_blocked(new, 6) and HM.close_blocked(old) and not HM.close_blocked(new + ' · accepted by you: "ok"', 6))
+
+        # ── 8A.16 the guide line ──
+        R16 = repo("e16_guide"); S16 = "e16guid1-aaaa-bbbb-cccc"; mk(S16, R16, work={str(R16): 1})
+        g16 = HM.guide_entries(str(R16), dict(HM.load_state(S16), close={"verdict": "⛔", "lines": [{"state": "⛔"}, {"state": "⛔", "waived": {"trace": "x"}}, {"state": "✓"}]}), S16)
+        check("8A.16: a stored ⛔ check with the guide clear reads `guide clear, close check ⛔ 1`, never `nothing open`",
+              [i["text"] for i in g16 if i.get("id") == "close"] == ["guide clear, close check ⛔ 1 — open /abofles:close"] and not any("nothing open" in i["text"] for i in g16))
+
+        # ── 8A.18 a CLI session with the app folder present ──
+        R18 = repo("e18_cli", overrides=["Close agent = off"]); S18 = "e18cli01-aaaa-bbbb-cccc"; F.mkstate(S18, R18, work={str(R18): 1}, actions=[], outside=[], turn_ts=time.time())
+        d18 = json.loads(cli(R18, S18, "close-check", "--json").stdout)
+        check("8A.18: a session with no app record of its own (the CLI) while the app folder exists: ✓ no sub sessions; ✅ reachable",
+              [l["state"] for l in d18["lines"] if l["src"] == "sub"] == ["✓"] and d18["verdict"] == "✅")
+
+        # ── 8A.21 a short Verify ──
+        check("8A.21: a Verify under 6 characters counts only as a whole command part", HM.verify_match("cd x && make", ["make"]) and not HM.verify_match("make clean", ["make"])
+              and not HM.verify_match("cmake ..", ["make"]) and HM.verify_match("npm t", ["npm t"]))
+
+        # ── 8A.22 the digest's cut ──
+        tp22 = Path(F.hh, "e22.jsonl"); owner_transcript(tp22, *[f"ask number {i}" for i in range(65)])
+        S22 = "e22dige1-aaaa-bbbb-cccc"; mk(S22, R1, work={str(R1): 1}, transcript_path=str(tp22), started=int(time.time()) - 60)
+        d22 = cli(R1, S22, "close-digest").stdout; j22 = json.loads(cli(R1, S22, "close-digest", "--json").stdout)
+        check("8A.22: a cut digest says `60 of 65` asks and that a rule needing the rest stays `not checked`",
+              "## Owner asks (60 of 65)" in d22 and "## Cut" in d22 and "not checked" in d22.split("## Cut")[1] and j22["cut"]["asks"] == 5)
+
+        # ── moved from 8C.6: qgate on a string, a pending memo row, the close agent's cost ──
+        Rm = repo("e_moved"); Sm = "emoved01-aaaa-bbbb-cccc"; mk(Sm, Rm, work={str(Rm): 1})
+        oq = hk("qgate", {"session_id": Sm, "cwd": str(Rm), "tool_name": "AskUserQuestion", "tool_input": {"questions": "Cap in IQD only?"}})
+        check("8C.6a: qgate on a `questions` string gates it (denied with no judge), never a crash that lets it through",
+              denies(oq) and HM.question_items("Cap?") == [{"question": "Cap?"}] and HM.question_items([None, "x?", {"question": "y?"}]) == [{"question": "x?"}, {"question": "y?"}])
+        gm = HM.guide_entries(str(Rm), HM.load_state(Sm), Sm, rows=[{"status": "pending", "memo": True, "ts": int(time.time()), "agent_id": "m1"},
+                                                                     {"status": "pending", "close": True, "ts": int(time.time()), "agent_id": "c1"}])
+        check("8C.6b: a pending memo-agent or close-agent row is no ⏳ background agent of the task (no ⛔ in the close check)", not any(str(i.get("id", "")).startswith("bg:") for i in gm))
+        Sc = "ecost001-aaaa-bbbb-cccc"; hk("start", {"session_id": Sc, "cwd": str(Rm), "source": "startup"}); cli(Rm, Sc, "close-check")
+        wk = spawn(Sc, Rm, "abofles:abofles-worker", head="abofles: Unit Test / Work · T2")
+        hk("pre", wk); hk("post", dict(wk, tool_response={"status": "completed", "agentId": "w1", "content": [{"type": "text", "text": "STATUS: done\nCONFIDENCE: high\nCHANGED:\n- a — b\nRAN: none\nLEFT: none"}]}))
+        u1 = HM.load_state(Sc).get("task_units"); b1 = HM.load_state(Sc).get("task_base")
+        agent_ran(Sc, Rm)
+        check("8C.6c: the close agent's cost stays in its own row: the task's units and base do not grow", HM.load_state(Sc).get("task_units") == u1 and HM.load_state(Sc).get("task_base") == b1 and u1)
+    finally:
+        F.close()
+
+
+
+def close_8b_tests(check):
+    """Batch 8B (git probe truth): a git call that fails is never ✓, untracked files counted whatever the config says, every local branch scanned,
+    an upstream that is gone or local, a squash-merged sub branch, the worktrees a session checks, the memo excluded from a subfolder project,
+    the widened connector reads, the Windows process-tree kill, the exact MEMORY.md match and the transcript cache — and the memo.py arg items moved
+    from 8C.4 (take_opt and `--`-led values, empty note / now and an unknown command, an empty --session, a ghost ABOFLES_SESSION). Temp dirs only."""
+    F = _MemoFixture("close8b"); HM = F.HM
+    gitc = lambda d, *a: subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *a], cwd=str(d), capture_output=True, text=True)
+    spec = _ilu.spec_from_file_location("memo_8b_t", F.memopy); MM = _ilu.module_from_spec(spec); spec.loader.exec_module(MM)
+    home = Path(F.hh, "home"); home.mkdir()
+    env = dict(os.environ, HOME=str(home), ABOFLES_SCRATCH_DIRS="")
+    env.pop("ABOFLES_SESSION", None)
+    def cli(root, *a, stdin=None, **kw):
+        return subprocess.run([sys.executable, F.memopy, *a], cwd=str(root), input=stdin, capture_output=True, text=True, env=dict(env, **kw))
+    def repo(name, push=True):
+        bare = Path(F.hh, name + ".git"); subprocess.run(["git", "init", "-q", "--bare", str(bare)], capture_output=True)
+        w = F.mkroot(name=name); gitc(w, "checkout", "-q", "-b", "main"); gitc(w, "commit", "-q", "--allow-empty", "-m", "c1")
+        gitc(w, "remote", "add", "origin", str(bare)); gitc(w, "push", "-q", "-u", "origin", "HEAD")
+        if not push:
+            gitc(w, "commit", "-q", "--allow-empty", "-m", "c2")
+        return w
+    st_of = lambda ls: [l["state"] for l in ls]
+    real_run = MM.subprocess.run
+    try:
+        # ── 8B.1: a failing git call is an error, never ✓; untracked files are counted whatever status.showUntrackedFiles says ──
+        R1 = repo("b1_fail")
+        def failing(cmd, *a, **kw):
+            if cmd[:3] == ["git", "--no-optional-locks", "status"]:
+                return subprocess.CompletedProcess(cmd, 128, "", "fatal: index file corrupt\n")
+            return real_run(cmd, *a, **kw)
+        def dubious(cmd, *a, **kw):
+            if cmd[:3] == ["git", "--no-optional-locks", "rev-parse"]:
+                return subprocess.CompletedProcess(cmd, 128, "", "fatal: detected dubious ownership in repository\n")
+            return real_run(cmd, *a, **kw)
+        try:
+            MM.subprocess.run = failing; f1 = MM.close_git(str(R1)); l1 = MM.close_git_lines(f1, "b1")
+            MM.subprocess.run = dubious; f1d = MM.close_git(str(R1)); l1d = MM.close_git_lines(f1d, "b1")
+        finally:
+            MM.subprocess.run = real_run
+        check("8B.1: `git status` exiting 128 is an error line (`not checked`), never ✓ clean", "status failed" in f1["error"] and "✓" not in st_of(l1) and "not checked" in st_of(l1))
+        check("8B.1: a repository git refuses (dubious ownership) is `not checked`, never ✓ `no git repository`", st_of(l1d) == ["not checked"] and "dubious" in l1d[0]["text"])
+        gitc(R1, "config", "status.showUntrackedFiles", "no"); Path(R1, "new.txt").write_text("n")
+        f1u = MM.close_git(str(R1))
+        check("8B.1: an untracked file is counted with status.showUntrackedFiles = no (--untracked-files=normal)", f1u["dirty"] == 1 and "⛔" in st_of(MM.close_git_lines(f1u, "b1")))
+
+        # ── 8B.2: every local branch, not only HEAD ──
+        R2 = repo("b2_branches")
+        gitc(R2, "checkout", "-q", "-b", "side"); gitc(R2, "commit", "-q", "--allow-empty", "-m", "side work")
+        gitc(R2, "checkout", "-q", "-b", "pushed", "main"); gitc(R2, "push", "-q", "-u", "origin", "pushed"); gitc(R2, "commit", "-q", "--allow-empty", "-m", "later")
+        gitc(R2, "branch", "fresh", "main"); gitc(R2, "checkout", "-q", "main")
+        l2 = MM.close_git_lines(MM.close_git(str(R2)), "b2")
+        by2 = {l["id"].split(":branch:")[-1]: l["state"] for l in l2 if ":branch:" in l["id"]}
+        check("8B.2: another branch with a commit no remote holds is ⛔ (never pushed), one ahead of its upstream ⛔; a branch whose tip is on the remote is not listed",
+              by2 == {"side:upstream": "⛔", "pushed:ahead": "⛔"} and "✓" not in st_of(l2))
+        check("8B.2: ... a skipped branch (its own worktree or a sub session tells it) is left out", "side:upstream" not in {l["id"].split(":branch:")[-1] for l in MM.close_git_lines(MM.close_git(str(R2)), "b2", skip={"side"})})
+
+        # ── 8B.3: an upstream that is gone ⚠ (not "never pushed"); a local upstream is not pushed ──
+        R3 = repo("b3_gone"); gitc(R3, "checkout", "-q", "-b", "feat"); gitc(R3, "commit", "-q", "--allow-empty", "-m", "f"); gitc(R3, "push", "-q", "-u", "origin", "feat")
+        gitc(R3, "update-ref", "-d", "refs/remotes/origin/feat")
+        f3 = MM.close_git(str(R3)); l3 = MM.close_git_lines(f3, "b3")
+        check("8B.3: HEAD's upstream gone is ⚠ `upstream … is gone`, not ⛔ `never pushed`", f3["gone"] and any(l["state"] == "⚠" and "is gone" in l["text"] for l in l3)
+              and not any("never pushed" in l["text"] for l in l3))
+        gitc(R3, "checkout", "-q", "-b", "loc", "main"); gitc(R3, "branch", "--set-upstream-to=main"); gitc(R3, "commit", "-q", "--allow-empty", "-m", "l")
+        f3l = MM.close_git(str(R3)); l3l = MM.close_git_lines(f3l, "b3")
+        check("8B.3: a branch tracking a local branch is ⛔ `tracks the local branch` — it does not count as pushed", f3l["local"]
+              and any(l["state"] == "⛔" and "tracks the local branch main" in l["text"] for l in l3l) and "✓" not in st_of(l3l))
+        bc = MM.close_branch(str(R3), "feat")
+        check("8B.3: close_branch sees a gone upstream too", bc["gone"] and bc["exists"])
+
+        # ── 8B.4: a squash-merged sub branch is ⚠, not ⛔ ──
+        R4 = repo("b4_squash"); gitc(R4, "checkout", "-q", "-b", "sq")
+        for i_ in range(2):
+            Path(R4, f"s{i_}.txt").write_text(str(i_)); gitc(R4, "add", "-A"); gitc(R4, "commit", "-q", "-m", f"sq {i_}")
+        gitc(R4, "push", "-q", "-u", "origin", "sq"); gitc(R4, "checkout", "-q", "main"); gitc(R4, "merge", "-q", "--squash", "sq"); gitc(R4, "commit", "-q", "-m", "squash sq")
+        gitc(R4, "push", "-q"); gitc(R4, "update-ref", "-d", "refs/remotes/origin/sq")
+        gitc(R4, "checkout", "-q", "-b", "open", "main"); Path(R4, "o.txt").write_text("o"); gitc(R4, "add", "-A"); gitc(R4, "commit", "-q", "-m", "o"); gitc(R4, "push", "-q", "-u", "origin", "open"); gitc(R4, "checkout", "-q", "main")
+        b4, b4o = MM.close_branch(str(R4), "sq"), MM.close_branch(str(R4), "open")
+        check("8B.4: close_branch: a squash-merged branch is not merged but squashed; a branch with its own change is neither", b4["merged"] is False and b4["squashed"] and b4o["merged"] is False and not b4o["squashed"])
+        S4 = "b4sq0001-aaaa-bbbb-cccc"
+        old_subs = MM.H.open_sub_sessions
+        try:
+            MM.H.open_sub_sessions = lambda sid, st, detail=False: ([{"name": "sq", "id": "l1", "cwd": str(R4), "branch": "sq"}, {"name": "op", "id": "l2", "cwd": str(R4), "branch": "open"}], [])
+            l4 = MM.close_inventory(str(R4), {"started": int(time.time()), "root": str(R4), "work": {str(R4): 1}, "actions": [], "outside": [], "transcript_path": str(Path(F.hh, "none4.jsonl"))}, S4)
+        finally:
+            MM.H.open_sub_sessions = old_subs
+        sub4 = {l["id"]: l for l in l4 if l["src"] == "sub"}
+        check("8B.4: the squash-merged sub branch (upstream gone) is ⚠ naming the squash; an unmerged one stays ⛔; neither repeats as a git branch line",
+              sub4["sub:l1"]["state"] == "⚠" and "squash" in sub4["sub:l1"]["text"] and "is gone" in sub4["sub:l1"]["text"] and sub4["sub:l2"]["state"] == "⛔"
+              and not any(":branch:" in l["id"] for l in l4))
+
+        # ── 8B.5: only the worktrees this session works in ──
+        R5 = repo("b5_wt"); Wout = Path(F.hh, "b5_out"); Win = Path(R5, ".claude", "worktrees", "in")
+        gitc(R5, "worktree", "add", "-q", "-b", "wt-out", str(Wout)); gitc(R5, "worktree", "add", "-q", "-b", "wt-in", str(Win))
+        gitc(Wout, "commit", "-q", "--allow-empty", "-m", "their work"); Path(Wout, "theirs.txt").write_text("t"); Path(Win, "mine.txt").write_text("m")
+        Path(R5, ".git", "info", "exclude").write_text(".claude/worktrees/\n")
+        tp5 = Path(F.hh, "b5.jsonl"); tp5.write_text(""); iso = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())
+        base5 = {"started": int(time.time()) - 60, "root": str(R5), "work": {str(R5): 1}, "actions": [], "outside": [], "transcript_path": str(tp5)}
+        l5 = MM.close_inventory(str(R5), dict(base5), "b5ses001")
+        txt5 = " | ".join(l["text"] for l in l5 if l["src"] == "git")
+        check("8B.5: a worktree under the project is checked; one elsewhere no work key or edit is in is not (its dirty file not told), its branch told by the main repository",
+              "worktree in (wt-in)" in txt5 and "worktree b5_out" not in txt5 and "branch wt-out has no upstream" in txt5)
+        tp5.write_text(json.dumps({"type": "assistant", "timestamp": iso, "message": {"content": [{"type": "tool_use", "id": "e", "name": "Edit", "input": {"file_path": str(Wout / "theirs.txt")}}]}}) + "\n")
+        l5e = MM.close_inventory(str(R5), dict(base5), "b5ses001")
+        check("8B.5: ... a worktree holding a file this session edited is checked (its dirty file ⛔)", any(l["state"] == "⛔" and "worktree b5_out" in l["text"] and "uncommitted" in l["text"] for l in l5e))
+
+        # ── 8B.6: the memo of a subfolder project is excluded from git status ──
+        R6 = F.mkroot(name="b6_top"); sub6 = Path(R6, "pkg", "app"); sub6.mkdir(parents=True)
+        Path(sub6, ".claude").mkdir(); Path(sub6, ".claude", "abofles-memo.md").write_text("m"); Path(R6, ".claude").mkdir(); Path(R6, ".claude", "abofles-memo.md").write_text("m")
+        HM.git_exclude_memo(str(sub6)); HM.git_exclude_memo(str(sub6)); HM.git_exclude_memo(str(R6))
+        st6 = gitc(R6, "status", "--porcelain", "--untracked-files=all").stdout
+        ex6 = Path(R6, ".git", "info", "exclude").read_text().splitlines()
+        check("8B.6: git_exclude_memo from a subfolder memo root writes an anchored line in the repository's exclude; both memos leave git status; no repeat line",
+              "abofles-memo" not in st6 and ex6.count("/pkg/app/.claude/abofles-memo.*") == 1 and ex6.count(".claude/abofles-memo.*") == 1)
+
+        # ── 8B.7: the widened connector reads ──
+        reads = ["mcp__plugin_abofles_context7__resolve-library-id", "mcp__plugin_abofles_context7__query-docs", "mcp__claude_ai_Atlassian__discover",
+                 "mcp__claude_ai_Atlassian__search", "mcp__claude_ai_Atlassian__atlassianUserInfo", "mcp__figma__whoami", "mcp__x__inspect-spacing",
+                 "mcp__x__preview-design-system", "mcp__x__check-comprehension", "mcp__x__retrieve_doc", "mcp__x__browse_files"]
+        writes = ["mcp__jira__createJiraIssue", "mcp__x__checkout_branch", "mcp__x__check_in", "mcp__sentry__resolve_issue", "mcp__slack__send_message", "mcp__x__get_or_create"]
+        check("8B.7: MCP_READ counts context7 resolve-library-id, Atlassian discover / search / atlassianUserInfo, Figma whoami and other read verbs as reads",
+              all(HM.MCP_READ.match(t) for t in reads))
+        check("8B.7: ... and still not a write (create, checkout, check-in, resolve_issue, send, get_or_create)", not any(HM.MCP_READ.match(t) for t in writes))
+
+        # ── 8B.8: Windows: a timeout kills the git process tree ──
+        killed, made = [], []
+        class FakeP:
+            pid = 4242
+            def __init__(self, cmd, **kw):
+                made.append(kw.get("creationflags")); self.n = 0; self.returncode = None; self.stdout = self.stderr = None
+            def communicate(self, timeout=None):
+                self.n += 1
+                raise subprocess.TimeoutExpired("git", timeout)
+            def kill(self):
+                pass
+        real_popen = MM.subprocess.Popen
+        try:
+            MM.WINDOWS = True; MM.subprocess.Popen = FakeP
+            MM.subprocess.run = lambda cmd, *a, **kw: (killed.append(cmd), subprocess.CompletedProcess(cmd, 0, "", ""))[1]
+            f8 = MM.close_git(str(R1), timeout=0.5)
+        finally:
+            MM.WINDOWS = False; MM.subprocess.Popen = real_popen; MM.subprocess.run = real_run
+        check("8B.8: on Windows a git call past its timeout runs in its own process group and `taskkill /T /F /PID` ends its whole tree; the line is a timeout, never ✓",
+              f8["timeout"] and made and made[0] == getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x200) and killed == [["taskkill", "/T", "/F", "/PID", "4242"]]
+              and "✓" not in st_of(MM.close_git_lines(f8, "w")))
+
+        # ── 8B.9: MEMORY.md exact names; the transcript parsed once per size and mtime ──
+        check("8B.9: memory_listed matches whole file names only (`rule.md` is not listed by `cap-rule.md`); links with spaces and paths count",
+              MM.memory_listed("- [Cap](cap-rule.md) — cap\n- [My](<my rule.md>)\n- memory/other.md") == {"cap-rule.md", "my rule.md", "other.md"})
+        mem9 = Path(home, ".claude", "projects", "b9", "memory"); mem9.mkdir(parents=True)
+        mem9.joinpath("MEMORY.md").write_text("- [Cap](cap-rule.md) — cap\n"); mem9.joinpath("cap-rule.md").write_text("x"); mem9.joinpath("rule.md").write_text("y")
+        tp9 = mem9.parent / "s9.jsonl"; tp9.write_text("")
+        l9 = MM.close_inventory(str(R1), {"started": int(time.time()), "root": str(R1), "work": {str(R1): 1}, "actions": [], "outside": [], "transcript_path": str(tp9)}, "b9ses001")
+        check("8B.9: close check: rule.md missing from MEMORY.md is ⚠ although cap-rule.md is listed", [l["id"] for l in l9 if l["id"].startswith("memory:index:")] == ["memory:index:rule.md"])
+        row9 = lambda n: json.dumps({"type": "assistant", "timestamp": iso, "message": {"content": [{"type": "tool_use", "id": n, "name": n, "input": {}}]}}) + "\n"
+        tp9.write_text(row9("mcp__a__send"))
+        a9 = MM.transcript_rows(str(tp9)); b9 = MM.transcript_rows(str(tp9))
+        with open(tp9, "a") as fh:
+            fh.write(row9("mcp__b__send"))
+        c9 = MM.transcript_tools(str(tp9))
+        check("8B.9: the transcript is parsed once while its size and mtime hold (the same rows); a grown file is read again",
+              a9[0] is b9[0] and [n for n, _, _ in c9] == ["mcp__a__send", "mcp__b__send"])
+
+        # ── moved from 8C.4: memo.py arg parsing ──
+        rest = ["#a1b2", "--reason", "-- a test line"]; v_ = MM.take_opt(rest, "--reason")
+        rest2 = ["#a1b2", "--reason", "", "x"]; v2_ = MM.take_opt(rest2, "--reason")
+        rest3 = ["--reason", "--force"]; v3_ = MM.take_opt(rest3, "--reason")
+        check("8C.4 memo: take_opt keeps a `--`-led value; an empty value goes with its flag; a following flag is no value",
+              v_ == "-- a test line" and rest == ["#a1b2"] and v2_ == "" and rest2 == ["#a1b2", "x"] and v3_ == "" and rest3 == ["--force"])
+        R10 = F.mkroot(name="b10_args"); S10 = "b10args1-aaaa-bbbb-cccc"; F.mkstate(S10, R10, last_prompt_ts=time.time())
+        n_ = cli(R10, "note", "  ", "--session", S10); w_ = cli(R10, "now", "--session", S10, stdin="  \n"); u_ = cli(R10, "bogus-cmd", "--session", S10); h_ = cli(R10, "help")
+        check("8C.4 memo: an empty note, an empty now and an unknown command print the usage and exit 2; `help` exits 0",
+              n_.returncode == 2 and "usage" in n_.stdout and w_.returncode == 2 and "usage" in w_.stdout and u_.returncode == 2 and "unknown command" in u_.stdout and h_.returncode == 0)
+        Rr = repo("b10_blank"); Sb = "b10blnk1-aaaa-bbbb-cccc"; F.mkstate(Sb, Rr, last_prompt_ts=time.time(), actions=[], outside=[])
+        e_ = cli(Rr, "close-check", "--session", ""); sh_ = cli(Rr, "show", "--session", "")
+        check("8C.4 memo: close-check with an empty --session exits 4 and stores nothing in the folder's newest session; show still reads",
+              e_.returncode == 4 and "no session" in e_.stdout and "close" not in HM.load_state(Sb) and sh_.returncode == 0)
+        g_ = cli(R10, "now", stdin="Task      ghost\n", ABOFLES_SESSION="ghost999-1111-2222-3333-444444444444")
+        n2_ = cli(R10, "note", "ghost note", ABOFLES_SESSION="ghost999-1111-2222-3333-444444444444")
+        check("8C.4 memo: a ghost ABOFLES_SESSION (no state) exits 4 for now and note: no session file for it, nothing in the folder's newest session",
+              g_.returncode == 4 and n2_.returncode == 4 and not list(Path(R10, ".claude").rglob("ghost999*")) and "ghost" not in "".join(p.read_text() for p in Path(R10).rglob("abofles-memo*") if p.is_file()))
+
+        # ── coordinator items: the close agent's cell names Sonnet 5.5; memo.py show is no close-agent read ──
+        hk = lambda mode, payload: subprocess.run([sys.executable, str(HOOK), mode], input=json.dumps(payload), capture_output=True, text=True, env=dict(env, ABOFLES_LEDGER_DIR=F.led)).stdout
+        ti = {"subagent_type": "abofles:abofles-close", "prompt": "abofles: Close Check / Verify · T2\nLine cap: 30", "description": "Close check", "model": "opus", "effort": "medium"}
+        o_ = json.loads(hk("pre", {"session_id": Sb, "cwd": str(Rr), "tool_name": "Agent", "tool_input": ti, "tool_use_id": "tu1"}) or "{}").get("hookSpecificOutput", {}).get("permissionDecisionReason", "")
+        check("8D hook: the close agent's wrong-cell denial says Sonnet 5.5 · Medium (label()), never a bare `Sonnet 5`", "Sonnet 5.5 · Medium" in o_ and "Sonnet 5 ·" not in o_)
+        mp = str(Path(HM.SCRIPTS_DIR) / "memo.py")
+        check("8D hook: memo.py show is refused for the close agent; close-digest, path and list still read",
+              bool(HM.close_agent_cmd_problem(f"python3 {mp} show")) and bool(HM.close_agent_cmd_problem(f"python3 {mp} show --scope project"))
+              and not any(HM.close_agent_cmd_problem(f"python3 {mp} {c}") for c in ("close-digest", "path", "list --json")))
+    finally:
+        MM.subprocess.run = real_run
+        F.close()
+
+
+def close_p5_tests(check):
+    """P5 close check: the five Close keys in OVERRIDE_KEYS, `Close place` in the pane's places, the `Close: <name> = <rule>` writer of
+    overrides.py (add, edit, remove, refusals), `Close PR check` (gh missing, a timeout, an open PR, read-only argv) and `Close git` in
+    `memo.py archive-session`. Temp dirs only: HOME, the claude home, the state dir, every repository and a fake gh are fixtures."""
+    F = _MemoFixture("closep5"); HM = F.HM
+    gitc = lambda d, *a: subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *a], cwd=str(d), capture_output=True, text=True)
+    spec = _ilu.spec_from_file_location("memo_p5_t", F.memopy); MM = _ilu.module_from_spec(spec); spec.loader.exec_module(MM)
+    import overrides as OE
+    ovp = Path(__file__).resolve().parent / "overrides.py"
+    saved_home = os.environ.get("ABOFLES_CLAUDE_HOME")
+    def repo(name, push=True, overrides=None):
+        bare = Path(F.hh, name + ".git"); subprocess.run(["git", "init", "-q", "--bare", str(bare)], capture_output=True)
+        w = F.mkroot(name=name, overrides=overrides); gitc(w, "add", "-A"); gitc(w, "commit", "-q", "--allow-empty", "-m", "c1")
+        gitc(w, "remote", "add", "origin", str(bare)); gitc(w, "push", "-q", "-u", "origin", "HEAD")
+        if not push:
+            gitc(w, "commit", "-q", "--allow-empty", "-m", "c2")
+        return w
+    def fake_gh(name, body):
+        b = Path(F.hh, "bin_" + name); b.mkdir(); g = b / "gh"
+        g.write_text("#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$(dirname \"$0\")/argv\"\n" + body + "\n"); g.chmod(0o755)
+        return g
+    try:
+        # ── step 54: the five keys, with kind, options and default ──
+        K = HM.OVERRIDE_KEYS
+        check("P5 keys: Close check / git / agent / PR check / place are select keys with the owner's defaults (ask, pushed, on, off, pane)",
+              K["Close check"] == {"kind": "select", "options": ["ask", "auto"], "default": "ask"}
+              and K["Close git"] == {"kind": "select", "options": ["pushed", "committed", "local"], "default": "pushed"}
+              and K["Close agent"] == {"kind": "select", "options": ["on", "off"], "default": "on"}
+              and K["Close PR check"] == {"kind": "select", "options": ["on", "off"], "default": "off"}
+              and K["Close place"] == {"kind": "select", "options": ["pane", "chat", "off"], "default": "pane"})
+        Rd = F.mkroot(name="p5_defaults")
+        check("P5 keys: with no line the readers give the defaults (ask, pushed, on, PR check off)",
+              (HM.close_check_mode(str(Rd)), HM.close_git_rule(str(Rd)), HM.close_agent_mode(str(Rd)), HM.close_pr_check(str(Rd))) == ("ask", "pushed", "on", False))
+        Rs = F.mkroot(name="p5_set", overrides=["Close check = auto", "Close git = local", "Close agent = off", "Close PR check = on  # team rule", "Close: docs = README lists every flag"])
+        ov_ = HM.pane_overrides(str(Rs), "")
+        kv_ = {k["key"]: k for k in ov_["keys"]}
+        check("P5 keys: the pane payload lists them as keys with their file values; a `Close:` rule stays a raw line",
+              [kv_[k]["value"] for k in ("Close check", "Close git", "Close agent")] == ["auto", "local", "off"] and kv_["Close PR check"]["source"] == "project"
+              and not kv_["Close PR check"].get("invalid") and HM.close_pr_check(str(Rs)) and [r["line"] for r in ov_["raw"]] == ["Close: docs = README lists every flag"])
+        Rb = F.mkroot(name="p5_bad", overrides=["Close place = sideways", "Close PR check = maybe"])
+        kb_ = {k["key"]: k for k in HM.pane_overrides(str(Rb), "")["keys"]}
+        check("P5 keys: a value the hooks cannot read is flagged invalid and read as the default", kb_["Close place"].get("invalid") and kb_["Close PR check"].get("invalid") and not HM.close_pr_check(str(Rb)))
+
+        # ── step 54: Close place in the pane's places ──
+        ch = Path(F.hh, "claude-home"); ch.mkdir(); os.environ["ABOFLES_CLAUDE_HOME"] = str(ch)
+        def mod(on):
+            (ch / "settings.json").write_text(json.dumps({"enabledPlugins": {"abofles-guide@claude-plugins": on}})); HM._PANE_ON.clear()
+        mod(True)
+        Rp = {v: F.mkroot(name=f"p5_place_{v or 'none'}", overrides=[f"Close place = {v}"] if v else None) for v in (None, "chat", "OFF", "sideways")}
+        check("P5 place: with the mod Close place reads pane (default), chat, off (case ignored) and pane for an unknown value",
+              [HM.place(str(Rp[v]), "close") for v in (None, "chat", "OFF", "sideways")] == ["pane", "chat", "off", "pane"])
+        stp = {"started": int(time.time()), "root": str(Rp["chat"])}
+        HM.refresh_pane(str(Rp["chat"]), stp, "p5place1")
+        check("P5 place: the pane payload's places carry `close` beside the other places", stp.get("pane", {}).get("places", {}).get("close") == "chat"
+              and set(stp["pane"]["places"]) == {"guide", "resume", "spawns", "running", "tasks", "close"})
+        mod(False)
+        check("P5 place: without the mod the card goes to the chat; an `off` line stays off", [HM.place(str(Rp[v]), "close") for v in (None, "chat", "OFF")] == ["chat", "chat", "off"])
+
+        # ── step 55: the `Close: <name> = <rule>` writer ──
+        t0 = "## abofles overrides\n- Pace = fast\n- Topic: A = T2\n\nprose\n"
+        t1 = OE.edit_text(t0, {}, None, {"docs": "README lists every flag"})
+        t2 = OE.edit_text(t1, {}, None, {"DOCS ": "README and CHANGELOG list every flag"})
+        t3 = OE.edit_text(t2 + "- Close: tests = suite green\n", {}, None, {"docs": ""})
+        check("P5 writer: a new Close rule is appended in the block, a known name (case and spacing ignored) gets its new rule in place, \"\" removes it",
+              t1 == "## abofles overrides\n- Pace = fast\n- Topic: A = T2\n- Close: docs = README lists every flag\n\nprose\n"
+              and t2 == "## abofles overrides\n- Pace = fast\n- Topic: A = T2\n- Close: docs = README and CHANGELOG list every flag\n\nprose\n"
+              and t3 == "## abofles overrides\n- Pace = fast\n- Topic: A = T2\n\nprose\n- Close: tests = suite green\n")
+        t4 = OE.edit_text("## abofles overrides\n- Close: docs = a\n```\n- Close: docs = example\n```\n- Close: Docs = b\n", {}, None, {"docs": "c"})
+        check("P5 writer: the first line of a name is edited, a second line of that name goes, a line in a code fence is an example and stays",
+              t4 == "## abofles overrides\n- Close: docs = c\n```\n- Close: docs = example\n```\n")
+        check("P5 writer: a Close rule line is a complex form, so the pane's `raw` list may add one; a simple key never matches it",
+              OE.is_complex("Close: docs = README lists every flag") and HM.simple_key("Close: docs = x") is None and HM.simple_key("Close git = local") == "Close git"
+              and not OE.is_complex("Close git = local"))
+        hh = Path(F.hh, "ovp5"); hh.mkdir()
+        env = dict(os.environ, ABOFLES_STATE_DIR=str(Path(hh, "st")), ABOFLES_USER_CLAUDE_MD=str(Path(hh, "user.md")))
+        def ov(proj, req):
+            return subprocess.run([sys.executable, str(ovp), "set", "--scope", "project", "--cwd", str(proj)], input=json.dumps(req), capture_output=True, text=True, env=env)
+        pw = Path(hh, "pw"); (pw / ".claude").mkdir(parents=True)
+        (pw / "CLAUDE.md").write_text("## abofles overrides\n- Close: docs = a\n"); (pw / ".claude" / "CLAUDE.md").write_text("## abofles overrides\n- Close: docs = old\n- Close: tests = green\n")
+        r1 = ov(pw, {"set": {"Close git": "Local"}, "close": {"Close: docs": "README lists every flag", "lint": "no warnings"}})
+        check("P5 writer: overrides.py set writes the Close keys and the rule form ({close: {name: rule}}) in one save",
+              r1.returncode == 0 and (pw / "CLAUDE.md").read_text() == "## abofles overrides\n- Close: docs = README lists every flag\n- Close git = local\n- Close: lint = no warnings\n"
+              and [x["line"] for x in json.loads(r1.stdout)["raw"]][:2] == ["Close: docs = README lists every flag", "Close: lint = no warnings"])
+        r2 = ov(pw, {"set": {}, "close": {"docs": ""}})
+        check("P5 writer: removing a rule takes it out of every project file (each file's rules count), other rules stay",
+              r2.returncode == 0 and "docs" not in (pw / "CLAUDE.md").read_text() + (pw / ".claude" / "CLAUDE.md").read_text() and "- Close: tests = green" in (pw / ".claude" / "CLAUDE.md").read_text()
+              and "- Close: lint = no warnings" in (pw / "CLAUDE.md").read_text())
+        before = (pw / "CLAUDE.md").read_text()
+        bad = [ov(pw, req) for req in ({"close": {"": "x"}}, {"close": {"a = b": "x"}}, {"close": {"a": "two\nlines"}}, {"close": {"a": ["x"]}}, {"close": ["a"]},
+                                        {"close": {"a": "x", "A ": "y"}}, {"close": {"a": "x" * 600}}, {"set": {"Close place": "sideways"}})]
+        check("P5 writer: refuses an empty name, `=` in a name, a two-line rule, a rule that is no text, a close that is no object, a name twice, a long rule, a bad Close place (exit 2, nothing written)",
+              all(b.returncode == 2 for b in bad) and (pw / "CLAUDE.md").read_text() == before)
+
+        # ── step 57: Close PR check ──
+        W = repo("p5_pr")
+        br = gitc(W, "symbolic-ref", "--short", "HEAD").stdout.strip()
+        MM.GH = str(Path(F.hh, "no-such-gh"))
+        lm = MM.close_pr_lines(str(W), br, "pr", MM.close_pr(str(W), br))
+        check("P5 PR check: gh missing -> one `not checked` line naming it, never ✓", [(l["state"], l["src"]) for l in lm] == [("not checked", "pr")] and "gh not installed" in lm[0]["text"])
+        MM.GH = str(fake_gh("slow", "exec sleep 5"))
+        t0_ = time.monotonic(); rs_ = MM.close_pr(str(W), br, timeout=0.5); el_ = time.monotonic() - t0_
+        ls_ = MM.close_pr_lines(str(W), br, "pr", rs_)
+        check("P5 PR check: a gh call past its cap ends at the cap and is `not checked`", isinstance(rs_, str) and "ran past" in rs_ and el_ < 2.0 and [l["state"] for l in ls_] == ["not checked"])
+        t0_ = time.monotonic(); rd_ = MM.close_pr(str(W), br, deadline=time.monotonic() + 0.4); el2_ = time.monotonic() - t0_
+        check("P5 PR check: ... the repository's deadline cuts the 2 s call too", isinstance(rd_, str) and el2_ < 1.5)
+        g = fake_gh("open", "echo '[{\"number\": 7, \"url\": \"https://github.com/o/r/pull/7\"}]'"); MM.GH = str(g)
+        lo = MM.close_pr_lines(str(W), br, "pr", MM.close_pr(str(W), br))
+        check("P5 PR check: an open PR is ⚠ `PR open: <url>`; gh is asked read-only (pr list --head <branch> --state open --json number,url)",
+              [l["state"] for l in lo] == ["⚠"] and lo[0]["text"].startswith("PR open: https://github.com/o/r/pull/7")
+              and (g.parent / "argv").read_text().split("\n")[:8] == ["pr", "list", "--head", br, "--state", "open", "--json", "number,url"])
+        MM.GH = str(fake_gh("none", "echo '[]'"))
+        ln_ = MM.close_pr_lines(str(W), br, "pr", MM.close_pr(str(W), br))
+        MM.GH = str(fake_gh("err", "echo 'no git remotes found' >&2; exit 1"))
+        le_ = MM.close_pr_lines(str(W), br, "pr", MM.close_pr(str(W), br))
+        check("P5 PR check: no open PR is ✓; a gh error is `not checked` with gh's words", [l["state"] for l in ln_] == ["✓"] and [l["state"] for l in le_] == ["not checked"] and "no git remotes found" in le_[0]["text"])
+        Won = repo("p5_pr_on", overrides=["Close PR check = on"]); Woff = repo("p5_pr_off")
+        g2 = fake_gh("inv", "echo '[{\"number\": 3, \"url\": \"https://github.com/o/r/pull/3\"}]'"); MM.GH = str(g2)
+        st_on = {"started": int(time.time()), "root": str(Won), "work": {str(Won): 1}, "actions": [], "outside": []}
+        lin = MM.close_inventory(str(Won), st_on, "p5pron01")
+        check("P5 PR check: Close PR check = on puts the open PR in the inventory as ⚠ and the verdict is no ✅",
+              [l["state"] for l in lin if l["src"] == "pr"] == ["⚠"] and HM.close_verdict(lin) != "✅")
+        (g2.parent / "argv").unlink()
+        st_off = {"started": int(time.time()), "root": str(Woff), "work": {str(Woff): 1}, "actions": [], "outside": []}
+        lof = MM.close_inventory(str(Woff), st_off, "p5proff1")
+        check("P5 PR check: off (default) asks gh nothing and adds no line", not [l for l in lof if l["src"] == "pr"] and not (g2.parent / "argv").exists())
+
+        # ── gap from P3: `Close git` in memo.py archive-session ──
+        def arch(rule, name, dirty=False):
+            R = F.mkroot(name=f"p5_a_{name}", overrides=[f"Close git = {rule}"] if rule else None); C = f"callp5{name[:2]}-aaaa"
+            Wa = repo(f"p5_aw_{name}", push=False)
+            if dirty:
+                Path(Wa, "d.txt").write_text("d")
+            k = f"arch{name[:4]:0<4}"; F.mkstate(k, Wa, work={str(Wa): 3})
+            F.put_sess(R, k, now="Written   2020-01-01 00:00\nTask      none — between tasks", age=10)
+            return HM.memo_apply(str(R), "archive_session", C, curator=True, target=k)
+        a_push, a_comm, a_cdir, a_ldir = arch(None, "push"), arch("committed", "comm"), arch("committed", "cdir", dirty=True), arch("local", "ldir", dirty=True)
+        check("P5 archive-session: Close git = committed archives an idle session with an unpushed commit; pushed (default) refuses it",
+              bool(a_comm) and not a_push and a_push.code == "refused" and "unpushed" in a_push.reason)
+        check("P5 archive-session: committed still refuses a dirty tree; local archives a dirty tree with an unpushed commit",
+              not a_cdir and "dirty" in a_cdir.reason and bool(a_ldir))
+    finally:
+        if saved_home is None:
+            os.environ.pop("ABOFLES_CLAUDE_HOME", None)
+        else:
+            os.environ["ABOFLES_CLAUDE_HOME"] = saved_home
+        F.close()
+
 
 def main():
     fails = 0
@@ -2228,6 +4556,7 @@ def main():
         os.environ["ABOFLES_USER_CLAUDE_MD"] = str(Path(state, "no-user-claude.md"))
         os.environ["ABOFLES_CONFIG"] = str(Path(state, "config.json"))
         os.environ["ABOFLES_CLAUDE_HOME"] = str(Path(state, "claude-home"))  # no ~/.claude/settings.json, no plugin cache: the abofles-guide mod counts as not installed (resume prints as before)
+        os.environ["ABOFLES_LAST_GOOD"] = str(Path(state, "last-good"))  # run.py's last-good hook copy stays in the temp dir, never ~/.abofles
         os.environ.pop("ABOFLES_RECEIPT", None)
         Path(cwd, "src").mkdir(); Path(cwd, "src/a.cs").write_text("x\n" * 30)
         def pin(sid=None):  # the scripts pick the session for a command: ABOFLES_SESSION, else the newest prompt among this folder's sessions
@@ -2352,7 +4681,11 @@ def main():
         gb = lambda cmd: run("guard", {"session_id": "test", "cwd": cwd, "tool_name": "Bash", "tool_input": {"command": cmd}}, led)
         gb("dotnet test TestLab")  # non-read Bash breaks the streak
         r = [gb("grep -rn Surcharge Application"), gb("cd /x && find . -name '*.cs'"), gb("sed -n '100,120p' a.cs"), gb("cat a.cs")]
-        check("guard: Bash reads count, 4th warns", r[0] is None and r[2] is None and "direct reads in a row" in ctx(r[3]))
+        check("guard (batch 5 #35): a second streak in the same task is not warned again (once per task, not per streak)", all(x is None for x in r))
+        run("prompt", {"session_id": "test", "cwd": cwd, "prompt": "now look at the export code please"}, led)  # a new ask with no open task: a new task
+        gb("dotnet test TestLab")
+        r = [gb("grep -rn Surcharge Application"), gb("cd /x && find . -name '*.cs'"), gb("sed -n '100,120p' a.cs"), gb("cat a.cs")]
+        check("guard: Bash reads count, 4th warns (the next task warns once again)", r[0] is None and r[2] is None and "direct reads in a row" in ctx(r[3]))
         check("guard: non-read Bash resets streak", gb("dotnet build") is None and gb("grep x y") is None)
         run("post", agent("haiku", "low", resp=good, cwd=cwd), led)
         check("guard: agent resets streak", g() is None)
@@ -2426,11 +4759,16 @@ def main():
         out = (run("receipt", {"session_id": "rm", "cwd": cwd, "stop_hook_active": False, "last_assistant_message": "done."}, led) or {}).get("reason", "")
         check("receipt: missing -> block carries the computed header", "🧾 **1 Agent · 0.5 u · Saved 99%**" in out)
         # non-abofles agents: no format warnings; background spawn running: no receipt nudge
-        long = "STATUS: done\nCONFIDENCE: high\n" + "x" * 300
+        long = "STATUS: done\nCONFIDENCE: high\nFACTS:\n- " + "x" * 300
         out = run("post", dict(agent("haiku", "low", "decision-judge", resp=long, cwd=cwd), session_id="na"), led)
         check("post: non-abofles agent -> no line-length warning", "too long" not in ctx(out))
         out = run("post", dict(agent("haiku", "low", "abofles:abofles-reader", resp=long, cwd=cwd), session_id="na"), led)
-        check("post: abofles agent -> line-length warning", "too long" in ctx(out))
+        check("post: abofles agent -> line-length warning on a long list line", "too long" in ctx(out))
+        prose = "STATUS: done\nCONFIDENCE: high\nFACTS:\n- src/a.cs:1 — f\n" + "y " * 150 + "\nGAPS: " + "z " * 150
+        out = run("post", dict(agent("haiku", "low", "abofles:abofles-reader", resp=prose, cwd=cwd), session_id="na"), led)
+        check("post (batch 5 #34): a long prose line or one-line section is not linted (list lines only)", "too long" not in ctx(out))
+        pl_ = "STATUS: done\nCONFIDENCE: high\nFACTS:\nsrc/a.cs:12 — " + "w " * 110 + "\nGAPS: none"
+        check("post (batch 5 #34): a long `path:line — fact` line is linted", "too long" in ctx(run("post", dict(agent("haiku", "low", "abofles:abofles-reader", resp=pl_, cwd=cwd), session_id="na"), led)))
         run("start", {"session_id": "bg", "cwd": cwd}, led)
         _bgout = run("post", dict(agent("haiku", "low", resp={"status": "async_launched", "agentId": "bg1", "prompt": "p", "description": "t"}, cwd=cwd), session_id="bg"), led)
         check("receipt: a background launch carries no receipt note", "Receipt at task end" not in ctx(_bgout))
@@ -2460,15 +4798,15 @@ def main():
               abs(_H.usd("claude-haiku-5-5", {"input_tokens": 1_000_000, "output_tokens": 1_000_000}) - 0.60) < 1e-9
               and abs(_H.usd("haiku", {"input_tokens": 1_000_000, "long": {"input_tokens": 1_000_000}}) - 0.50) < 1e-9
               and abs(_H.usd("opus", {"input_tokens": 1_000_000, "long": {"input_tokens": 1_000_000}}) - 4.0) < 1e-9
-              and _H.PRICE["sonnet"] / _H.PRICE["haiku"] == _H.PRICE_USD["sonnet"][3] / _H.PRICE_USD["haiku"][3])
+              and all(_H.PRICE[a] / _H.PRICE["haiku"] == _H.PRICE_USD[i][4] / _H.PRICE_USD["claude-haiku-5-5"][4] for a, i in _H.PRICE_ALIAS.items()))
         # background: pending at launch, spend filled at SubagentStop
         run("post", dict(agent("sonnet", "medium", resp={"status": "async_launched", "agentId": "s1", "prompt": "p", "description": "t"}, cwd=cwd), session_id="tk", transcript_path=str(tr)), led)
-        sub_tr("tk", "s1", "claude-sonnet-5-5", 0, 0, 500_000, 5_000)  # sonnet: 0.10 + 0.05 = $0.15 ; at opus: 0.10 + 0.10 = $0.20
+        sub_tr("tk", "s1", "claude-sonnet-5-5", 0, 0, 500_000, 10_000)  # sonnet: 0.05 + 0.10 = $0.15 ; at opus: 0.10 + 0.20 = $0.30
         run("stop", {"session_id": "tk", "agent_id": "s1", "last_assistant_message": good}, led)
         rows = [json.loads(l) for l in Path(led, "tk.jsonl").read_text().splitlines()]
-        check("tokens: background row filled at SubagentStop", rows[-1].get("tokens") == 505_000 and rows[-1].get("usd") == 0.15 and rows[-1].get("status") == "done")
+        check("tokens: background row filled at SubagentStop", rows[-1].get("tokens") == 510_000 and rows[-1].get("usd") == 0.15 and rows[-1].get("status") == "done")
         out = run("receipt", {"session_id": "tk", "cwd": cwd, "transcript_path": str(tr), "stop_hook_active": False, "last_assistant_message": "done."}, led)
-        check("tokens: Stop header sums sync + background", "🧾 **2 Agents · 1.6M Tokens · $0.29 · Saved 74% ($0.81)** vs Opus 5.5" in (out or {}).get("reason", ""))
+        check("tokens: Stop header sums sync + background", "🧾 **2 Agents · 1.6M Tokens · $0.29 · Saved 76% ($0.91)** vs Opus 5.5" in (out or {}).get("reason", ""))
         check("tokens: the dominant agent is named", "largest: Read Sonnet 5.5 · Medium $0.15 (52%)" in (out or {}).get("reason", ""))
         run("receipt", {"session_id": "tk", "cwd": cwd, "transcript_path": str(tr), "stop_hook_active": True, "last_assistant_message": "🧾 **2 Agents · 1 u · Saved 1%** vs Opus 5.5\n- `done` → x"}, led)  # a printed receipt closes the task
         smp_ = _H.session_memo_path(cwd, "tk")
@@ -2477,15 +4815,15 @@ def main():
         check("receipt_fallback: no 🧾 line -> None", _H.receipt_fallback("done → x") is None)
         # main session on fable: baseline priced at fable
         with open(tr, "a") as f:
-            f.write(json.dumps({"type": "assistant", "message": {"model": "claude-fable-5-1", "usage": {"input_tokens": 1, "cache_read_input_tokens": 1, "cache_creation_input_tokens": 0, "output_tokens": 1}}}) + "\n")
-        sub_tr("tk", "o1", "claude-opus-5-5", 1_000_000, 0, 0, 0)  # opus $4 ; at fable $10
+            f.write(json.dumps({"type": "assistant", "message": {"model": "claude-fable-5-2", "usage": {"input_tokens": 1, "cache_read_input_tokens": 1, "cache_creation_input_tokens": 0, "output_tokens": 1}}}) + "\n")
+        sub_tr("tk", "o1", "claude-opus-5-5", 1_000_000, 0, 0, 0)  # opus $4 ; at fable (5.2) $8
         out = run("post", dict(agent("opus", "high", resp={"status": "completed", "agentId": "o1", "content": [{"type": "text", "text": good}]}, cwd=cwd), session_id="tk", transcript_path=str(tr)), led)
         hdr = next((l for l in ctx(out).splitlines() if l.startswith("🧾")), "")
-        check("tokens: baseline follows the main model (fable)", hdr == "🧾 **1 Agent · 1.0M Tokens · $4.00 · Saved 60% ($6.00)** vs Fable 5.1")
+        check("tokens: baseline follows the main model (fable)", hdr == "🧾 **1 Agent · 1.0M Tokens · $4.00 · Saved 50% ($4.00)** vs Fable 5.2")
         # no transcript found -> unit estimate header (legacy)
         out = run("post", dict(agent("haiku", "low", resp={"status": "completed", "agentId": "nope", "content": [{"type": "text", "text": good}]}, cwd=cwd), session_id="tk", transcript_path=str(tr)), led)
         hdr = next((l for l in ctx(out).splitlines() if l.startswith("🧾")), "")
-        check("tokens: missing transcript inside a priced task -> flagged unpriced", "vs Fable 5.1 · 1 unpriced" in hdr)
+        check("tokens: missing transcript inside a priced task -> flagged unpriced", "vs Fable 5.2 · 1 unpriced" in hdr)
         run("start", {"session_id": "tk2", "cwd": cwd, "transcript_path": str(tr)}, led)
         out = run("post", dict(agent("haiku", "low", resp={"status": "completed", "agentId": "nope2", "content": [{"type": "text", "text": good}]}, cwd=cwd), session_id="tk2", transcript_path=str(tr)), led)
         hdr = next((l for l in ctx(out).splitlines() if l.startswith("🧾")), "")
@@ -2496,6 +4834,46 @@ def main():
         Path(d, "agent-dup.jsonl").write_text("".join(json.dumps({"type": "assistant", "message": {"id": f"msg_{i // 3}", "model": "claude-haiku-5-5", "usage": u}}) + "\n" for i in range(9)))
         out = run("post", dict(agent("haiku", "low", resp={"status": "completed", "agentId": "dup", "content": [{"type": "text", "text": good}]}, cwd=cwd), session_id="tk2", transcript_path=str(tr)), led)
         check("tokens: duplicate usage lines deduplicated by message id (9 lines, 3 messages)", json.loads(Path(led, "tk2.jsonl").read_text().splitlines()[-1]).get("tokens") == 300_000)
+        # prices per model id: Sonnet 5.5 cache read $0.10, Fable 5.2 (the `fable` default) vs Fable 5.1 (old ledgers)
+        M = 1_000_000
+        check("usd: priced per model id (sonnet cache read 0.10; fable-5-2 output 40, fable-5-1 50; alias fable = 5.2)",
+              abs(_H.usd("claude-sonnet-5-5", {"cache_read_input_tokens": M}) - 0.10) < 1e-9
+              and abs(_H.usd("claude-fable-5-2", {"output_tokens": M}) - 40.0) < 1e-9 and abs(_H.usd("claude-fable-5-1", {"output_tokens": M}) - 50.0) < 1e-9
+              and abs(_H.usd("fable", {"input_tokens": M}) - 8.0) < 1e-9 and abs(_H.usd("claude-fable-5-2-20261101", {"input_tokens": M}) - 8.0) < 1e-9)
+        d = Path(cwd, "px"); d.mkdir(parents=True, exist_ok=True)
+        cw = lambda h: {"input_tokens": 0, "cache_creation_input_tokens": M, "cache_read_input_tokens": 0, "output_tokens": 0, **({"cache_creation": {"ephemeral_5m_input_tokens": M - h, "ephemeral_1h_input_tokens": h}} if h is not None else {})}
+        Path(d, "split.jsonl").write_text(json.dumps({"type": "assistant", "message": {"model": "claude-opus-5-5", "usage": cw(400_000)}}) + "\n")
+        Path(d, "nosplit.jsonl").write_text(json.dumps({"type": "assistant", "message": {"model": "claude-opus-5-5", "usage": cw(None)}}) + "\n")
+        check("usd: a 1 h cache write at 2x input, 5 m at 1.25x; no split -> all 5 m",
+              abs(_H.usd("claude-opus-5-5", {"cache_creation_input_tokens": M, _H.CACHE_1H: M}) - 8.0) < 1e-9
+              and abs(_H.real_usd(_H.transcript_usage(Path(d, "split.jsonl"))) - (0.6 * 5.0 + 0.4 * 8.0)) < 1e-9
+              and abs(_H.real_usd(_H.transcript_usage(Path(d, "nosplit.jsonl"))) - 5.0) < 1e-9)
+        zero = {"input_tokens": 0, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0, "output_tokens": 0}
+        Path(d, "syn.jsonl").write_text("".join(json.dumps({"type": "assistant", "message": {"model": m, "usage": u}}) + "\n" for m, u in (
+            ("claude-haiku-5-5", {**zero, "output_tokens": M}), ("claude-opus-5-5", {**zero, "input_tokens": M}), ("<synthetic>", zero))))
+        su = _H.transcript_usage(Path(d, "syn.jsonl"))
+        check("usd: a `<synthetic>` last message keeps the price; each message at its own model (haiku 0.50 + opus 4.00)",
+              su["model"] == "claude-opus-5-5" and su["calls"] == 2 and abs(_H.real_usd(su, "opus") - 4.50) < 1e-9)
+        check("label: a full model id reads as its name (receipt 'vs Opus 5.5', never 'vs Claude-opus-5-5')",
+              _H.label("claude-opus-5-5") == "Opus 5.5" and _H.label("claude-fable-5-1") == "Fable 5.1" and _H.label("claude-fable-5-2") == "Fable 5.2" and _H.label("opus", "high") == "Opus 5.5 · High")
+        check("gate_model: claude-fable-5-2 and -5-1 pass for fable; claude-opus-4-1 is no opus",
+              _H.gate_model("claude-fable-5-2") == "fable" and _H.gate_model("claude-fable-5-1") == "fable" and _H.gate_model("fable") == "fable" and _H.gate_model("claude-opus-4-1") is None)
+        # priced too early: SubagentStop before the last message is written -> the Stop re-prices the row from the grown transcript
+        run("start", {"session_id": "rp", "cwd": cwd, "transcript_path": str(tr)}, led)
+        for aid in ("rp1", "rp2"):
+            run("post", dict(agent("sonnet", "medium", resp={"status": "async_launched", "agentId": aid, "prompt": "p", "description": "t"}, cwd=cwd), session_id="rp", transcript_path=str(tr)), led)
+        sub_tr("rp", "rp1", "claude-sonnet-5-5", 0, 0, 0, 100_000, calls=1)  # one call written so far: $1.00
+        for aid in ("rp1", "rp2"):  # rp2: a one-call agent whose transcript is not written yet
+            run("stop", {"session_id": "rp", "agent_id": aid, "last_assistant_message": good}, led)
+        rows = [json.loads(l) for l in Path(led, "rp.jsonl").read_text().splitlines()]
+        early = (rows[-2].get("tokens"), rows[-1].get("tokens"))
+        sub_tr("rp", "rp1", "claude-sonnet-5-5", 0, 0, 0, 200_000, calls=2)  # the last message lands: $2.00
+        sub_tr("rp", "rp2", "claude-sonnet-5-5", 0, 0, 0, 100_000, calls=1)
+        out = (run("receipt", {"session_id": "rp", "cwd": cwd, "transcript_path": str(tr), "stop_hook_active": False, "last_assistant_message": "done."}, led) or {}).get("reason", "")
+        rows = [json.loads(l) for l in Path(led, "rp.jsonl").read_text().splitlines()]
+        check("reprice: a row priced before its transcript grew is priced again at Stop; a one-call row is not unpriced",
+              early == (100_000, None) and rows[-2].get("tokens") == 200_000 and rows[-2].get("usd") == 2.0 and rows[-1].get("tokens") == 100_000
+              and "unpriced" not in out and "300K Tokens · $3.00" in out)
         # "Main session only" (budget 0) expires at the next Stop even with no spawn; a budget > 0 answer survives a prose turn
         run("start", {"session_id": "gx", "cwd": cwd, "transcript_path": str(tr)}, led)
         gq2 = {"session_id": "gx", "cwd": cwd, "tool_name": "AskUserQuestion", "tool_input": {"questions": [{"question": "Abo Fles agent gate: how many?", "options": []}]}}
@@ -2587,7 +4965,10 @@ def main():
         Path(cwd, "CLAUDE.md").write_text("## abofles overrides\n- Break = 30\n")
         check("memo: Break = 30 -> 11 min is not a break", "RESUME" not in ctx(run("prompt", {"session_id": "mm", "cwd": cwd}, led)))
         stj = json.loads(stf.read_text()); stj["last_activity"] = int(time.time()) - 31 * 60; stf.write_text(json.dumps(stj))
-        check("memo: Break = 30 -> 31 min is", "away 31 min" in ctx(run("prompt", {"session_id": "mm", "cwd": cwd}, led)))
+        check("memo (batch 5 #39): Break = 30 -> 31 min is a break, but the block is the one injected last time: not sent again", "RESUME" not in ctx(run("prompt", {"session_id": "mm", "cwd": cwd}, led)))
+        memo("now", inp="Task      next task\nNext      ship the cap\n")
+        stj = json.loads(stf.read_text()); stj["last_activity"] = int(time.time()) - 31 * 60; stf.write_text(json.dumps(stj))
+        check("memo: Break = 30 -> 31 min is, and a changed memo sends the block again", "away 31 min" in ctx(run("prompt", {"session_id": "mm", "cwd": cwd}, led)))
         Path(cwd, "CLAUDE.md").write_text("## abofles overrides\n- Break = off\n")
         stj = json.loads(stf.read_text()); stj["last_activity"] = int(time.time()) - 500 * 60; stf.write_text(json.dumps(stj))
         check("memo: Break = off -> never", "RESUME" not in ctx(run("prompt", {"session_id": "mm", "cwd": cwd}, led)))
@@ -2753,7 +5134,7 @@ def main():
         json.dump(dict(json.loads(Path(state, "qg.json").read_text()), last_ask_ts=0), open(Path(state, "qg.json"), "w"))
         aq2 = dict(aq, tool_input={"questions": [{"question": "Should refunds go to the wallet or the card?", "options": []}]})
         check("qgate: a different question later is denied again", "question gate" in reason(run("qgate", aq2, led)))
-        check("qgate: gate text puts WHY/EXPLAIN inside the question and asks for a Language line", "question text = QUESTION" in reason(run("qgate", aq2, led)) and "Language:" in reason(run("qgate", aq2, led)))
+        check("qgate: gate text asks for a Language line and points to question-gate.md; the after-Judge note puts WHY inside the question", "question-gate.md" in reason(run("qgate", aq2, led)) and "Language:" in reason(run("qgate", aq2, led)) and "question text = QUESTION, a blank line, WHY" in _H0.ASK_PLAIN)
         # SendMessage to a gate agent unlocks one question
         check("qgate: SendMessage to a non-gate agent does nothing", run("sendmsg", {"session_id": "qg", "cwd": cwd, "tool_name": "SendMessage", "tool_input": {"to": "worker-7", "message": "m"}}, led) is None)
         check("qgate: SendMessage to the agent TYPE name unlocks nothing (an id or the agent name is needed)", run("sendmsg", {"session_id": "qg", "cwd": cwd, "tool_name": "SendMessage", "tool_input": {"to": "abofles-judge", "message": "m"}}, led) is None)
@@ -2761,9 +5142,12 @@ def main():
         check("qgate: a failed SendMessage to a gate agent unlocks nothing (no reply coming)", all(smq({"success": False, "error": "no such agent"}) is None for _ in range(3))
               and json.loads(Path(state, "qg.json").read_text()).get("judge_ok", 0) == 0)
         out = smq({"success": True, "message": "Resuming", "resumedAgentId": "judge-q"})
-        check("qgate: SendMessage to a gate agent this session started, with a reply id, unlocks", "unlocked" in ctx(out) and json.loads(Path(state, "qg.json").read_text()).get("judge_ok") == 1)
+        check("qgate: SendMessage to a Judge this session started, with a reply id, unlocks nothing before its verdict (bug 5)", "no question unlocked yet" in ctx(out) and json.loads(Path(state, "qg.json").read_text()).get("judge_ok", 0) == 0)
+        check("qgate: ... and the question is still refused while the resumed Judge has not answered", "question gate" in reason(run("qgate", aq2, led)))
         check("qgate: a second SendMessage before that reply lands adds no unlock (one per reply), nor one with no reply id", smq({"success": True, "resumedAgentId": "judge-q"}) is None and smq() is None and smq("ok") is None
-              and json.loads(Path(state, "qg.json").read_text()).get("judge_ok") == 1)
+              and json.loads(Path(state, "qg.json").read_text()).get("judge_ok", 0) == 0)
+        out = smq({"success": True, "reply": ask.replace("per unit or per order", "in IQD or per currency")})
+        check("qgate: the resumed Judge's reply graded VERDICT: ASK unlocks one question (the fresh-reply path)", "unlocked" in ctx(out) and json.loads(Path(state, "qg.json").read_text()).get("judge_ok") == 1)
         check("qgate: ... and the unlock lets the question through", run("qgate", aq2, led) is None)
         check("qgate: a spent Judge unlock clears the denied set (it is never exempt on its own later)", "denied_qhash" not in json.loads(Path(state, "qg.json").read_text()))
         ans = "STATUS: done\nCONFIDENCE: high\nVERDICT: ANSWERED\nQUESTION: Is the cap per unit?\nANSWER: Yes, per unit\nEVIDENCE:\n- src/a.cs:12 — cap applied inside the unit loop"
@@ -2879,12 +5263,12 @@ def main():
         run("start", {"session_id": "ml", "cwd": cwd, "transcript_path": str(trm), "effort": {"level": "high"}}, led)
         json.dump(dict(json.loads(Path(state, "ml.json").read_text()), gate="auto", main_model="opus"), open(Path(state, "ml.json"), "w"))
         out = run("pre", dict(p4, session_id="ml", transcript_path=str(trm)), led)
-        check("main: first agent of a 🔴 task on Opus·High -> fits line", "main: Opus 5.5 · High fits this 🔴 Critical task" in ctx(out) and "print this line now" in ctx(out))
+        check("main (batch 5 #37): first agent of a 🔴 task on Opus·High fits -> no main: line at all", "main:" not in ctx(out) and _H0.main_line({"main_model": "opus", "effort": "high"}, 4).startswith("main: Opus 5.5 · High fits"))
         out = run("pre", dict(p4, session_id="ml", transcript_path=str(trm)), led)
         check("main: second agent of the same task -> no line", "main:" not in ctx(out))
         json.dump(dict(json.loads(Path(state, "ml.json").read_text()), inflight=0, spawns_since_receipt=0), open(Path(state, "ml.json"), "w"))
         out = run("pre", dict(agent("haiku", "low", prompt="abofles: Unit Test / Read · T2\nq\nLine cap: 40", cwd=cwd), session_id="ml", transcript_path=str(trm)), led)
-        check("main: 🟡 task on Opus·High -> suggest Sonnet·Medium with the current setting", 'main: suggest Sonnet 5.5 · Medium for this 🟡 Normal task (now Opus 5.5 · High). Switch in the model picker, or say "keep".' in ctx(out))
+        check("main: 🟡 task on Opus·High -> suggest Sonnet·Medium with the current setting", 'main: suggest Sonnet 5.5 · Medium for this 🟡 Normal task (now Opus 5.5 · High). Switch in the model picker, or say "keep".' in ctx(out) and "print this line next" in ctx(out))
         run("post", dict(agent("haiku", "low", prompt="abofles: Unit Test / Read · T2\nq\nLine cap: 40", resp=good, cwd=cwd), session_id="ml", transcript_path=str(trm)), led)
         mg = json.loads(Path(state, "ml.json").read_text()).get("guide") or {}
         check("guide: state carries root, ctx, task and the main suggestion for the band",
@@ -3098,10 +5482,11 @@ def main():
         gout = _sp.run([sys.executable, str(GU), "--all"], cwd=cwd, capture_output=True, text=True, env=dict(os.environ, ABOFLES_LEDGER_DIR=led)).stdout
         check("guide: CLI --all lists the ladder", gout.startswith("🟠 ") and "owner decision" in gout)
         od = ((json.loads(Path(state, "gu.json").read_text()).get("guide") or {}).get("items") or [{}])[0]
+        gid_ = next((m_.group(1) for l in Path(cwd, ".claude", "abofles-memo.md").read_text().splitlines() if "[ ]" in l for m_ in [re.search(r"#([0-9a-f]{4}) \(s:gu\b", l)] if m_), "?")  # the recheck names the item by its stable id
         check("guide: an owner decision item asks the user after judging; no resolve argv, a recheck with the traced memo.py command and AskUserQuestion",
               od.get("p") == "🟠" and re.match(r"abofles: owner decision \d+ is open: ", od.get("fill", "")) and "(from session gu" in od["fill"] and od["fill"].endswith("Judge it first, then ask me with AskUserQuestion.")
               and od.get("resolve") is None and od.get("unresolve") is None
-              and all(x in (od.get("recheck") or "") for x in (f"resolve {od['id'].split(':')[1]} --session gu", "memo.py", "re-checked: <evidence>", "--trace \"user answered: <answer>\"", "AskUserQuestion", "Re-check it first")))
+              and all(x in (od.get("recheck") or "") for x in (f"resolve '#{gid_}' --session gu", "memo.py", "re-checked: <evidence>", "--trace \"user answered: <answer>\"", "AskUserQuestion", "Re-check it first")))
         MEMOPY = str(Path(__file__).resolve().parent / "memo.py")
         ODN = od["id"].split(":")[1]  # gu's own item (item 1 is rt's: resolving it from gu needs --force)
         OD_RES = [sys.executable, "-X", "utf8", MEMOPY, "resolve", ODN, "settled in the test", "--trace", "--session", "gu"]
@@ -3259,22 +5644,22 @@ def main():
         open_task(sA, pa, led)
         run("receipt", {"session_id": sA, "cwd": pa, "stop_hook_active": False, "last_assistant_message": RC1}, led)
         nowA = H.sess_read(pa, sA)["Now"]
-        check("now auto: a receipt rewrites this session's Now (between tasks, Done, Left lines, Next = the receipt's own next, Verify)",
-              "Task      none — between tasks" in nowA and "Done      capped the surcharge in AqsatiRules.cs" in nowA and "Left      wire the FE badge\nLeft      update the docs page" in nowA
-              and "Next      wire the FE badge" in nowA and "Verify    `dotnet test` → 13 passed" in nowA and "old left" not in nowA and "old next" not in nowA and "old done" not in nowA)
+        check("now auto: a receipt rewrites this session's Now (between tasks, Done, Left lines, Next = the receipt's own next, Verify); the old Left its done does not cover stays after them",
+              "Task      none — between tasks" in nowA and "Done      capped the surcharge in AqsatiRules.cs" in nowA and "Left      wire the FE badge\nLeft      update the docs page\nLeft      old left" in nowA
+              and "Next      wire the FE badge" in nowA and "Verify    `dotnet test` → 13 passed" in nowA and "old next" not in nowA and "old done" not in nowA)
         check("now auto: Decisions kept unchanged, Tree kept outside git, block marked from receipt",
               "Decisions keep: tables are printed above the box" in nowA and "Tree      M old.cs" in nowA and re.search(r"Written   \d{4}-\d\d-\d\d \d\d:\d\d · from receipt", nowA))
         nx_ = next((i for i in gitems(sA) if i.get("id") == "next"), {})
-        check("now auto: the band's next item shows the new Next in the same Stop", "next from the memo: wire the FE badge" in nx_.get("text", "") and gstate(sA)["guide"]["items"][0]["p"] == "✅")
+        check("now auto: the band's next item shows the new Left first (M18), in the same Stop", "left from the memo: wire the FE badge" in nx_.get("text", "") and gstate(sA)["guide"]["items"][0]["p"] == "✅")
         blkA = H.resume_block(pa, session_id=sA)
         check("now auto: resume block reads the receipt-stamped Now (no 'since' stale line, left and next shown)", "now written " in blkA and "from receipt" in blkA and "- `since`" not in blkA and "- `next` → wire the FE badge" in blkA)
         open_task(sA, pa, led)
         run("receipt", {"session_id": sA, "cwd": pa, "stop_hook_active": False, "last_assistant_message": "🧾 **1 Agent · 1 u · Saved 1%** vs Opus 5.5 · open: none"}, led)
         nowA2 = H.sess_read(pa, sA)["Now"]
-        check("now auto: short receipt with open none -> no Left, Next ready, Done/Verify/Decisions kept",
-              "Left" not in nowA2 and "Next      none — ready for the next task" in nowA2 and "capped the surcharge" in nowA2 and "13 passed" in nowA2 and "Decisions keep:" in nowA2)
+        check("now auto: short receipt with open none -> the Left it does not cover stays, no Next, never 'ready'; Done/Verify/Decisions kept",
+              "Left      wire the FE badge\nLeft      update the docs page\nLeft      old left" in nowA2 and "Next" not in nowA2 and "ready" not in nowA2 and "capped the surcharge" in nowA2 and "13 passed" in nowA2 and "Decisions keep:" in nowA2)
         nx_ = next((i for i in gitems(sA) if i.get("id") == "next"), {})
-        check("now auto: Next 'none…' -> the band says pick the next ticket", nx_.get("text") == "nothing open — pick the next ticket and route it with abofles first")
+        check("now auto: no Next but Left kept -> the band names the first left item, not 'pick the next ticket'", nx_.get("text") == "no decision open — left from the memo: wire the FE badge")
         # Next follows the receipt's own `next`; sub-bullets of `open` are single Left items; the 🧭 guide line is not copied
         RCH = "🧾 **1 Agent · 1 u · Saved 1%** vs Opus 5.5\n- `done` → x\n- `check` → ok\n- `open` →\n  - QA did not test X, Y one by one; the full suite covers them\n  - update the docs page"
         pn = tempfile.mkdtemp(); sN = "nextsess1"
@@ -3348,7 +5733,7 @@ def main():
         check("next: resume shows `next` with 2 sub-bullets; the guide ✅ item uses the first", "- `next` →\n  - wire the FE badge\n  - update the docs page" in blkQ and "next from the memo: wire the FE badge" in nx_.get("text", "") and "docs page" not in nx_.get("text", ""))
         open_task(sN, pn, led)
         run("receipt", {"session_id": sN, "cwd": pn, "stop_hook_active": False, "last_assistant_message": "🧾 **1 Agent · 1 u · Saved 1%** vs Opus 5.5\n- `done` → x\n- `check` → ok\n- `open` → none\n- `next` → 🧭 something"}, led)
-        check("now auto: open none + a guide-line next -> ready for the next task", "Next      none — ready for the next task" in H.sess_read(pn, sN)["Now"] and "Left" not in H.sess_read(pn, sN)["Now"])
+        check("now auto: open none + a guide-line next -> the old Left stays, no Next line, never 'ready'", "Left      a\nLeft      b" in H.sess_read(pn, sN)["Now"] and "Next" not in H.sess_read(pn, sN)["Now"] and "ready" not in H.sess_read(pn, sN)["Now"])
         pg = tempfile.mkdtemp()
         if subprocess.run(["git", "init", "-q"], cwd=pg, capture_output=True).returncode == 0:
             Path(pg, "a.txt").write_text("x")
@@ -3525,7 +5910,11 @@ def main():
         check("override_blocks: read once per process, read again when the file changed", o3a_ == "fast" and H.pace(o3c_) == "normal")
         # 10. the gate text says what the question text holds
         qt = H.question_gate_text({})
-        check("question gate text: question text = QUESTION, blank line, WHY (no option summary); no 'plain summary'", "plain summary" not in qt and "QUESTION, a blank line, WHY (no option summary)" in qt)
+        qgd_ = (Path(__file__).resolve().parent.parent / "skills/abofles/references/question-gate.md").read_text()
+        check("question gate text (batch 5 #38): a 2-line deny under 600 chars — what to do + the Judge start (routes, header, Language, cap); the box rules live in question-gate.md",
+              len(qt.splitlines()) == 2 and len(qt) < 600 and "abofles:abofles-judge" in qt and "/ Judge · T<tier>" in qt and "Language:" in qt and "Line cap: 40" in qt
+              and "🔴 Critical Opus 5.5 · Medium → Opus 5.5 · High" in qt and "references/question-gate.md" in qt
+              and "plain summary" not in qt and "the `QUESTION`, a blank line, the `WHY` line" in qgd_ and "Never restate the options" in qgd_)
         # 11. next setting stops at the top unless T4
         check("next_setting: Work stops at opus·xhigh (max only on T4)", H.next_setting("opus", "xhigh", "Work", 3) == (None, None) and H.next_setting("opus", "xhigh", "Work", 4) == ("opus", "max") and H.next_setting("opus", "max", "Work", 4) == (None, None))
         check("next_setting: Analyse/Plan reach fable, max only after fable·high on T4",
@@ -3559,9 +5948,9 @@ def main():
         run("prompt", {"session_id": sI, "cwd": pi_, "transcript_path": str(tri)}, led)
         iditems = {i["id"]: i for i in gitems(sI)}
         check("guide ids: fail:<agent>, ask, dec:<n>, bg:<agent>, ctx:<mark>, budget on their items", {"fail:vfx111", "ask", "dec:1", "bg:bgx111", "ctx:500", "budget"} <= set(iditems))
-        check("guide ids: the owner-decision item has no resolve/reopen argv, its recheck carries `resolve 1 --session <sid>`",
+        check("guide ids: the owner-decision item has no resolve/reopen argv, its recheck carries `resolve '#<id>' --session <sid>` (the stable id, never the number)",
               iditems.get("dec:1", {}).get("resolve") is None and iditems.get("dec:1", {}).get("unresolve") is None
-              and f"resolve 1 --session {sI}" in (iditems.get("dec:1", {}).get("recheck") or "") and "AskUserQuestion" in iditems["dec:1"]["recheck"])
+              and re.search(r"resolve '#[0-9a-f]{4}' --session " + re.escape(sI), iditems.get("dec:1", {}).get("recheck") or "") and "AskUserQuestion" in iditems["dec:1"]["recheck"])
         # 13. the band never settles an item: every guide item has resolve/unresolve None; Claude's resolve is traced and undoable
         po_ = tempfile.mkdtemp(); run("start", {"session_id": "idsess2", "cwd": po_}, led); H.memo_needs(po_, "idsess2", "owner decision: elsewhere?")
         allst = dict(gstate(sI), review_missing={"names": ["qa"], "tier": 3, "topic": "Ids Topic", "ts": int(time.time())}, receipt_owed=True)
@@ -3572,9 +5961,9 @@ def main():
         check("guide: every item of the ladder has resolve and unresolve None", allit and all(i.get("resolve") is None and i.get("unresolve") is None and "resolve" in i and "unresolve" in i for i in allit))
         check("guide: the fail, esc and dec items carry a recheck, the others none", all(bool(i.get("recheck")) == (i["id"].split(":")[0] in ("fail", "esc") or i["id"] == "dec:1") for i in allit))
         sec_ = H.memo_read(pi_); sec_["Needs you"] = "- [ ] a free-text line with no number (s:idsess1)"; H.memo_write(pi_, sec_, sI)
-        dn = next(i for i in H.guide_entries(pi_, gstate(sI), sI, scope="project") if i["id"] == "dec:?")
+        dn = [i for i in H.guide_entries(pi_, gstate(sI), sI, scope="project") if i["id"].startswith("dec:")]
         H.LEDGER_DIR = led0_
-        check("guide: an owner decision without a number has no recheck", dn.get("recheck") is None and dn.get("resolve") is None and dn.get("unresolve") is None)
+        check("guide: a `[ ]` line with no number is no open item (M14: `^N. [ ] ` only), so no owner-decision item", dn == [])
         # Claude's resolve: the evidence in the Journal, Undo in the guide state until the turn after the next Stop
         pl_ = tempfile.mkdtemp(); sL = "lres1"
         run("start", {"session_id": sL, "cwd": pl_}, led)
@@ -3750,15 +6139,21 @@ def main():
         run("post", jpa("ba10", launch_("gj10")), led)
         check("sendmsg: a message to a gate agent still running its first reply adds no unlock (that reply unlocks when it lands)", sm("ba10", "gj10") is None and gstate("ba10").get("judge_ok", 0) == 0)
         run("stop", {"session_id": "ba10", "agent_id": "gj10", "last_assistant_message": ask}, led)
-        check("sendmsg: the id of a gate agent this session started still unlocks once its reply is in (one per reply)", gstate("ba10").get("judge_ok") == 1 and "unlocked" in ctx(sm("ba10", "gj10")) and gstate("ba10").get("judge_ok") == 2 and gstate("ba10").get("judge_ok_ts"))
+        ok10_ = gstate("ba10").get("judge_ok")
+        setst("ba10", judge_ok=0, round_asked=1)  # its question was asked: the next round is open
+        out10_ = sm("ba10", "gj10")
+        ok10b_ = gstate("ba10").get("judge_ok", 0)
+        run("stop", {"session_id": "ba10", "agent_id": "gj10", "last_assistant_message": ask}, led)
+        check("sendmsg: a resumed Judge unlocks nothing at the message; its resumed ASK reply unlocks one at its SubagentStop (bug 5)",
+              ok10_ == 1 and "no question unlocked yet" in ctx(out10_) and ok10b_ == 0 and gstate("ba10").get("judge_ok") == 1 and gstate("ba10").get("judge_ok_ts"))
         for sx_ in ("bc1", "bc2", "bc3"):
             run("start", {"session_id": sx_, "cwd": cwd, "transcript_path": str(tr)}, led)
             setst(sx_, gate="auto")
         pn_ = jpa("bc3", {"agentId": "gj3", "content": ask})
         run("post", dict(pn_, tool_input=dict(pn_["tool_input"], name="jq3")), led)
         check("gate_agents: the agent id and the agent name are recorded, not the type name", gstate("bc3").get("gate_agents") == ["gj3", "jq3"])
-        check("sendmsg: the type name unlocks nothing; the agent name (reply id given) does, and a second message before that reply adds none", sm("bc3", "abofles-judge") is None and gstate("bc3").get("judge_ok") == 1
-              and "unlocked" in ctx(sm("bc3", "jq3", "gj3")) and sm("bc3", "gj3") is None and gstate("bc3").get("judge_ok") == 2)
+        check("sendmsg: the type name reaches nothing; the agent name (reply id given) resumes the Judge with no unlock yet, and a second message before that reply adds none", sm("bc3", "abofles-judge") is None and gstate("bc3").get("judge_ok") == 1
+              and "no question unlocked yet" in ctx(sm("bc3", "jq3", "gj3")) and sm("bc3", "gj3") is None and gstate("bc3").get("judge_ok") == 1)
         # 6. stale unlocks
         now_ = int(time.time())
         ids_ = lambda sid_: [i.get("id") for i in gitems(sid_)]
@@ -3925,16 +6320,136 @@ def main():
         sk_stop("rs3")
         r3b_ = rs_row("rs3", "q3")
         check("resume: with reopened_ts older than STALE_AFTER and a finished transcript the receipt closes the row (closed_by=stale), no SubagentStop needed", r3b_.get("status") != "pending" and r3b_.get("closed_by") == "stale" and r3b_.get("resumed") == 1)
-        # a resumed gate agent: sendmsg's own unlock counts once; the SubagentStop of the resumed turn does not unlock a second time
+        # a resumed Judge (bug 5): sendmsg unlocks nothing; the SubagentStop of the resumed turn grades its reply — ASK unlocks one, ANSWERED none
         run("start", {"session_id": "rs4", "cwd": cwd, "transcript_path": str(tr)}, led)
         setst("rs4", gate="auto")
         rs_sync("rs4", "q4", name="judge-r", stype="abofles:abofles-judge", text=ask_)
-        ok4_ = gstate("rs4").get("judge_ok", 0)
+        setst("rs4", judge_ok=0, round_asked=1)  # its first question was asked
         out4_ = rs_msg("rs4", "judge-r", rs_ok("q4"))
         ok4b_ = gstate("rs4").get("judge_ok", 0)
+        v4_ = rs_row("rs4", "q4").get("verdict")
         run("stop", {"session_id": "rs4", "agent_id": "q4", "last_assistant_message": ask_}, led)
         q4_ = rs_row("rs4", "q4")
-        check("resume: a resumed judge row is pending, sendmsg unlocks one question (SENDMSG_TEXT), the stop that closes it adds no judge_ok", "unlocked" in ctx(out4_) and ok4b_ == ok4_ + 1 and gstate("rs4").get("judge_ok", 0) == ok4b_ and q4_.get("status") == "done" and q4_.get("resumed") == 1)
+        check("resume: a resumed judge row is pending with no verdict, sendmsg unlocks nothing, the stop's ASK reply unlocks one",
+              "no question unlocked yet" in ctx(out4_) and ok4b_ == 0 and v4_ is None and gstate("rs4").get("judge_ok", 0) == 1 and q4_.get("status") == "done" and q4_.get("verdict") == "ASK" and q4_.get("resumed") == 1)
+        setst("rs4", judge_ok=0, round_asked=1)
+        rs_msg("rs4", "judge-r", rs_ok("q4"))
+        run("stop", {"session_id": "rs4", "agent_id": "q4", "last_assistant_message": "STATUS: done\nCONFIDENCE: high\nVERDICT: ANSWERED\nQUESTION: q\nANSWER: a\nEVIDENCE:\n- src/a.cs:1 — x"}, led)
+        check("resume: a resumed Judge that replies ANSWERED unlocks nothing", gstate("rs4").get("judge_ok", 0) == 0 and rs_row("rs4", "q4").get("verdict") == "ANSWERED")
+        # bug 9: a resumed agent is not closed on the hand-back it wrote before the resume (only one written after reopened_ts closes it)
+        iso_ = lambda t: time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(t))
+        hb_ = lambda t, msg: {"type": "assistant", "timestamp": iso_(t), "message": {"content": [{"type": "tool_use", "id": "h", "name": "SubagentHandback", "input": {"message": msg}}]}}
+        run("start", {"session_id": "rs9", "cwd": cwd, "transcript_path": str(tr)}, led)
+        rs_sync("rs9", "q9")
+        f9_ = Path(cwd, "rs9", "subagents", "agent-q9.jsonl"); f9_.parent.mkdir(parents=True, exist_ok=True)
+        f9_.write_text(json.dumps(hb_(time.time() - 30, good)) + "\n")
+        rs_msg("rs9", "q9", rs_ok("q9"))
+        with open(f9_, "a") as fh_: fh_.write(json.dumps({"type": "user", "timestamp": iso_(time.time()), "message": {"role": "user", "content": "more"}}) + "\n")
+        sk_stop("rs9")
+        check("resume: a hand-back written before reopened_ts does not close the reopened row (bug 9)", rs_row("rs9", "q9").get("status") == "pending")
+        with open(f9_, "a") as fh_: fh_.write(json.dumps(hb_(time.time() + 1, good.replace("x", "second run"))) + "\n")
+        sk_stop("rs9")
+        r9_ = rs_row("rs9", "q9")
+        check("resume: ... the hand-back written after the reopen closes it, from the new report", r9_.get("status") == "done" and r9_.get("resumed") == 1)
+        check("assistant_replies: `since` skips stamped replies older than it",
+              [t for t, _ in H.assistant_replies(f9_, since=time.time() - 5)] == [good.replace("x", "second run")] and len(list(H.assistant_replies(f9_))) == 2)
+        fu_ = Path(f9_).with_name("unstamped.jsonl")
+        fu_.write_text(json.dumps(hb_(time.time() + 1, "stamped new")) + "\n" + json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": "no stamp"}]}}) + "\n")
+        check("assistant_replies: with `since` set an unstamped reply is read as old (skipped); without `since` it is read",
+              [t for t, _ in H.assistant_replies(fu_, since=time.time() - 5)] == ["stamped new"] and [t for t, _ in H.assistant_replies(fu_)] == ["no stamp", "stamped new"])
+        check("entry_ts: an out-of-range or malformed stamp is None, not a crash",
+              all(H.entry_ts({"timestamp": t}) is None for t in ("99999-01-01T00:00:00Z", "not a date", "0001-01-01T00:00:00"))
+              and H.entry_ts({"timestamp": 5}) is None and H.entry_ts("x") is None)
+        # main_background_open: a background Bash of the main session stops holding the receipt back once it started more than LOST_MIN ago
+        fb_ = Path(f9_).with_name("mainbg.jsonl")
+        def bg_tp_(t):
+            fb_.write_text(json.dumps({"type": "user", "timestamp": iso_(t), "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "b", "content": "Command running in background with ID: bdev1"}]}}) + "\n")
+            return {"transcript_path": str(fb_)}
+        now_b = time.time()
+        st_b = {"task_started": now_b - 3 * H.LOST_MIN * 60}
+        fresh_ = H.main_background_open(bg_tp_(now_b - 60), dict(st_b), now=now_b)
+        stale_ = H.main_background_open(bg_tp_(now_b - (H.LOST_MIN + 2) * 60), dict(st_b), now=now_b)
+        check("main_background_open: a bg Bash started 1 min ago suppresses the receipt; one started more than LOST_MIN ago does not", fresh_ is True and stale_ is False)
+        d_b = bg_tp_(now_b - 60)
+        st_c = dict(st_b)
+        first_ = H.main_background_open(d_b, st_c, now=now_b)
+        orig_bo = H.background_open
+        H.background_open = lambda *a, **k: (_ for _ in ()).throw(AssertionError("re-scanned"))
+        try:
+            cached_ = H.main_background_open(d_b, st_c, now=now_b + 1)
+        finally:
+            H.background_open = orig_bo
+        with open(fb_, "a") as fh_: fh_.write(json.dumps({"type": "attachment", "attachment": {"prompt": "<task-notification>\n<task-id>bdev1</task-id>\n</task-notification>"}}) + "\n")
+        check("main_background_open: the cached answer equals the scan, is reused while the transcript is unchanged, and a write re-scans it",
+              first_ is True and cached_ is True and "bg_open_cache" in st_c and H.main_background_open(d_b, st_c, now=now_b + 2) is False)
+        # bug 12: an agent that ended its turn to wait on its own background command is not stale-closed as a stub
+        bgw_ = [{"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "b", "name": "Bash", "input": {"command": "make", "run_in_background": True}}], "stop_reason": "tool_use"}},
+                {"type": "user", "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "b", "content": "Command running in background with ID: bsh12"}]}},
+                sk_msg("text", "Waiting for the completion notification.", "end_turn", "w")]
+        f12_ = sk_agent("bg12", "k12", bgw_, 200)
+        sk_stop("bg12")
+        check("stale: an agent waiting on its own background Bash stays pending past STALE_AFTER (bug 12)", sk_row("bg12", "k12").get("status") == "pending")
+        with open(f12_, "a") as fh_:
+            fh_.write(json.dumps({"type": "user", "message": {"role": "user", "content": "<task-notification>\n<task-id>bsh12</task-id>\n<status>completed</status>\n</task-notification>"}}) + "\n")
+            fh_.write(json.dumps(sk_msg("text", good, "end_turn", "z")) + "\n")
+        os.utime(f12_, (time.time() - 200, time.time() - 200))
+        sk_stop("bg12")
+        check("stale: ... once its background command has ended, the finished turn closes it as usual", sk_row("bg12", "k12").get("status") == "done")
+        # bug 10: no receipt demand while the main session's background Bash of this task still runs
+        def mainbg_(sid_, ts):
+            mt = Path(cwd, f"main-{sid_}.jsonl")
+            mt.write_text(json.dumps({"type": "user", "timestamp": iso_(ts), "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "m", "content": f"Command running in background with ID: m-{sid_}"}]}}) + "\n")
+            run("start", {"session_id": sid_, "cwd": cwd, "transcript_path": str(mt)}, led)
+            return mt
+        mt_ = mainbg_("bg10", time.time() + 1)
+        o10p_ = run("post", dict(agent("haiku", "low", resp=good, cwd=cwd), session_id="bg10", transcript_path=str(mt_)), led)
+        o10_ = run("receipt", {"session_id": "bg10", "cwd": cwd, "transcript_path": str(mt_), "stop_hook_active": False, "last_assistant_message": "started the build"}, led)
+        check("receipt: no 'no receipt' demand while the task's background Bash runs (bug 10), and the agent's hand-back carries no receipt note", "no receipt" not in json.dumps(o10_ or {}) and "Receipt at task end" not in ctx(o10p_))
+        with open(mt_, "a") as fh_: fh_.write(json.dumps({"type": "user", "message": {"role": "user", "content": "<task-notification>\n<task-id>m-bg10</task-id>\n<status>completed</status>\n</task-notification>"}}) + "\n")
+        check("receipt: ... once it has ended the receipt is due", "no receipt" in json.dumps(run("receipt", {"session_id": "bg10", "cwd": cwd, "transcript_path": str(mt_), "stop_hook_active": False, "last_assistant_message": "build done"}, led) or {}))
+        mt_ = mainbg_("bg10b", time.time() - 3600)
+        run("post", dict(agent("haiku", "low", resp=good, cwd=cwd), session_id="bg10b", transcript_path=str(mt_)), led)
+        check("receipt: a background Bash started before the task (a dev server) does not hold the receipt back", "no receipt" in json.dumps(run("receipt", {"session_id": "bg10b", "cwd": cwd, "transcript_path": str(mt_), "stop_hook_active": False, "last_assistant_message": "done"}, led) or {}))
+        # bug 11: the receipt note rides on the last agent's hand-back prompt, even while its row still reads pending
+        run("start", {"session_id": "hb11", "cwd": cwd, "transcript_path": str(tr)}, led)
+        run("post", dict(pi, session_id="hb11", transcript_path=str(tr), tool_response=launch_("h11")), led)
+        run("post", dict(pi, session_id="hb11", transcript_path=str(tr), tool_response=launch_("h12")), led)
+        note_ = lambda ids: ctx(run("prompt", {"session_id": "hb11", "cwd": cwd, "transcript_path": str(tr), "prompt": "".join(f"<task-notification>\n<task-id>{i}</task-id>\n<status>completed</status>\n</task-notification>\n" for i in ids)}, led))
+        check("prompt: a hand-back while another agent of the task still runs carries no receipt note", "Receipt at task end" not in note_(["h11"]))
+        check("prompt: the last agent's hand-back carries the receipt note though its row is still pending (bug 11)", "Receipt at task end" in note_(["h12", "h11"]) and any(r.get("status") == "pending" for r in ledrows("hb11")))
+        # bug 7: a new task forgets the old task's asked boxes — its question is no re-ask and needs a Judge
+        stx_ = {"asked": ["q"], "asked_full": ["Should the cap apply per unit?"]}
+        H.close_task(stx_, "receipt")
+        check("reset_task: asked_full is cleared with the task (bug 7)", stx_.get("asked_full") == [] and stx_.get("asked") == [])
+        run("start", {"session_id": "af7", "cwd": cwd, "transcript_path": str(tr)}, led)
+        aq7_ = dict(aq, session_id="af7", tool_input={"questions": [{"question": "Ship the wallet refund screen this sprint?", "options": []}]})
+        setst("af7", gate="auto", asked_full=[H.question_full(q) for q in aq7_["tool_input"]["questions"]])
+        check("qgate: control — the same box asked again in one task is a re-ask (no Judge)", run("qgate", aq7_, led) is None)
+        run("start", {"session_id": "af7", "cwd": cwd, "transcript_path": str(tr), "source": "clear"}, led)
+        check("start: a /clear forgets asked_full, so the old box is judged again (bug 7)", not gstate("af7").get("asked_full") and "question gate" in reason(run("qgate", aq7_, led)))
+        # bug 8: a `VERDICT: ASK` with no QUESTION line counts as one question — it unlocks one, as its "ask now" says
+        st8_ = {"task_started": int(time.time()) - 5}
+        v8_, w8_, i8_ = H.apply_gate_reply(st8_, "STATUS: done\nCONFIDENCE: high\nVERDICT: ASK\nEVIDENCE:\n- a.cs:1 — x\nWHY: w", "judge", "t8", cwd, tier=3)
+        check("gate reply: VERDICT: ASK with no QUESTION line unlocks one question and says ask (bug 8)", v8_ == "ASK" and st8_.get("judge_ok") == 1 and st8_.get("judged_n") == 1 and i8_ and not w8_)
+        st8_ = {"task_started": int(time.time()) - 5}
+        H.apply_gate_reply(st8_, "STATUS: done\nCONFIDENCE: high\nVERDICT: ANSWERED\nANSWER: a\nEVIDENCE:\n- a.cs:1 — x", "judge", "t8", cwd, tier=3)
+        check("gate reply: ... an ANSWERED with no QUESTION line still unlocks nothing", st8_.get("judge_ok", 0) == 0)
+        # bug 13: the state file and the ledger are replaced whole, never truncated in place
+        H.save_state("at13", {"started": 1, "root": "/r"})
+        ino_ = os.stat(H.state_path("at13")).st_ino
+        H.save_state("at13", {"started": 2, "root": "/r"})
+        check("save_state: writes a new file and renames it over the old one (bug 13)", os.stat(H.state_path("at13")).st_ino != ino_ and H.load_state("at13") == {"started": 2, "root": "/r"})
+        real_fsync_ = H.os.fsync
+        def boom_(fd): raise OSError("disk full")
+        H.os.fsync = boom_
+        try:
+            H.save_state("at13", {"started": 3})
+            H.write_rows(Path(led, "at13.jsonl"), [{"a": 1}])
+        finally:
+            H.os.fsync = real_fsync_
+        check("save_state / write_rows: a write that fails midway leaves the old state whole and no temp file behind",
+              H.load_state("at13") == {"started": 2, "root": "/r"} and not Path(led, "at13.jsonl").exists()
+              and not [x for x in os.listdir(H.STATE_DIR) if x.endswith(".tmp")] and not [x for x in os.listdir(led) if x.endswith(".tmp")])
         rs_sync("rs", "q5", name="plain-5")
         check("resume: a non-gate agent resume prints nothing (no SENDMSG_TEXT)", rs_msg("rs", "q5", rs_ok("q5")) is None)
 
@@ -4066,8 +6581,8 @@ def main():
                 check("session: ABOFLES_SESSION wins over everything", H.newest_session_id(pj, U1) == "sA" and H.newest_state_path(pj).name == "sA.json")
                 pin()
                 check("session: an explicit UUID of an existing state is used", H.newest_session_id(pj, U1) == U1 and H.newest_state(pj, U1).get("last_prompt_ts") == 50)
-                check("session: an unexpanded ${CLAUDE_SESSION_ID}, an empty value and an unknown UUID are ignored",
-                      all(H.newest_session_id(pj, v) == "sB" for v in ("${CLAUDE_SESSION_ID}", "", None, U2)))
+                check("session: an unexpanded ${CLAUDE_SESSION_ID} and an empty value are ignored; an unknown UUID is no session, never the folder's newest",
+                      all(H.newest_session_id(pj, v) == "sB" for v in ("${CLAUDE_SESSION_ID}", "", None)) and H.newest_state_path(pj, U2) is None and H.newest_session_id(pj, U2) == "")
                 check("session: a short id names that session (exact name, or the one state it starts), never the newest one; an unknown or ambiguous short id is none",
                       H.newest_session_id(pj, "sA") == "sA" and H.newest_session_id(pj, U1[:8]) == U1 and H.newest_state_path(pj, "zzzzzzzz") is None
                       and H.newest_state_path(pj, "sZ") is None and (put(sd, U1[:8] + "-0000-4000-8000-000000000000", pj, age=1) or True) and H.newest_state_path(pj, U1[:8]) is None)
@@ -4147,27 +6662,37 @@ def main():
         check("status: the Sides line counts the Git side after Work", "Git 1" in st_("--session", "gs").stdout)
         check("exit: status --resolve with no ledger at all exits 1", st_("--resolve", "abc", "--trace", "re-checked: t").returncode == 1)
         lf = Path(xh, "led", "xs.jsonl")
-        lf.write_text('{"agent_id": "abc123", "status": "partial"}\nHALF{"agent_id":"abc9\n{"agent_id": "abd1", "status": "blocked"}\n')
+        lf.write_text('{"agent_id": "abc123", "status": "partial"}\nHALF{"agent_id":"abc9\n{"agent_id": "abd123", "status": "blocked"}\n')
         check("exit: status --resolve as the last arg exits 2", st_("--resolve").returncode == 2)
         check("exit: status --resolve with an empty id exits 2", st_("--resolve", "", "--session", "xs").returncode == 2)
         check("exit: status --resolve with a flag as id exits 2", st_("--resolve", "--trace").returncode == 2)
         check("exit: status --session without a value exits 2", st_("--resolve", "abc", "--session").returncode == 2)
         check("exit: status --unresolve with an empty session exits 2", st_("--unresolve", "abc", "--session", "", "--trace").returncode == 2)
         check("exit: status --session ../ is cleaned to a name in the ledger dir (no such ledger, exit 1)", st_("--resolve", "abc", "--session", "../../nope", "--trace", "re-checked: t").returncode == 1 and not Path(xh, "nope.jsonl").exists())
-        r1 = st_("--resolve", "abc1", "--session", "xs", "--trace", "by test")
+        r0 = st_("--resolve", "abd123", "--session", "xs", "--trace", "no root")  # M25: no state, so no root: the trace goes to no memo (never the cwd)
+        check("M25: status --resolve --trace of a session with no state writes no memo trace and says so",
+              r0.returncode == 0 and "no session root known" in r0.stdout and not Path(xp, ".claude", "abofles-memo.d").exists())
+        st_("--unresolve", "abd123", "--session", "xs")
+        Path(xh, "st", "xs.json").write_text(json.dumps({"root": xp, "started": int(time.time())}))
+        r1 = st_("--resolve", "abc123", "--session", "xs", "--trace", "by test")
         txt = lf.read_text().splitlines()
         check("exit: status --resolve exits 0, marks the row, keeps the half-written line verbatim",
-              r1.returncode == 0 and json.loads(txt[0]).get("resolved") is True and txt[1] == 'HALF{"agent_id":"abc9' and json.loads(txt[2]) == {"agent_id": "abd1", "status": "blocked"})
+              r1.returncode == 0 and json.loads(txt[0]).get("resolved") is True and txt[1] == 'HALF{"agent_id":"abc9' and json.loads(txt[2]) == {"agent_id": "abd123", "status": "blocked"})
         memd = lambda s: Path(xp, ".claude", "abofles-memo.d", f"{s[:8]}.md")  # a trace lands in the file of the session it names
         mem = memd("xs")
         check("exit: status --resolve --trace wrote one Journal line", mem.read_text().count("resolved by hand:") == 1)
-        r2 = st_("--resolve", "abc1", "--session", "xs", "--trace", "again")
+        r2 = st_("--resolve", "abc123", "--session", "xs", "--trace", "again")
         check("exit: status --resolve of a resolved row exits 3, writes no trace", r2.returncode == 3 and mem.read_text().count("resolved by hand:") == 1)
         check("exit: status --resolve miss exits 1", st_("--resolve", "zzz", "--session", "xs", "--trace", "re-checked: t").returncode == 1)
-        check("exit: status --unresolve exits 0", st_("--unresolve", "abc1", "--session", "xs").returncode == 0 and "resolved" not in json.loads(lf.read_text().splitlines()[0]))
-        check("exit: status --unresolve of an open row exits 3, writes no trace", st_("--unresolve", "abc1", "--session", "xs", "--trace").returncode == 3 and "reopened by hand" not in mem.read_text())
+        check("exit: status --unresolve exits 0", st_("--unresolve", "abc123", "--session", "xs").returncode == 0 and "resolved" not in json.loads(lf.read_text().splitlines()[0]))
+        check("exit: status --unresolve of an open row exits 3, writes no trace", st_("--unresolve", "abc123", "--session", "xs", "--trace").returncode == 3 and "reopened by hand" not in mem.read_text())
         # memo.py: Needs-you items through the hook's own writer
         subprocess.run([sys.executable, "-X", "utf8", "-c", "import sys,os; sys.path.insert(0, sys.argv[1]); import abofles_hook as h; h.memo_needs(os.getcwd(), 'sessAAAA', 'owner decision: pick A or B')", str(sdir.parent / "hooks")], cwd=xp, env=xenv)
+        g19 = me_("resolve", "1", "x", "--trace", "--session", "ghost19", "--force")
+        check("M19: memo resolve under a short session id that has no state is refused (exit 4), nothing settled",
+              g19.returncode == 4 and "no session" in g19.stdout and "[x]" not in Path(xp, ".claude", "abofles-memo.md").read_text() and not memd("ghost19").exists())
+        for s19 in ("sessAAAA", "mysess", "other"):  # named sessions need a state (M19)
+            Path(xh, "st", f"{s19}.json").write_text(json.dumps({"root": xp, "started": int(time.time())}))
         check("exit: memo resolve without n exits 2", me_("resolve").returncode == 2 and me_("resolve", "x").returncode == 2)
         check("exit: memo resolve --session without a value exits 2", me_("resolve", "1", "--session").returncode == 2 and me_("reopen", "1", "--session", "--trace").returncode == 2)
         check("exit: memo reopen of an open item exits 3, writes no trace", me_("reopen", "1", "--trace", "--session", "sessAAAA").returncode == 3 and "reopened by hand" not in mem.read_text())
@@ -4273,8 +6798,15 @@ def main():
         for i_ in range(4):
             jd = dict(agent("opus", "medium", "abofles:abofles-judge", prompt=f"abofles: Payments & Gateway Integration / Judge · T4\nq{i_}\nLine cap: 40", cwd=str(P)), session_id="lp3", transcript_path=str(trr))
             jr.append(reason(run("pre", jd, led3))); run("post", dict(jd, tool_response={"status": "completed", "content": [{"type": "text", "text": ANSJ}]}), led3)
-        check("loop guard: 3 Judges with no question asked — the 4th waits and the next question goes straight to the user",
-              all("loop guard" not in x for x in jr[:3]) and "3 Judges ran and no question reached the user" in jr[3] and ask_("lp3", "Which lock order?") is None)
+        check("loop guard: Judges that ANSWERED settle their question — 4 in a row never trip the guard (bug 6)", all("loop guard" not in x for x in jr) and not (rst("lp3").get("loop") or {}).get("judge"))
+        HOJ = "STATUS: done\nCONFIDENCE: high\nVERDICT: HANDOFF\nQUESTION: q\nEVIDENCE:\n- src/a.cs:1 — x\nWHY: w"
+        ASKJ = "STATUS: done\nCONFIDENCE: high\nVERDICT: ASK\nQUESTION: Which lock order?\nEVIDENCE:\n- src/a.cs:1 — x\nWHY: w"
+        jr = []
+        for i_, rj_ in enumerate((HOJ, HOJ, HOJ, ASKJ, ASKJ, ASKJ, ASKJ)):
+            jd = dict(agent("opus", "medium", "abofles:abofles-judge", prompt=f"abofles: Payments & Gateway Integration / Judge · T4\nq{i_}\nLine cap: 40", cwd=str(P)), session_id="lp3", transcript_path=str(trr))
+            jr.append(reason(run("pre", jd, led3))); run("post", dict(jd, tool_response={"status": "completed", "content": [{"type": "text", "text": rj_}]}), led3)
+        check("loop guard: HANDOFF Judges do not count; 3 ASK Judges with no question asked — the 4th waits and the next question goes straight to the user",
+              all("loop guard" not in x for x in jr[:6]) and "3 Judges ran and no question reached the user" in jr[6] and ask_("lp3", "Which lock order?") is None)
         Path(P, "CLAUDE.md").write_text("## abofles overrides\n- Loop guard = off\n")
         run("start", {"session_id": "lp4", "cwd": str(P), "transcript_path": str(trr)}, led3)
         json.dump(dict(rst("lp4"), gate="off"), open(Path(rh, "st", "lp4.json"), "w"))
@@ -4474,8 +7006,11 @@ def main():
         env3 = dict(os.environ, ABOFLES_LEDGER_DIR=led2); env3.pop("ABOFLES_SESSION", None)
         r = mp("resolve", "1", "x", cwd=D, env=env3)
         check("memo.py: a write with no session state, no --session and no memo in the folder exits 4 and writes nothing", r.returncode == 4 and "nothing written" in r.stdout and not Path(D, ".claude").exists())
-        check("memo.py: naming a session allows the write (two sessions in one root)", mp("note", "named", "--session", "d1", cwd=D, env=env3).returncode == 0 and Path(D, ".claude", "abofles-memo.md").exists())
-        import shutil; shutil.rmtree(Path(D, ".claude"))
+        n19 = mp("note", "named", "--session", "d1", cwd=D, env=env3)
+        check("M19: naming a short session id that has no state is refused (exit 4), nothing written", n19.returncode == 4 and not Path(D, ".claude").exists())
+        W.state_path("d1").write_text(json.dumps({"root": str(D), "started": int(time.time())}))
+        check("memo.py: naming a session that has a state allows the write (two sessions in one root)", mp("note", "named", "--session", "d1", cwd=D, env=env3).returncode == 0 and Path(D, ".claude", "abofles-memo.md").exists())
+        import shutil; shutil.rmtree(Path(D, ".claude")); W.state_path("d1").unlink()
         r = mp("now", cwd=D, env=env3)
         check("memo.py: now with no session state exits 4 too", r.returncode == 4 and not Path(D, ".claude").exists())
         check("memo.py: show with no session state still reads", mp("show", cwd=D, env=env3).returncode == 0)
@@ -4537,10 +7072,11 @@ def main():
         Path(xh, "led", f"{sid_}.jsonl").write_text('{"agent_id": "abc123", "topic": "MineTopic", "status": "partial", "model": "opus", "effort": "high"}\n')
         r = sc_("status.py", "--baseline", "opus", "--session", sid_)
         check("scope: status shows this project's own ledger row", "MineTopic" in r.stdout and "abc123" in r.stdout and "OtherProjectTopic" not in r.stdout)
-        r = sc_("status.py", "--resolve", "abc1", "--session", sid_, "--trace", "re-checked: t")
+        r = sc_("status.py", "--resolve", "abc123", "--session", sid_, "--trace", "re-checked: t")
         check("scope: status --resolve <id> --session <uuid> settles the row the display shows", r.returncode == 0 and json.loads(Path(xh, "led", f"{sid_}.jsonl").read_text())["resolved"] is True)
         # memo.py: the user's own --session wins over the command's appended one
         subprocess.run([sys.executable, "-X", "utf8", "-c", "import sys,os; sys.path.insert(0, sys.argv[1]); import abofles_hook as h; h.memo_needs(os.getcwd(), 'sessAAAA', 'owner decision: pick A or B')", str(sdir.parent / "hooks")], cwd=xp, env=xenv)
+        Path(xh, "st", "mysessX.json").write_text(json.dumps({"root": os.path.realpath(xp), "started": 1}))  # a named session needs a state (M19)
         r = sc_("memo.py", "resolve", "1", "re-checked: t", "--trace", "--force", "--session", "mysessX", "--session", sid_)  # the item is sessAAAA's: --force
         memx = lambda s: Path(xp, ".claude", "abofles-memo.d", f"{s[:8]}.md")
         check("session: memo resolve with the user's --session X plus an appended UUID traces into X's file", r.returncode == 0 and "· resolved by hand: owner decision 1" in memx("mysessX").read_text() and "owner decision" not in (memx(sid_).read_text() if memx(sid_).exists() else ""))
@@ -4720,7 +7256,7 @@ def main():
         check("launcher: no Python at all -> one clear stderr line, exit 0 (hook never breaks the session)", r.returncode == 0 and "Python 3.8+ not found" in r.stderr and r.stdout == "")
         hj = json.loads((HOOK.parent / "hooks.json").read_text(encoding="utf-8"))
         cmds = [h["command"] for ev in hj["hooks"].values() for grp in ev for h in grp["hooks"] if "run.py" in h["command"]]
-        check("launcher: every hook command runs bash scripts/py --hook hooks/run.py <mode>, no `||` (no double run)", len(cmds) == 18 and all(c.startswith('bash "${CLAUDE_PLUGIN_ROOT}/scripts/py" --hook "${CLAUDE_PLUGIN_ROOT}/hooks/run.py" ') and "||" not in c for c in cmds))
+        check("launcher: every hook command runs bash scripts/py --hook hooks/run.py <mode>, no `||` (no double run)", len(cmds) == 19 and all(c.startswith('bash "${CLAUDE_PLUGIN_ROOT}/scripts/py" --hook "${CLAUDE_PLUGIN_ROOT}/hooks/run.py" ') and "||" not in c for c in cmds))
         r = subprocess.run(["bash", str(PY), "--hook", str(Path(state, "missing.py"))], capture_output=True, text=True, env=base)
         check("launcher: --hook always exits 0, even when Python fails (exit 2 would block the tool call)", r.returncode == 0)
         r = subprocess.run(["bash", str(PY), str(Path(state, "missing.py"))], capture_output=True, text=True, env=base)
@@ -4887,7 +7423,8 @@ def main():
               and all(v["kind"] in ("select", "number", "text", "list") and "default" in v and (v["kind"] == "select") == bool(v["options"]) for v in HG.OVERRIDE_KEYS.values())
               and all(HG.OVERRIDE_KEYS[k]["default"] == "pane" for k in ("Guide place", "Resume place", "Agents place")))
         forms = ["Unit Test / Work = haiku·medium", "Codebase Exploration & Onboarding / Read cap = 200", "Topic: Notifications & Messaging = T3", "Reviewers: FIN = finance, security, tester",
-                 "Workflow: Code Health = Read, Work, Verify", "Review: Security / T4 = opus·xhigh", "Financial & Amount Calculations / Verify = opus·xhigh", "Unit Test / Session = sonnet·medium"]
+                 "Workflow: Code Health = Read, Work, Verify", "Review: Security / T4 = opus·xhigh", "Financial & Amount Calculations / Verify = opus·xhigh", "Unit Test / Session = sonnet·medium",
+                 "Close: docs = README lists every new flag"]
         check("COMPLEX_FORMS: every complex form of overrides.md matches one, no simple key does", all(any(r.match(f) for r in HG.COMPLEX_FORMS) for f in forms)
               and not any(r.match(f"{k} = {v['default'] or 'x'}") for k, v in HG.OVERRIDE_KEYS.items() for r in HG.COMPLEX_FORMS))
 
@@ -4900,7 +7437,7 @@ def main():
         run("start", {"session_id": ps, "cwd": pd}, led)
         pn_ = gstate(ps).get("pane") or {}
         check("pane: start writes the payload with v, ts, root, sid, places, resume, agents, overrides, cmd", {"v", "ts", "root", "sid", "places", "resume", "spawns", "overrides", "cmd"} <= set(pn_) and pn_["v"] == 1 and pn_["sid"] == ps and pn_["root"] == pd)
-        check("pane: places are the effective ones (mod on -> pane)", pn_["places"] == {"guide": "pane", "resume": "pane", "spawns": "pane", "running": "pane", "tasks": "pane"})
+        check("pane: places are the effective ones (mod on -> pane)", pn_["places"] == {"guide": "pane", "resume": "pane", "spawns": "pane", "running": "pane", "tasks": "pane", "close": "pane"})
         # the task list: an open list gets the ask note on a prompt and the tick note every `Tasks nudge` calls; wrap_up or all done stops both
         tl, tp = "tasklist1", tempfile.mkdtemp()
         run("start", {"session_id": tl, "cwd": tp}, led)
@@ -4910,6 +7447,10 @@ def main():
         check("tasks: update_plan with an open step marks the list open", gstate(tl).get("plan_open") is True and [x["status"] for x in gstate(tl)["plan"]["items"]] == ["in_progress", "pending"] and gstate(tl)["pane"]["plan"]["items"][0]["content"] == "a")
         check("tasks: a new message while the list is open gets the add-a-step note", "add it as its own step" in ctx(run("prompt", {"session_id": tl, "cwd": tp, "prompt": "also show the percent"}, led)))
         check("tasks: a task notification gets no ask note", "add it as its own step" not in ctx(run("prompt", {"session_id": tl, "cwd": tp, "prompt": "<task-notification>x</task-notification>"}, led)))
+        check("prompt: a message that only starts with `<` is the user's (it gets the ask note); a real envelope is not",
+              "add it as its own step" in ctx(run("prompt", {"session_id": tl, "cwd": tp, "prompt": "<div> overflows on mobile, fix it"}, led))
+              and "add it as its own step" not in ctx(run("prompt", {"session_id": tl, "cwd": tp, "prompt": "<command-name>/abofles:status</command-name>"}, led))
+              and HG.prompt_envelope("<local-command-stdout>x</local-command-stdout>") and not HG.prompt_envelope("<3 thanks") and not HG.prompt_envelope("<task-notificationx>"))
         notes = [ctx(run("guard", {"session_id": tl, "cwd": tp, "tool_name": "Bash", "tool_input": {"command": "echo hi"}}, led)) for _ in range(12)]
         check("tasks: the 12th call with no list update gets the tick note, the 11 before it none", "since the task list last moved" in notes[11] and not any("since the task list last moved" in n for n in notes[:11]))
         en_ = ctx(run("edit", {"session_id": tl, "cwd": tp, "tool_name": "Edit", "tool_input": {"file_path": os.path.join(tp, "x.txt")}}, led))
@@ -4920,7 +7461,8 @@ def main():
         check("tasks: the last advance closes the list: no ask note", gstate(tl).get("plan_open") is False and "add it as its own step" not in ctx(run("prompt", {"session_id": tl, "cwd": tp, "prompt": "next"}, led)))
         run("plan", {"session_id": tl, "cwd": tp, "tool_name": "TodoWrite", "tool_input": {"todos": [{"content": "a", "status": "pending", "activeForm": "A"}]}}, led)
         run("plan", {"session_id": tl, "cwd": tp, "tool_name": "mcp__ccd_turn__wrap_up", "tool_input": {"recap": "r"}}, led)
-        check("tasks: TodoWrite opens a list, wrap_up closes it", gstate(tl).get("plan_open") is False)
+        check("tasks: TodoWrite opens a list, wrap_up hides it (no nudges), its step still open", gstate(tl).get("plan_open") is False
+              and gstate(tl)["plan"]["wrapped"] is True and [x["status"] for x in gstate(tl)["plan"]["items"]] == ["pending"] and gstate(tl)["pane"]["plan"]["wrapped"] is True)
         put_md(tp, "- Tasks nudge = off\n")
         run("plan", {"session_id": tl, "cwd": tp, "tool_name": UP, "tool_input": {"items": [{"content": "a", "status": "in_progress"}]}}, led)
         check("tasks: Tasks nudge = off: no ask note", "add it as its own step" not in ctx(run("prompt", {"session_id": tl, "cwd": tp, "prompt": "more"}, led)))
@@ -4962,13 +7504,50 @@ def main():
         now_ = HG.sess_read(pm_, "planmemo1")["Now"]
         check("memo Now: a list call writes it, marked from task list", "· from task list" in now_.splitlines()[0] and "Task      step 2 of 4 — B" in now_)
         run("plan", {"session_id": "planmemo1", "cwd": pm_, "tool_name": "mcp__ccd_turn__wrap_up", "tool_input": {"recap": "r"}}, led)
-        check("tasks: wrap_up with 3 steps open leaves the list open, as the app does: Now keeps the step", gstate("planmemo1").get("plan_open") is True
-              and [x["status"] for x in gstate("planmemo1")["plan"]["items"]] == ["completed", "in_progress", "pending", "pending"] and "step 2 of 4" in HG.sess_read(pm_, "planmemo1")["Now"])
+        nw_ = HG.sess_read(pm_, "planmemo1")["Now"]
+        check("P1: wrap_up with 3 steps open keeps every status and hides the list, as the app does: no nudges, Now says wrapped with 3 open (never between tasks)",
+              gstate("planmemo1").get("plan_open") is False and gstate("planmemo1")["plan"]["wrapped"] is True
+              and [x["status"] for x in gstate("planmemo1")["plan"]["items"]] == ["completed", "in_progress", "pending", "pending"]
+              and "Task      none — task list wrapped, 3 steps open" in nw_ and "step 2 of 4" not in nw_ and "between tasks" not in nw_ and not HG.session_task_open("planmemo", nw_))
         run("plan", {"session_id": "planmemo1", "cwd": pm_, "tool_name": UP, "tool_input": {"advance": True}}, led)
-        check("tasks: the next turn's advance goes on from there", [x["status"] for x in gstate("planmemo1")["plan"]["items"]] == ["completed", "completed", "in_progress", "pending"])
-        run("plan", {"session_id": "planmemo1", "cwd": pm_, "tool_name": UP, "tool_input": {"done": [3], "start": 4}}, led)
+        check("P2: an advance after the wrap-up resumes the list: open again, the next step in progress, Now on that step",
+              gstate("planmemo1").get("plan_open") is True and gstate("planmemo1")["plan"]["wrapped"] is False
+              and [x["status"] for x in gstate("planmemo1")["plan"]["items"]] == ["completed", "completed", "in_progress", "pending"]
+              and "Task      step 3 of 4 — C" in HG.sess_read(pm_, "planmemo1")["Now"] and "wrapped" not in HG.sess_read(pm_, "planmemo1")["Now"])
+        run("plan", {"session_id": "planmemo1", "cwd": pm_, "tool_name": UP, "tool_input": {"items": its_}}, led)
+        check("tasks: the next update_plan with items opens a new list", gstate("planmemo1").get("plan_open") is True and "step 2 of 4" in HG.sess_read(pm_, "planmemo1")["Now"])
+        run("plan", {"session_id": "planmemo1", "cwd": pm_, "tool_name": UP, "tool_input": {"done": [2, 3], "start": 4}}, led)
         run("plan", {"session_id": "planmemo1", "cwd": pm_, "tool_name": "mcp__ccd_turn__wrap_up", "tool_input": {"recap": "r"}}, led)
-        check("memo Now: wrap_up with one step open closes the list and takes the step out of Now", gstate("planmemo1").get("plan_open") is False and "step " not in HG.sess_read(pm_, "planmemo1")["Now"] and "none — between tasks" in HG.sess_read(pm_, "planmemo1")["Now"])
+        check("memo Now: wrap_up with one step open hides the list and takes its step lines out of Now, naming the open step", gstate("planmemo1").get("plan_open") is False
+              and "step 4 of 4" not in HG.sess_read(pm_, "planmemo1")["Now"] and "Task      none — task list wrapped, 1 step open" in HG.sess_read(pm_, "planmemo1")["Now"])
+        run("plan", {"session_id": "planmemo1", "cwd": pm_, "tool_name": UP, "tool_input": {"done": [4]}}, led)
+        check("memo Now: the list finished after a wrap-up: between tasks", gstate("planmemo1").get("plan_open") is False and "none — between tasks" in HG.sess_read(pm_, "planmemo1")["Now"])
+        lone_ = [{"content": "A", "status": "completed"}, {"content": "B", "status": "pending"}]
+        check("tasks: a lone pending step is ticked by nothing but advance (a wrap_up keeps it pending)", all(HG.plan_apply(lone_, t, i)[1]["status"] == "pending" for t, i in (
+              ("TaskUpdate", {"taskId": "1", "status": "completed"}), (UP, {"done": [1]}), (UP, {}), (UP, {"start": 9}), (UP, {"advance": False}), ("mcp__ccd_turn__wrap_up", {})))
+              and HG.plan_apply(lone_, UP, {"advance": True})[1]["status"] == "in_progress")
+        abc_ = [{"content": c, "status": "pending"} for c in "ABC"]
+        check("tasks: advance \"true\", done and start as strings of numbers count like their typed forms",
+              [x["status"] for x in HG.plan_apply(abc_, UP, {"start": "1"})] == ["in_progress", "pending", "pending"]
+              and [x["status"] for x in HG.plan_apply(HG.plan_apply(abc_, UP, {"start": "1"}), UP, {"advance": "true"})] == ["completed", "in_progress", "pending"]
+              and [x["status"] for x in HG.plan_apply(abc_, UP, {"done": ["1", "3"]})] == ["completed", "pending", "completed"]
+              and [x["status"] for x in HG.plan_apply(abc_, UP, {"done": "2"})] == ["pending", "completed", "pending"]
+              and [x["status"] for x in HG.plan_apply(abc_, UP, {"advance": "false", "done": ["x"], "start": "0"})] == ["pending"] * 3)
+        check("tasks: a call with items and advance / done / start applies the items only, as the app does",
+              [(x["content"], x["status"]) for x in HG.plan_apply(abc_, UP, {"items": [{"content": "X", "status": "in_progress"}, {"content": "Y", "status": "pending"}], "advance": True, "done": [1], "start": 2})]
+              == [("X", "in_progress"), ("Y", "pending")])
+        tk_ = HG.plan_apply([], "TaskCreate", {"subject": "one"}, {"task": {"id": "7", "subject": "one"}})
+        tk_ = HG.plan_apply(tk_, "TaskCreate", {"subject": "two"}, "Task #9 created successfully: two")
+        tk_ = HG.plan_apply(tk_, "TaskCreate", {"subject": "three"})
+        check("tasks: TaskCreate keeps the id its result names (dict or text), else the next number", [x["id"] for x in tk_] == ["7", "9", "3"])
+        tk_ = HG.plan_apply(HG.plan_apply(tk_, "TaskUpdate", {"taskId": "9", "status": "completed"}), "TaskUpdate", {"taskId": "3", "status": "in_progress"})
+        check("tasks: TaskUpdate status=completed ticks the step with its id, in_progress starts one, deleted takes it out",
+              [x["status"] for x in tk_] == ["pending", "completed", "in_progress"] and [x["content"] for x in HG.plan_apply(tk_, "TaskUpdate", {"taskId": "7", "status": "deleted"})] == ["two", "three"])
+        tq2 = tempfile.mkdtemp(); trp2 = os.path.join(tq2, "t.jsonl")
+        with open(trp2, "w") as f_:
+            f_.write("\n".join([tu("c1", "TaskCreate", {"subject": "one"}), tu("c2", "TaskCreate", {"subject": "two"}), tu("c3", "TaskUpdate", {"taskId": "1", "status": "completed"}),
+                                 tu("c4", "TaskUpdate", {"taskId": "2", "status": "in_progress"})]) + "\n")
+        check("tasks: a restart rebuilds the Task* list with its ticks (no stuck 0/N)", [x["status"] for x in HG.plan_from_transcript(trp2)] == ["completed", "in_progress"])
         run("plan", {"session_id": "planmemo1", "cwd": pm_, "tool_name": UP, "tool_input": {"items": its_}}, led)
         HG.memo_now(pm_, "Task      my own words\nNext      mine", "planmemo1")
         run("plan", {"session_id": "planmemo1", "cwd": pm_, "tool_name": UP, "tool_input": {"advance": True}}, led)
@@ -5097,7 +7676,7 @@ def main():
         check("bill --history: a row with real usage shows tokens, $ and its saved %, a row without shows dashes",
               len(hl) == 2 and "1K tok" in hl[0] and "$0.01" in hl[0] and "saved 75%" in hl[0] and "partial" in hl[1] and "low" in hl[1] and "saved 50%" in hl[1])
         check("bill --history: the totals line carries the same sums as the pane payload",
-              any("Total: " in l and "· 3K tokens · $0.04 (same tokens on Opus 5.5 · High: $0.10) · saved 60% · 1 open FAIL" in l for l in bh)
+              any("Total: " in l and "· 3K tokens · $0.04 (same tokens on Opus 5.5: $0.10) · saved 60% · 1 open FAIL" in l for l in bh)
               and {k: v for k, v in HG.history_totals([json.loads(l) for l in Path(led, "histsess.jsonl").read_text().splitlines()]).items() if k not in ("by_model", "base_label")} == {"spawns": 2, "tokens": 3000, "usd": 0.04, "base_usd": 0.1, "saved_pct": 60, "open_fail": 1, "sessions": 0})
         check("commands: /abofles:history runs bill.py --history; /abofles:pane names the mod and falls back to memo.py show + bill.py --history",
               "bill.py\" --history" in (HOOK.parent.parent / "commands" / "history.md").read_text() and (lambda t: "abofles-guide" in t and "memo.py\" show" in t and "bill.py\" --history" in t)((HOOK.parent.parent / "commands" / "pane.md").read_text()))
@@ -5198,8 +7777,8 @@ def main():
         _so = _iuo.spec_from_file_location("abofles_overrides_race", str(OVP)); OVM = _iuo.module_from_spec(_so); _so.loader.exec_module(OVM)
         dr = ovproj(); fr = dr / "CLAUDE.md"; fr.write_text("## abofles overrides\n- Pace = fast\n")
         _edit = OVM.edit_text
-        def _racing(old, sets, raw):
-            out = _edit(old, sets, raw); fr.write_text("## abofles overrides\n- Pace = fast\n- Break = 7\n"); return out  # another writer lands between read and write
+        def _racing(old, sets, raw, close=None):
+            out = _edit(old, sets, raw, close); fr.write_text("## abofles overrides\n- Pace = fast\n- Break = 7\n"); return out  # another writer lands between read and write
         OVM.edit_text = _racing
         _argv, _stdin, _env = sys.argv, sys.stdin, os.environ.get("ABOFLES_STATE_DIR")
         sys.argv = ["overrides.py", "set", "--scope", "project", "--cwd", str(dr)]; sys.stdin = io.StringIO(json.dumps({"set": {"Pace": "normal"}})); os.environ["ABOFLES_STATE_DIR"] = state
@@ -5227,11 +7806,11 @@ def main():
         rd_ = (HOOK.parent.parent / "README.md").read_text()
         sec_ = rd_[rd_.index("### Overrides"):]
         check("README: the Overrides table lists every OVERRIDE_KEYS key", all(f"| `{k}` |" in sec_ for k in HG.OVERRIDE_KEYS))
-        form_marks = ["Topic / Side cap", "Topic / Side =", "Topic / Session =", "Topic: Name", "Reviewers:", "Workflow:", "Review: <Tag>"]  # COMPLEX_FORMS order
+        form_marks = ["Topic / Side cap", "Topic / Side =", "Topic / Session =", "Topic: Name", "Reviewers:", "Workflow:", "Review: <Tag>", "Close: <name>"]  # COMPLEX_FORMS order
         check("README: ... and every COMPLEX_FORMS form (one row each)", len(form_marks) == len(HG.COMPLEX_FORMS) and all(re.search(r"^\| `" + re.escape(m), sec_, re.M) for m in form_marks))
         check("README: ... with defaults from the code, the pane editor, /abofles:pane and /abofles:history", all(f"| `{k}` |" in sec_ and (v["default"] in sec_ if v["default"] else True) for k, v in HG.OVERRIDE_KEYS.items()) and "/abofles:pane" in sec_ and "/abofles:history" in sec_ and "pane" in sec_.split("| `Main session`")[0])
         check("overrides.md: the six place forms are described and the form count matches the code", all(f"`{w} place = " in (HOOK.parent.parent / "skills/abofles/references/overrides.md").read_text() for w in ("Guide", "Resume", "Agents", "Receipt", "Running", "Tasks"))
-              and f"Fifty-one forms" in (HOOK.parent.parent / "skills/abofles/references/overrides.md").read_text() and len(HG.OVERRIDE_KEYS) + len(HG.COMPLEX_FORMS) == 51)
+              and f"Fifty-seven forms" in (HOOK.parent.parent / "skills/abofles/references/overrides.md").read_text() and len(HG.OVERRIDE_KEYS) + len(HG.COMPLEX_FORMS) == 57)
 
         # a receipt's Journal line keeps every field, and reads back
         rc_ = HG.parse_receipt("🧾 **1 Agent · 63K Tokens · $0.03**\n- `done` → the page\n- `why` → asked\n- `workflow` → Read ✓ · Work ✓\n- `check` → 181 pass\n- `open` → none\n- `next` → run /compact")
@@ -5306,11 +7885,11 @@ def main():
         check("check all: no items and one item -> None", HG.guide_check_all([]) is None and HG.guide_check_all([ci_("a", "abofles: x")]) is None)
         check("check all: 3 items -> n 3 and one numbered instruction holding each item's own Use text in ladder order",
               ca_["n"] == 3 and ca_["fill"].startswith("abofles: work through every open item") and ca_["fill"].index("1) fix the open FAIL on Pay.") < ca_["fill"].index("2) owner decision 3 is open: cap.") < ca_["fill"].index("3) collect the background agents"))
-        check("check all: Needs-you items are resolved only with evidence via memo.py resolve <n> <note>, owner decisions are asked, not guessed",
-              "memo.py" in ca_["fill"] and "resolve <n> --trace \"<note>\"" in ca_["fill"] and "only with evidence" in ca_["fill"] and "AskUserQuestion" in ca_["fill"] and "never guessed" in ca_["fill"])
+        check("check all: Needs-you items are resolved only with evidence via memo.py resolve <#id> <note>, owner decisions are asked, not guessed",
+              "memo.py" in ca_["fill"] and "resolve <#id> --trace \"<note>\"" in ca_["fill"] and "only with evidence" in ca_["fill"] and "AskUserQuestion" in ca_["fill"] and "never guessed" in ca_["fill"])
         cs2_ = HG.guide_check_all([ci_("a", "abofles: fix the open FAIL on Pay."), ci_("b", "abofles: x")], "sess 1")
         check("check all: the resolve hint carries --session <sid> and --trace like the single-item recheck, so a resolve writes the Journal line",
-              "resolve <n> --session 'sess 1' --trace \"<note>\"" in cs2_["fill"] and "memo.py" in cs2_["fill"])
+              "resolve <#id> --session 'sess 1' --trace \"<note>\"" in cs2_["fill"] and "memo.py" in cs2_["fill"])
         wi_ = lambda i, t, f: HG.guide_item("🧠", t, f, id=i)
         cw_ = HG.guide_check_all([wi_("ctx:600", "c", "/compact"), wi_("memo-age", "m", "/abofles:memo"), wi_("budget", "b", "/abofles:agents"), ci_("z", "abofles: fix it.")])["fill"]
         check("check all: context, memo-age and budget items say what to do in words, not a bare slash command",
@@ -5438,9 +8017,25 @@ def main():
         check("budget raise: ... a sync start then raises 2 → 4, and the Session cap warning still fires after the raise", allowed(orz_) and "budget raised 2 → 4 (auto, raise 1/2)" in ctx(orz_) and gstate("bcap")["budget_raise"]["n"] == 1)
         pr_ = dict(agent("haiku", "low", prompt="abofles: Unit Test / Work · T1\nq\nLine cap: 20", cwd=cwd), session_id="bcap")
         pr_["tool_input"] = dict(pr_["tool_input"], run_in_background=True)
+        check("budget raise: ... the session cap passed after the raise is warned once (post)", gstate("bcap").get("session_cap_warned") == 1)
+        Path(cwd, "CLAUDE.md").write_text("## abofles overrides\n- Parallel = 1\n")
         check("budget raise: ... and the Parallel cap still denies a background start after a raise", "already running (Parallel = " in reason(run("pre", pr_, led)))
+        Path(cwd, "CLAUDE.md").write_text("## abofles overrides\n- Parallel = 1\n- Session cap = 1\n")
+        check("batch 5 #36: session cap warned once -> the next agent start is denied", "already warned" in reason(run("pre", pr_, led)))
+        jq_ = dict(agent("sonnet", "low", "abofles:abofles-judge", prompt="abofles: Unit Test / Judge · T1\nq\nLine cap: 40", cwd=cwd), session_id="bcap")
+        check("batch 5 #36: ... a Judge still starts (asking the user goes through the question gate)", "already warned" not in reason(run("pre", jq_, led)))
+        vq_ = dict(agent("sonnet", "low", "abofles:abofles-verifier", prompt="abofles: Unit Test / Verify · T1\nq\nLine cap: 10", cwd=cwd), session_id="bcap")
+        check("batch 5 #36: ... and so does a Verify (a re-check after a FAIL must not wait on the cap)", "already warned" not in reason(run("pre", vq_, led)))
         sc_ = ctx(run("post", dict(agent("haiku", "low", prompt="abofles: Unit Test / Work · T1\nq\nLine cap: 20", cwd=cwd, resp=good), session_id="bcap"), led))
-        check("budget raise: session cap passed is still warned after a raise", "session cap 1 units passed" in sc_)
+        check("batch 5 #36: the session cap warning is not repeated after the first one", "session cap 1 units passed" not in sc_)
+        _old_ld = _H0.LEDGER_DIR; _H0.LEDGER_DIR = Path(led)
+        try:
+            d36_ = (_H0.session_cap_deny(cwd, {"session_cap_warned": 1}, "bcap"), _H0.session_cap_deny(cwd, {}, "bcap"))
+            Path(cwd, "CLAUDE.md").write_text("## abofles overrides\n- Parallel = 1\n- Session cap = 2\n")
+            check("batch 5 #36: deny only after the warning at this cap value; a raised cap warns again before it denies",
+                  _H0.session_spent("bcap") > 1 and "session cap 1 units passed" in (d36_[0] or "") and d36_[1] is None and _H0.session_cap_deny(cwd, {"session_cap_warned": 1}, "bcap") is None)
+        finally:
+            _H0.LEDGER_DIR = _old_ld
         Path(cwd, "CLAUDE.md").unlink()
         # gate re-answer: Auto again starts a fresh count and clears the raises
         run("decision", {"session_id": "bcap", "cwd": cwd, "tool_name": "AskUserQuestion", "tool_input": {"questions": [{"question": "Abo Fles agent gate: how many?", "options": []}]}, "tool_response": {"answers": {"Abo Fles agent gate: how many?": "Auto (recommended)"}}}, led)
@@ -5557,6 +8152,12 @@ def main():
         # Poll guard (2026-11-18: a background `pgrep -f` wait loop matched its own shell and ran 12+ hours)
         pg = lambda cmd, bg=False, atype=None: run("guard", dict({"session_id": "pg", "cwd": cwd, "tool_name": "Bash", "tool_input": dict({"command": cmd}, **({"run_in_background": True} if bg else {}))}, **({"agent_type": atype} if atype else {})), led)
         loop_ = 'until [ "$(pgrep -f test_hooks_dbg | wc -l)" = "0" ]; do sleep 5; done'
+        check("poll guard: by default the self-matching loop is denied (it can never end)", not Path(cwd, "CLAUDE.md").exists()
+              and pg(loop_, True)["hookSpecificOutput"].get("permissionDecision") == "deny" and pg("while pgrep -f myjob; do sleep 1; done")["hookSpecificOutput"].get("permissionDecision") == "deny")
+        check("poll guard: a self-matching loop with a counter, a -lt limit, a seq limit or a timeout is bounded: not flagged", all(pg(c) is None for c in (
+              "i=0; while pgrep -f myjob; do i=$((i+1)); [ $i -ge 30 ] && break; sleep 1; done", "n=0; while [ $n -lt 30 ] && pgrep -f myjob; do n=$((n+1)); sleep 1; done",
+              "for i in $(seq 30); do pgrep -f myjob || break; sleep 1; done; while pgrep -f myjob && [ $i -lt 30 ]; do sleep 1; done", "timeout 60 bash -c 'while pgrep -f myjob; do sleep 1; done'")))
+        Path(cwd, "CLAUDE.md").write_text("## abofles overrides\n- Poll guard = warn\n")
         o_ = pg(loop_, True, "abofles:abofles-worker")
         check("poll guard: the 2026-11-18 loop (an agent, background) is warned, naming the pattern and the fixes", "self-matching wait" in ctx(o_) and "`pgrep -f test_hooks_dbg`" in ctx(o_)
               and "'[t]est_hooks_dbg'" in ctx(o_) and "wait $PID" in ctx(o_) and "timeout N" in ctx(o_) and "permissionDecision" not in json.dumps(o_))
@@ -5601,7 +8202,7 @@ def main():
         Path(cwd, "CLAUDE.md").write_text("## abofles overrides\n- Poll guard = off\n")
         check("poll guard: Poll guard = off is silent", pg(loop_, True) is None and pg("until [ -f done ]; do sleep 5; done", True) is None)
         Path(cwd, "CLAUDE.md").unlink()
-        check("poll guard: a pattern that is no valid regex is matched as text, no crash", "`pgrep -f job(`" in ctx(pg("while pgrep -f 'job(' >/dev/null; do sleep 2; done")))
+        check("poll guard: a pattern that is no valid regex is matched as text, no crash", "`pgrep -f job(`" in reason(pg("while pgrep -f 'job(' >/dev/null; do sleep 2; done")))
 
         # security review (T4): git guard forms, question gate, memo, repo root
         for cmd_, op_ in (("g\\it reset --hard", "reset --hard"), ('gi""t reset --hard', "reset --hard"), ("GIT reset --hard", "reset --hard"),
@@ -5695,6 +8296,7 @@ def main():
             check("memo_resolve_matching (review): ... its own session's item is", n_ == 1)
             SR.memo_needs(mproj, "AbCdEf12-x", "owner decision: keep the wide banner")
             k_ = next(l for l in SR.memo_read(mproj)["Needs you"].splitlines() if "wide banner" in l).split(".")[0]
+            SR.save_state("AbCdEf12-x", {"started": int(time.time()), "root": os.path.realpath(mproj)})  # a named session needs a state (M19)
             r_ = subprocess.run([sys.executable, str(HOOK.parent.parent / "scripts" / "memo.py"), "resolve", k_, "user said keep it", "--trace", "--session", "AbCdEf12-x"], capture_output=True, text=True, cwd=mproj)
             jr_ = SR.session_memo_path(mproj, "AbCdEf12-x").read_text() if SR.session_memo_path(mproj, "AbCdEf12-x").exists() else ""
             check("memo.py resolve (review): the trace strips an upper-case session tag too (one tag pattern with the hook)", r_.returncode == 0 and "keep the wide banner" in jr_ and "(s:AbCdEf12" not in jr_)
@@ -5849,7 +8451,10 @@ def main():
         idB = M.need_id(needs(RA)[1])
         M.memo_move(str(RA), str(RB), "isoAAAAA-1")
         check("isolation: ids stay the same when the items are renumbered (A's item moved away, B's went from 2 to 1)", needs(RA)[0].startswith("1. [ ] ") and "pick the rounding" in needs(RA)[0] and M.need_id(needs(RA)[0]) == idB and len(needs(RA)) == 1)
-        check("isolation: ... and the number stays an alias", M.memo_resolve(str(RA), 1, "x", "isoBBBBB-2") is not None and M.memo_reopen(str(RA), "#" + idB, "isoBBBBB-2") is not None)
+        rn_ = M.memo_apply(str(RA), "resolve", "isoBBBBB-2", ref="1", note="x")
+        check("isolation: ... a bare number shown before the renumber is refused, naming the #id; the #id settles it",
+              (not rn_ and rn_.code == "renumbered" and f"#{idB}" in rn_.reason or rn_ and M.needs_shown_map(str(RA), "isoBBBBB-2") is None)
+              and (rn_ or M.memo_resolve(str(RA), "#" + idB, "x", "isoBBBBB-2") is not None) and M.memo_reopen(str(RA), "#" + idB, "isoBBBBB-2") is not None)
         old_ = ["1. [ ] 11-01 09:00 · owner decision: hand written one", "2. [ ] 11-01 09:01 · owner decision: legacy mine? (s:isoBBBBB)", "3. [x] 11-01 09:02 · owner decision: done one (s:isoBBBBB p:RA) → resolved 11-01 09:05: ok"]
         sec_ = M.memo_read(str(RA)); sec_["Needs you"] = "\n".join(old_); M.memo_write(str(RA), sec_)
         before_ = M.memo_path(str(RA)).read_text()
@@ -5948,6 +8553,17 @@ def main():
         git_header_291_tests(check)
         prompt_checkup_tests(check)
         user_prompt_checkup_tests(check)
+        memo_fix_backlog_tests(check)
+        batch6_tests(check)
+        verifier_lock_plan_tests(check)
+        batch5_tests(check)
+        batch7_tests(check)
+        close_check_tests(check)
+        close_verdict_tests(check)
+        close_agent_tests(check)
+        close_p5_tests(check)
+        close_8a_tests(check)
+        close_8b_tests(check)
 
     print(f"\n{'ALL PASS' if not fails else f'{fails} FAILED'}")
     sys.exit(1 if fails else 0)

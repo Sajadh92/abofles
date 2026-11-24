@@ -2,7 +2,7 @@
 
 Read when starting an agent in the background, when a model is unavailable, when the abofles agents are missing, or after a verifier FAIL.
 
-9. **Model not available** (the agent fails with a model-access or permission error): restart one step down at the next effort up — `fable` → `opus·xhigh`, `opus` → `sonnet·xhigh`, `sonnet` → `haiku·high`. Say so in the route line with the modifier ` · Fallback: Fable 5.1 Unavailable`. Never retry the same model.
+9. **Model not available** (the agent fails with a model-access or permission error): restart one step down at the next effort up — `fable` → `opus·xhigh`, `opus` → `sonnet·xhigh`, `sonnet` → `haiku·high`. Say so in the route line with the modifier ` · Fallback: Fable 5.2 Unavailable`. Never retry the same model.
 
 10. **Background agents.** Pass `run_in_background: false` on abofles agents unless they are a parallel group. A background reply reaches the hooks only through `SubagentStop`, which fills the ledger silently (any hook output there would be fed back to the subagent and replace its reply); for a background agent **you** check the `STATUS`/`CONFIDENCE` header when the result arrives and apply Step 4 yourself. `/abofles:bill` lists the warnings the hook recorded for background agents.
 

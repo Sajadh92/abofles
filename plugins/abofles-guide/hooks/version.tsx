@@ -66,7 +66,9 @@ function cleanRelease(x: unknown): Release | null {
 // With `Update check = off` no request is made. Never throws.
 export async function checkRelease($: EngineInterface, force = false) {
   try {
-    if ((await getPane($))?.version?.check === 'off') return
+    // `Update check = off`: no request. Before the hook's state is read the setting is unknown, so no request either.
+    const v = (await getPane($))?.version
+    if (!v || v.check === 'off') return
     let cur = await read($, release)
     if (!cur) {
       cur = cleanRelease(await $.store.get('release').catch(() => undefined))
@@ -75,12 +77,23 @@ export async function checkRelease($: EngineInterface, force = false) {
     const now = await $.clock.now()
     if (!force && cur && now - cur.checkedAt < CHECK_MS) return
     const r = await $.http.fetch(`https://api.github.com/repos/${REPO}/releases?per_page=30`, { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'abofles-guide' } })
-    if (!r.ok) return
+    if (!r.ok) {
+      // refused (403, rate limit) or not found: the attempt counts, so the next ask waits the same 6 hours
+      const tried = { ...(cur ?? { abofles: null, guide: null }), checkedAt: now }
+      await update($, release, () => tried)
+      return
+    }
     const next = releasesOf(JSON.parse(r.text), now)
     await update($, release, () => next)
     await $.store.set('release', next).catch(() => {})
   } catch {
-    // offline or refused: the card shows what it knows
+    // offline: the card shows what it knows, and the attempt counts (no request on every turn while offline)
+    try {
+      const now = await $.clock.now()
+      await update($, release, c => ({ ...(c ?? { abofles: null, guide: null }), checkedAt: now }))
+    } catch {
+      // nothing to stamp
+    }
   }
 }
 
@@ -135,6 +148,12 @@ async function reloadNow($: EngineInterface) {
   try {
     await $.command.run({ command: 'reload-plugins', args: '' })
   } catch {
+    // a typed draft is never replaced: the command only runs as the first thing in the box
+    const draft = (await $.prompt.read().catch(() => ({ text: '' }))).text.trim()
+    if (draft) {
+      $.ui.toast('Send or clear your draft first, then type /reload-plugins')
+      return
+    }
     const r = await $.prompt.fill({ text: '/reload-plugins', mode: 'replace' }).catch(() => ({ isFilled: false }))
     if (!r.isFilled) $.ui.toast('Type /reload-plugins to load the new version')
   }

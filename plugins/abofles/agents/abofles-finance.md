@@ -1,6 +1,6 @@
 ---
 name: abofles-finance
-description: "Abo Fles Finance reviewer (side Verify, tag Finance). Reviews a finished change for money correctness: rounding and precision, currency handling, ledger invariants, idempotency and double entry, limits and fees. Returns PASS or FAIL with evidence. Use after Verify on 🟠/🔴 changes in Money & Finance topics."
+description: "Abo Fles Finance reviewer (side Verify, tag Finance): rounding and precision, currency, ledger invariants, idempotency, limits and fees. Returns PASS or FAIL with evidence."
 tools: Read, Glob, Grep, Bash
 ---
 

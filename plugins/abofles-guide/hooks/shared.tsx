@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface } from 'claude-code'
 
-import type { Guide, GuideItem, Pane, PaneCheckup, PaneDecision, PaneDecisions, PaneHealth, PaneLive, PaneModel, PaneOverrideKey, PaneOverrides, PanePlaces, PaneResume, PaneRow, PaneSpawns, PaneTotals, PaneVersion, Plan, PlanStatus } from '../types'
+import type { CloseLine, CloseState, Guide, GuideItem, Pane, PaneCheckup, PaneClose, PaneDecision, PaneDecisions, PaneHealth, PaneLive, PaneModel, PaneOverrideKey, PaneOverrides, PanePlaces, PaneResume, PaneRow, PaneSpawns, PaneTotals, PaneVersion, Plan, PlanStatus } from '../types'
 import { ICONS, emptyCard, headerBlock, headerWidth, paneWidth, svgOf, textOf, tileSvg } from './html'
 import type { Block, IconName, Tone } from './html'
 
@@ -486,11 +486,12 @@ export function othersToggle($: EngineInterface, ui: Ui, folds: Folds, id: strin
   return <Button key={`others:${id}`} label={label} plain dimColor onPress={() => setFold($, `others:${id}`, !open)} />
 }
 
-export function moreButton($: EngineInterface, ui: Ui, folds: Folds, id: string, total: number, limit: number, look?: Look) {
+// `have`: the rows the pane holds, when it holds fewer than `total` (the history keeps only the newest): the button names what it shows.
+export function moreButton($: EngineInterface, ui: Ui, folds: Folds, id: string, total: number, limit: number, look?: Look, have = total) {
   const { Button } = ui
-  if (total <= limit) return null
+  if (Math.min(total, have) <= limit) return null
   const all = isOpen(folds, `more:${id}`, false)
-  const label = all ? 'Show fewer' : `Show all ${total}`
+  const label = all ? 'Show fewer' : have < total ? `Show last ${have} of ${total}` : `Show all ${total}`
   if (look && hasSvg(ui, look)) return <Button key={`more:${id}`} label={glyph(look, all ? GLYPH.less : GLYPH.more, label)} variant="secondary" onPress={() => setFold($, `more:${id}`, !all)} />
   return <Button key={`more:${id}`} label={label} plain dimColor onPress={() => setFold($, `more:${id}`, !all)} />
 }
@@ -593,7 +594,7 @@ export const fmtTokens = (n: number): string => (n >= 1e6 ? `${(n / 1e6).toFixed
 export const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`
 
 const EFFORT: Record<string, string> = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra', max: 'Max' }
-const MODEL_NAME: Record<string, string> = { haiku: 'Haiku 5.5', sonnet: 'Sonnet 5.5', opus: 'Opus 5.5', fable: 'Fable 5.1' }
+const MODEL_NAME: Record<string, string> = { haiku: 'Haiku 5.5', sonnet: 'Sonnet 5.5', opus: 'Opus 5.5', fable: 'Fable 5.2' }
 const capFirst = (t: string): string => (t ? t[0]!.toUpperCase() + t.slice(1) : t)
 export function modelName(model: string, effort: string, labels: Record<string, string> = {}): string {
   const m = model ? labels[model] ?? MODEL_NAME[model] ?? capFirst(model) : '?'
@@ -676,6 +677,7 @@ function cleanPlaces(raw: unknown): PanePlaces {
     spawns: p.spawns === 'pane' ? 'pane' : 'output',
     running: p.running === 'off' ? 'off' : 'pane',
     tasks: p.tasks === 'off' ? 'off' : 'pane',
+    close: p.close === 'off' || p.close === 'chat' ? p.close : 'pane',
   }
 }
 
@@ -720,6 +722,28 @@ function cleanHealth(v: unknown): PaneHealth | null {
   if (!isObj(v)) return null
   const n = (x: unknown) => (isNum(x) && x > 0 ? x : 0)
   return { archived_items: n(v.archived_items), archived_sessions: n(v.archived_sessions), trimmed: n(v.trimmed), deduped: n(v.deduped), line: strOr(v.line, '') }
+}
+
+// The stored close check (`st["close"]`, from `memo.py close-check`): its lines as the script wrote them, the verdict, and whether an
+// edit or a prompt since made it stale. A line of an unknown state reads as `not checked`, never as ✓.
+const CLOSE_STATES: CloseState[] = ['⛔', '⚠', '✓', 'not checked']
+export function cleanClose(v: unknown): PaneClose | null {
+  if (!isObj(v) || !Array.isArray(v.lines)) return null
+  // every line is kept (the view ranks them, blockers first): a cap here could drop a late agent ⛔
+  const lines: CloseLine[] = v.lines.filter(isObj).slice(0, 500).map((l, n) => ({
+    id: strOr(l.id, `c${n + 1}`),
+    state: CLOSE_STATES.includes(l.state as CloseState) ? (l.state as CloseState) : 'not checked',
+    src: strOr(l.src, ''),
+    text: strOr(l.text, ''),
+    fix: strOr(l.fix, ''),
+    waived: isObj(l.waived),
+    byRule: isStr(l.by_rule) && l.by_rule ? l.by_rule : null,
+    by: isStr(l.by) && l.by ? l.by : null,
+    judges: isStr(l.judges) && l.judges ? l.judges : null,
+  }))
+  const verdict = v.verdict === '✅' || v.verdict === '⛔' || v.verdict === '⚠' ? v.verdict : 'not checked'
+  const agent = v.agent === 'yes' || v.agent === 'no' || v.agent === 'off' ? v.agent : null
+  return { lines, verdict, ts: isNum(v.ts) ? v.ts : 0, stale: v.stale === true, gitRule: strOr(v.git_rule, 'pushed'), agent }
 }
 
 // The Prompt checkup counts (newer hooks); anything else is null, so the Agents page draws no block.
@@ -813,11 +837,12 @@ function cleanPlan(raw: unknown): Plan | null {
   if (!isObj(raw) || !Array.isArray(raw.items)) return null
   const items = raw.items
     .filter(isObj)
-    .map(x => ({ content: strOr(x.content, '').slice(0, 300), status: (x.status === 'completed' || x.status === 'in_progress' ? x.status : 'pending') as PlanStatus }))
+    .map(x => ({ content: strOr(x.content, '').slice(0, 300), status: (x.status === 'completed' || x.status === 'in_progress' ? x.status : 'pending') as PlanStatus, ...(isStr(x.id) || isNum(x.id) ? { id: String(x.id) } : {}) }))
     .filter(x => x.content)
     .slice(0, 200)
   if (items.length === 0) return null
-  return { items, ts: isNum(raw.ts) ? raw.ts : 0, closed: items.every(x => x.status === 'completed') }
+  const wrapped = raw.wrapped === true
+  return { items, ts: isNum(raw.ts) ? raw.ts : 0, closed: wrapped || items.every(x => x.status === 'completed'), ...(wrapped ? { wrapped } : {}) }
 }
 
 export function cleanPane(raw: unknown): Pane | null {
@@ -838,6 +863,7 @@ export function cleanPane(raw: unknown): Pane | null {
       checkup: cleanCheckup(raw.checkup),
       plan: cleanPlan(raw.plan),
       version: cleanVersion(raw.version),
+      close: cleanClose(raw.close),
       tasks_hide: raw.tasks_hide === 'auto' || raw.tasks_hide === 'next' ? raw.tasks_hide : 'manual',
       cmd: { overrides: scriptArgv(cmd.overrides, ['overrides.py']) },
     }
@@ -851,6 +877,8 @@ export async function applyOverrides($: EngineInterface, raw: unknown) {
   const ov = cleanOverrides(raw)
   if (ov) await update($, pane, cur => (cur ? { ...cur, overrides: ov } : cur))
   await refresh($) // the script also rewrote the state file: a changed place (Guide place = band) shows at once
+  // the script may have skipped its state save (a busy lock): the table it printed is the newer one, so it stays drawn
+  if (ov) await update($, pane, cur => (cur ? { ...cur, overrides: ov } : cur))
 }
 
 // Does any of the three things show in the pane?
@@ -884,11 +912,32 @@ export async function noteCompact($: EngineInterface, tokens: number | null) {
 }
 
 // What the abofles hooks keep for this session (~/.abofles/state/<session>.json). Throws when there is none.
+let lastText = ''
+let lastPath = ''
+let lastParsed: unknown = null
+
+// A read that finds no file throws `NoState`; a file that is not JSON throws the parser's SyntaxError.
+class NoState extends Error {}
+
 async function sessionState($: EngineInterface): Promise<Record<string, unknown>> {
   const home = (await $.env.get('HOME')) ?? ''
   const dir = (await $.env.get('ABOFLES_STATE_DIR')) ?? `${home}/.abofles/state`
-  const st: unknown = JSON.parse(await $.fs.read(`${dir}/${await $.session.id()}.json`))
+  let text: string
+  const path = `${dir}/${await $.session.id()}.json`
+  try {
+    text = await $.fs.read(path)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    // only a file that is not there means no state; a read refused or cut short keeps the pane as drawn
+    if (/ENOENT|no such file|not found|does not exist/i.test(msg)) throw new NoState(msg)
+    throw err
+  }
+  // every tool call refreshes: the same text as last time is not parsed again (the state file is ~100 KB)
+  const st: unknown = text === lastText && path === lastPath ? lastParsed : JSON.parse(text)
   if (!isObj(st)) throw new Error('no abofles state')
+  lastText = text
+  lastPath = path
+  lastParsed = st
   return st as Record<string, unknown>
 }
 
@@ -910,17 +959,37 @@ export async function continueAfterCompact($: EngineInterface) {
   }
 }
 
-export async function refresh($: EngineInterface) {
+// One read of the state file, tried twice: a write caught mid-way (an older hook wrote in place) reads as bad JSON once.
+async function stateTwice($: EngineInterface): Promise<Record<string, unknown>> {
   try {
-    const st = (await sessionState($)) as { guide?: unknown; pane?: unknown }
+    return await sessionState($)
+  } catch (err) {
+    if (err instanceof NoState) throw err // no file: nothing to retry
+    return await sessionState($)
+  }
+}
+
+// Refreshes can overlap (a tool call and a Stop): each takes a number, and one whose read is older than a newer refresh's drops its
+// result, so an older state never overwrites a newer pane, and a red toast fires once.
+let refreshSeq = 0
+let refreshDone = 0
+export async function refresh($: EngineInterface) {
+  const mine = ++refreshSeq
+  try {
+    const st = (await stateTwice($)) as { guide?: unknown; pane?: unknown; close?: unknown }
+    if (mine < refreshDone) return // a newer refresh already wrote what it read
+    refreshDone = mine
     const nextPane = cleanPane(isObj(st) ? st.pane : null)
-    await update($, pane, () => nextPane)
+    // the close check lives at the state's top level (memo.py writes it there, not in the pane payload)
+    if (nextPane && isObj(st) && st.close !== undefined) nextPane.close = cleanClose(st.close)
+    // every tool call refreshes: a pane that reads the same as the one drawn is not written again, so nothing redraws for it
+    if (JSON.stringify(await read($, pane)) !== JSON.stringify(nextPane)) await update($, pane, () => nextPane)
     const next = withCompactSize(cleanGuide(isObj(st) ? st.guide : null), await read($, compactedTo))
     if (!next) {
-      await update($, guide, () => null)
+      if ((await read($, guide)) !== null) await update($, guide, () => null)
       return
     }
-    await update($, guide, () => next)
+    if (JSON.stringify(await read($, guide)) !== JSON.stringify(next)) await update($, guide, () => next)
     // Toast when a red item appears that was not toasted before (an old state file without items: the line itself).
     const red = next.items.filter(i => i.p === '🔴').map(idOf)
     if (red.length === 0 && Array.from(keyOf(next.line))[0] === '🔴') red.push(`line:${next.line}`)
@@ -930,8 +999,10 @@ export async function refresh($: EngineInterface) {
       $.ui.toast(Array.from(next.line).slice(0, 160).join(''))
     }
     if (red.length !== seen.length || red.some((r, n) => r !== seen[n])) await update($, toasted, () => red)
-  } catch {
-    // no state yet (abofles not installed, or no hook ran): draw nothing
+  } catch (err) {
+    // no state (abofles not installed, no hook ran, or the file is gone): draw nothing. A file that is there but does not read as JSON
+    // twice keeps the pane already drawn: a write caught mid-way must not empty it, and the next refresh brings it up to date.
+    if (!(err instanceof NoState) && ((await read($, pane)) !== null || (await read($, guide)) !== null)) return
     await update($, guide, () => null)
     await update($, pane, () => null)
   }
@@ -1073,6 +1144,11 @@ export async function hideGuide($: EngineInterface, g: Guide) {
 // Put text into the prompt box; keep a draft the person already typed. Hides the guide once it is in.
 export async function fillPrompt($: EngineInterface, g: Guide | null, text: string) {
   const draft = (await $.prompt.read()).text.trim()
+  // a slash command only runs as the first thing in the box: added under a draft it would be sent as plain text
+  if (draft && text.trimStart().startsWith('/')) {
+    $.ui.toast(`Send or clear your draft first, then press again — ${text.trim().split(/\s/)[0]} must start the prompt`)
+    return
+  }
   const r = await $.prompt.fill({ text: draft ? `\n${text}` : text, mode: draft ? 'append' : 'replace' })
   if (r.isFilled) {
     if (g) await hideGuide($, g)

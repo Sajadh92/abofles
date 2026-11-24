@@ -459,7 +459,7 @@ function detailRow(kind: string, text: string, room: number): Block {
   return { html: `<div class="lead">${lead}<div class="grow">${f.html}</div></div>`, h: f.h }
 }
 
-export type Receipt = { time: string; spawns: string | null; usd: string | null; saved: string | null; tokens?: string | null; money?: string | null; text: string; details: string[] } // money: `73% saved ($0.09) vs Opus 5.5`
+export type Receipt = { time: string; spawns: string | null; usd: string | null; saved: string | null; over?: string | null; tokens?: string | null; money?: string | null; text: string; details: string[] } // money: `73% saved ($0.09) vs Opus 5.5`
 
 // A receipt as a card of its own: the time and the cost on two edges; what was done as its headline (body text, two lines, then
 // its Full details); the spawns and the saving; then, under a hairline, the other details as quiet labelled rows.
@@ -472,7 +472,7 @@ export function receiptCard(x: Receipt, paneW: number): Block {
   // the short card: what was done, how it was checked, what is open; the rest is on its Full details page
   const rest = kinds.filter(k => k !== done && !RECEIPT_MORE.has(k.kind) && (done || x.text || k !== kinds[0]))
   const top: Block = { html: `<div class="fact"><span class="cap k">${esc(x.time)}</span><span class="v">${esc(x.usd ?? '')}</span></div>`, h: LINE }
-  const stat: Block | null = x.spawns ? { html: `<div class="mt"><span class="q">${esc(x.spawns)}</span>${x.saved ? ` <span class="q">·</span> <span class="ink t-green">${esc(x.saved)} saved</span>` : ''}</div>`, h: CAP } : null
+  const stat: Block | null = x.spawns ? { html: `<div class="mt"><span class="q">${esc(x.spawns)}</span>${x.over ? ` <span class="q">·</span> <span class="ink t-red">${esc(x.over)} over cost</span>` : x.saved ? ` <span class="q">·</span> <span class="ink t-green">${esc(x.saved)} saved</span>` : ''}</div>`, h: CAP } : null
   const head = stack([top, headline ? fit(headline, room, 2) : null, stat], 4)
   const rows = rest.map(k => detailRow(k.kind, k.text, room))
   return cardOf([head, rows.length ? stack(rows, GAP) : null])
@@ -538,6 +538,7 @@ export function resumeBlocks(r: ResumeIn): { status: Block | null; needs: Block 
 export type SpawnRow = { tone: Tone; side: string; desc: string; cost: string; meta: string; word: string; wordTone: Tone | null; now?: string } // now: what a running one does, its last tool
 export type SpendIn = {
   saved: string // "54% saved"
+  tone?: Tone | null // 'red' when the agents cost more than the base model: the headline reads "N% over cost"
   versus: string // "$0.41 of $0.90 on Opus 5.5"
   models: { label: string; tone: Tone; tokens: string; spawns: number; usd: string; pct: number }[] // tokens: '' when no agent of the model reported any
   facts: Fact[] // Tokens, Open FAIL
@@ -577,7 +578,7 @@ export function spendCard(s: SpendIn, paneW: number, head: Block | null = null):
   const room = textRoom(paneW)
   const wide = room >= SPEND_TABLE
   // the saving as the headline, what it compares under it: the full line at any width
-  const top = stack([{ html: `<div class="big">${esc(s.saved)}</div>`, h: 20 }, { html: `<div class="mt"><span class="q num">${esc(s.versus)}</span></div>`, h: CAP }], 2)
+  const top = stack([{ html: `<div class="big${s.tone ? ` ink t-${s.tone}` : ''}">${esc(s.saved)}</div>`, h: 20 }, { html: `<div class="mt"><span class="q num">${esc(s.versus)}</span></div>`, h: CAP }], 2)
   const bar: Block | null =
     s.models.length === 0
       ? null
@@ -842,7 +843,7 @@ export function receiptDetail(x: Receipt, paneW: number): Block[] {
   const plainStat = [x.spawns, x.tokens].filter(Boolean).join(' · ')
   const statText = [plainStat, x.money].filter(Boolean).join(' · ')
   const stat: Block | null = statText
-    ? { html: `<div class="mt2"><span class="q">${esc(plainStat)}</span>${x.money ? `${plainStat ? ' <span class="q">·</span> ' : ''}<span class="ink t-green">${esc(x.money)}</span>` : ''}</div>`, h: estLines(statText, (room * WHOLE_ROOM) / 1.05, 12) * CAP }
+    ? { html: `<div class="mt2"><span class="q">${esc(plainStat)}</span>${x.money ? `${plainStat ? ' <span class="q">·</span> ' : ''}<span class="ink t-${/over cost/i.test(x.money) ? 'red' : 'green'}">${esc(x.money)}</span>` : ''}</div>`, h: estLines(statText, (room * WHOLE_ROOM) / 1.05, 12) * CAP }
     : null
   const head = stack([top, headline ? fit(headline, room, WHOLE) : null, stat], 4)
   const secs = rest.map(k => {
@@ -873,4 +874,37 @@ export function brandFooter(): Block {
       `<span class="nm b">${esc(BRAND_EN)}</span><span class="sep">·</span><span class="nm b ar" dir="rtl" lang="ar">${esc(BRAND_AR)}</span></div>`,
     h: LINE + 8,
   }
+}
+
+// ---- Close check
+
+// The "Ready to archive?" card: a head with the verdict word in its tone, an optional note under it (stale, busy), and one row per
+// line of the stored check, blockers first: a dot in the line's tone, its text, and a muted line under it (its fix, "accepted by you",
+// "by rule"). Checked lines come last as one row, so the open ones lead.
+export type CloseRowIn = { text: string; sub: string | null; tone: Tone; word: string }
+export type CloseIn = { paneW: number; word: string; tone: Tone; notes: { text: string; tone: Tone }[]; rows: CloseRowIn[]; more: string | null; whole?: boolean }
+// Text that wraps to `n` lines at most (WHOLE: never cut), `lineH` px a line. The close rows hold paths and long agent lines, and Arabic: each
+// keeps the card's left edge (`text-align:left`), so a right-to-left line never floats away from its dot.
+function wrapped(html: string, plainText: string, room: number, max: number, cls: string, size: number, lineH: number): Block {
+  const n = max >= WHOLE ? estLines(plainText, room * WHOLE_ROOM, size) : Math.min(max, estLines(plainText, room * 0.94, size))
+  const clampCss = max >= WHOLE ? '' : `-webkit-line-clamp:${n};`
+  return { html: `<div class="${cls} ${max >= WHOLE ? 'whole' : 'clamp'}" dir="auto" style="${clampCss}text-align:left">${html}</div>`, h: n * lineH }
+}
+export function closeCard(c: CloseIn): Block {
+  const room = textRoom(c.paneW)
+  const max = c.whole ? WHOLE : 2
+  const head = capRow('Ready to archive?', c.word, c.tone)
+  const notes = c.notes.map(n => wrapped(esc(n.text), n.text, room, max, `small ink t-${n.tone}`, 12, CAP))
+  const rows = c.rows.map(r => {
+    const tRoom = room - 16
+    const n = max >= WHOLE ? estLines(r.text, tRoom * WHOLE_ROOM) : Math.min(2, estLines(r.text, tRoom * 0.94))
+    // the dot sits on the first line; the text beside it wraps to two lines on Home, whole on Full details
+    const top: Block = { html: `<div class="lead"><span class="dot t-${r.tone}" style="margin:6px 0"></span><div class="grow ${max >= WHOLE ? 'whole' : 'clamp'}" dir="auto" style="${max >= WHOLE ? '' : `-webkit-line-clamp:${n};`}text-align:left">${esc(r.text)}</div></div>`, h: n * LINE }
+    const under = [r.word, r.sub].filter(Boolean).join(' · ')
+    const subHtml = `<span class="ink t-${r.tone}">${esc(r.word)}</span>${r.sub ? `<span class="dim"> · ${esc(r.sub)}</span>` : ''}`
+    const sub = wrapped(subHtml, under, tRoom, max, 'small pad', 12, CAP)
+    return stack([top, sub], 4)
+  })
+  const tail: Block | null = c.more ? { html: `<div class="small dim one">${esc(c.more)}</div>`, h: CAP } : null
+  return cardOf([stack([head, ...notes, rows.length ? ruledRows(rows) : null, tail], GAP)])
 }

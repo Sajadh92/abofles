@@ -18,7 +18,7 @@ and the overrides editor's `Save` (`scripts/overrides.py`, which edits the `## a
   output) and stays offered until the next turn ends; the row does not depend on anything but that field. While it
   runs (up to 30 s) `Undo` is gone, so a second press cannot start a second run. `Hide` takes that row down (keyed by
   its timestamp; a newer resolve draws again).
-- Reopen by hand: `/abofles:resume --reopen <n>` (an owner decision), `/abofles:status --unresolve <id>` (a FAIL or an
+- Reopen by hand: `/abofles:resume --reopen <#id>` (an owner decision), `/abofles:status --unresolve <id>` (a FAIL or an
   escalation). Exit code 3 from `Undo` toasts `already open`; any other failure toasts `undo failed` with the first
   line of the error and keeps the row, so `Undo` can be pressed again. Exit 0 and exit 3 clear the row.
 - `Compact` (when the context is within 50K of its next mark, or past the last one) puts `/compact` in the prompt box: the memo saves itself. With `Memo on compact = off`, or an older `abofles`, it is `Memo` and puts `/abofles:memo` there.
@@ -56,7 +56,19 @@ first rows and `Show all N` (`Show fewer` to fold it back).
   fill shows under the pointer (a Button holds text alone, and a picture takes no press). The pane has no fixed header or footer to pin a bar to, so pages replace the long scroll. A page's cards
   slide in for a moment when you move to it (a 0.26 s ease-out, one after another; none under reduced motion). **Home** sums up
   every section: the next step with `Check all` / `Use`, the numbers at a glance (Context, Needs you, Open FAIL, This
-  task), the Agents page's spend card, where the work stands (Now, Next), and the latest decision and receipt.
+  task, and `Close: N blockers` while a stored close check has one, amber and "out of date" once the work changed since), the
+  Tasks card (the session's task list, step by step, kept after the turn ends), the Agents page's spend card, where the work stands
+  (Now, Next), and the latest decision and receipt. Its header says `N open`, or `guide clear` (amber while the close check has a
+  blocker): the guide has nothing open, which is not the same as ready to archive.
+- **Ready to archive?** (Home, `Close place = pane`): the close check that `memo.py close-check` stored, drawn from state and never
+  from a chat sentence. The head is the stored verdict in words (`2 blockers`, `1 to check`, `Not checked`, `Out of date`, `Not yet`,
+  `Yes`); under it the check's time, a note while agents or commands still run, while task steps are open, or while the close agent
+  has not judged the check. One row per line, blockers first: a dot, the line (two lines at most; whole on `Full details`), and under
+  it the state in words, its source and its fix. Open task steps join as `Check` rows only, never as blockers, and a list the
+  wrap-up hid does not count. `Run close check` fills `/abofles:close`; a `Fix …` button per open line fills a question about it,
+  never an order: a git line asks for your own words and names the abofles-git agent, with no git command in it. The card shows
+  after a check, or once the guide is clear in a session that worked. In the terminal it is a `Close check` card while a check is
+  stored. `Close place = chat` or `off` keeps it off the pane.
 - Every section is drawn in HTML and CSS (`hooks/html.ts`: XHTML in an SVG `<foreignObject>`, which the app
   draws as an image, unsanitized, in its own text colour; laid out at the pane's width and scaled to the slot keeping its ratio):
   a header strip (the section's icon on a tinted tile, the title, the summary as a pill where it carries meaning), then its
@@ -82,7 +94,9 @@ first rows and `Show all N` (`Show fewer` to fold it back).
   and the answer under it after an arrow in semibold (a note is its text alone; the Judge's `judge:` lead is dropped), a light rule
   between decisions; five, then `Show all`; an empty group says so. Drawn after Resume whenever the hooks wrote decisions, with no
   `places` key of its own; older hooks write none and the card is absent.
-- **Running**: what works now, from the engine's own events, with no model call: the main turn, each agent (its side, ask, last tool, model, tool count, tokens, elapsed), background commands and scheduled wake-ups. An agent has `Full details` (the tools it ran, newest first) and, when TaskStop can stop it (a background, named or teammate agent), `Stop`; a command has `Full details` (the end of its output) and `Stop`, and Stop asks first. In the terminal an agent has `Open` instead, which puts its transcript in the main view: a desktop has no main view a plugin can switch. The nav icon carries a dot while an agent or a command runs, and Home shows the first three of them. `Running place = off` hides the page and the card.
+- **Running**: what works now, from the engine's own events, with no model call: the main turn, each agent (its side, ask, last tool, model, tool count, tokens, elapsed), background commands and scheduled wake-ups. A command whose output has not grown for 30 minutes (a server, a watcher), or an
+  agent with no tool returned for as long, turns grey with `quiet Nm`: it still shows, the Tasks card and the close check do not wait
+  on it, and its time moves once a minute. An agent inside one long tool is never quiet. An agent has `Full details` (the tools it ran, newest first) and, when TaskStop can stop it (a background, named or teammate agent), `Stop`; a command has `Full details` (the end of its output) and `Stop`, and Stop asks first. In the terminal an agent has `Open` instead, which puts its transcript in the main view: a desktop has no main view a plugin can switch. The nav icon carries a dot while an agent or a command runs, and Home shows the first three of them. `Running place = off` hides the page and the card.
 - **Agents**: the saving first (`32% saved`, `$14.36 of $21.26 on Opus 5.5`), a meter split by model and a table with five titled
   columns (Model, Tokens, Agents, Cost, %; a pane too narrow for them puts the numbers under each model, each with its word), total Tokens, and Open FAIL in red when a FAIL is still open (one resolved by
   hand with evidence is not). History (newest first, five rows, then `Show all`) holds activity rows: the status dot
@@ -119,7 +133,8 @@ draft is kept). It edits the simple keys of the `## abofles overrides` block (th
   over the user file when both set a key.
 - The keys in folding groups: **Session** (Main session, Sub session, Session cap, Context marks, Context stop, Continue after compact, Break, Pace), **Agents** (Agents,
   Parallel, Agent budgets, Review gate, Review memory, Questions, Budget raise, Git guard, Poll guard, Prompt checkup, User prompt checkup, Sub sessions, Session routing), **Memo** (Judge notes, Memo agent, Memo agent every, Memo on compact, Archive items, Archive sessions, Other items, Memo repair), **Output** (Receipt, Guide, Resume, Language), **Where it shows**
-  (Guide place, Resume place, Agents place, Running place, Receipt place); a key the table adds later goes to **More**. Each group's summary says
+  (Guide place, Resume place, Agents place, Running place, Receipt place, Close place), **Close** (Close check, Close git, Close agent,
+  Close PR check); a key the table adds later goes to **More**. `Close: <name> = <rule>` lines go in **Other overrides**. Each group's summary says
   `default`, how many keys a file sets, or how many are edited.
 - The groups and their settings have a line between them. Each key reads one thing per line: its name (`· edited` beside it
   while unsaved) with a `Set` badge at the end of the line when a file sets it, the help, then the control — a list for the keys with a fixed set of values (its first entry,

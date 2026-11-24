@@ -46,7 +46,7 @@ test('the session start reads the state file of its session and draws the band f
 test('a state file that is not JSON, or has no guide line, draws nothing and does not throw', async ($, on) => {
   const reads = session($, on, '{ not json')
   await $.session.start({ cwd: '/home', surface: 'desktop', isInteractive: true })
-  expect(reads.length).toBe(1)
+  expect(reads.length).toBe(2) // a bad read is tried once more: a write caught mid-way reads whole the second time
   const ui = await $.ui.mount(MOUNT)
   expect(await ui.find({ key: 'hide' })).toBeUndefined()
   await ui.unmount()

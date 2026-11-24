@@ -16,7 +16,7 @@ export type Guide = {
   ctx_wait?: { marks: number[]; auto: boolean } | null // a compact ran and the hooks have no size yet: every mark in K tokens, for the mod's own figure; absent in older state files
   task: { spawns: number; usd: number; budget: number | null; left: number | null; raised?: number } | null // raised: automatic agent-budget raises this task
   all?: { n: number; fill: string } | null // 2+ items open: what Check all puts in the prompt box; absent in older state files
-  main: string | null // "suggest Opus 5.5 · Medium (now Fable 5.1 · Medium)"; null when the main session fits
+  main: string | null // "suggest Opus 5.5 · Medium (now Fable 5.2 · Medium)"; null when the main session fits
   // Claude's last resolve, kept by the hook until the Stop of the turn after it; null when nothing. Undo runs `unresolve` (cwd = root).
   last_resolved: { text: string; unresolve: string[]; ts: number } | null
 }
@@ -30,6 +30,7 @@ export type PanePlaces = {
   spawns: 'pane' | 'output' // where /abofles:bill shows; old hooks: the output
   tasks?: 'pane' | 'off' // the Tasks card (the session's task list); absent in older state files: pane
   running: 'pane' | 'off' // the Running page and Home's Running card; old hooks: the pane
+  close?: 'pane' | 'chat' | 'off' // Home's Ready to archive? card (`Close place`); absent in older state files: pane
 }
 
 export type PaneResume = {
@@ -85,6 +86,11 @@ export type PaneOverrides = {
   raw: { line: string; source: string; path?: string }[] // override lines the table cannot show; path: the file it is in (newer hooks)
 }
 
+// ---- Close check: the stored check memo.py close-check writes (st["close"]), read by Home's Ready to archive? card
+export type CloseState = '⛔' | '⚠' | '✓' | 'not checked'
+export type CloseLine = { id: string; state: CloseState; src: string; text: string; fix: string; waived: boolean; byRule: string | null; by: string | null; judges: string | null } // waived: the owner accepted it (close-waive); byRule: a `Close git` rule made it a ⚠; by: 'agent' for a close-add line; judges: the `Close:` rule line id an agent line judges
+export type PaneClose = { lines: CloseLine[]; verdict: '✅' | '⛔' | '⚠' | 'not checked'; ts: number; stale: boolean; gitRule: string; agent: 'yes' | 'no' | 'off' | null } // ts: epoch seconds; stale: a change since the check; agent: whether the close agent judged this check (null: older records)
+
 // ---- Prompt checkup: how many agent prompts and user asks the hook flagged, how many agents it refused, and the newest hit
 export type PaneCheckup = { agent: number; user: number; denied: number; last: { kind: 'agent' | 'user'; problems: string[]; at: string } | null }
 
@@ -103,6 +109,7 @@ export type Pane = {
   version?: PaneVersion | null // the versions the Version card compares; absent in older state files: no card
   checkup?: PaneCheckup | null // Prompt checkup hits this session (agent prompts, the user's risky asks); absent in older state files: no block
   tasks_hide?: 'manual' | 'auto' | 'next' // when a finished task list hides itself; absent in older state files: manual
+  close?: PaneClose | null // the stored close check (st["close"], written by `memo.py close-check`); absent: no check ran
   cmd: { overrides: string[] | null } // argv prefix of the script the overrides editor runs
 }
 
@@ -114,11 +121,11 @@ export type Release = { abofles: { version: string; url: string } | null; guide:
 // ---- the session's task list, kept by the mod from the main session's update_plan / TodoWrite / TaskCreate / TaskUpdate calls (tasks.tsx)
 export type PlanStatus = 'pending' | 'in_progress' | 'completed'
 export type PlanItem = { content: string; status: PlanStatus; id?: string } // id: a TaskCreate task's id, for TaskUpdate
-export type Plan = { items: PlanItem[]; ts: number; closed: boolean; hidden?: boolean } // ts: last change (ms); closed: every step done (or the wrap-up checked them off); hidden: a finished list taken off Home (its Hide button or `Tasks hide`), until a new list
+export type Plan = { items: PlanItem[]; ts: number; closed: boolean; hidden?: boolean; wrapped?: boolean } // ts: last change (ms); closed: every step done, or wrapped; wrapped: the wrap-up hid the list with its statuses as they were (the app keeps them, and a later advance resumes it); hidden: a finished list taken off Home (its Hide button or `Tasks hide`), until a new list
 
 // ---- what runs now, kept by the mod from the engine's events (running.tsx); no hook and no model call feeds it.
-export type WorkLoop = { startedAt: number; now: string | null; uses: number; tokens: number; model: string | null; effort: string | null; recent?: { at: number; s: string }[]; endedAt?: number } // startedAt: ms; now: its last tool, in words; recent: its last tools, oldest first; endedAt: an agent's turn ended (its reply is in), while the engine may still hold it on background work it owns
-export type WorkTask = { id: string; kind: string; desc: string; detail: string | null; startedAt: number; out?: string | null; owner?: string | null } // a background command, monitor or workflow; out: its output file; owner: the agent whose loop started it (none: the main session)
+export type WorkLoop = { startedAt: number; now: string | null; uses: number; tokens: number; model: string | null; effort: string | null; recent?: { at: number; s: string }[]; endedAt?: number; doneAt?: number } // startedAt: ms; now: its last tool, in words; recent: its last tools, oldest first; endedAt: an agent's turn ended (its reply is in), while the engine may still hold it on background work it owns; doneAt: its last tool returned (ms)
+export type WorkTask = { id: string; kind: string; desc: string; detail: string | null; startedAt: number; out?: string | null; owner?: string | null; size?: number; outAt?: number } // size, outAt: the output file's size at the last look and when it last grew; a background command, monitor or workflow; out: its output file; owner: the agent whose loop started it (none: the main session)
 export type WorkCron = { id: string; schedule: string; recurring: boolean; prompt: string }
 export type Work = { main: WorkLoop | null; agents: Record<string, WorkLoop>; tasks: WorkTask[]; crons: WorkCron[] }
 
@@ -137,7 +144,8 @@ declare module 'claude-code' {
     // `paneDraft`: unsaved values of the overrides editor, by override key (+ '@scope', '@raw', '@custom:<key>').
     // `paneSaving`: true while the editor's Save runs its command.
     // `paneView`: the page the pane shows: 'main' (the cards), 'overrides' (the editor) or 'detail' (the full text of one card).
-    // `paneDetail`: which card the detail page shows: 'guide', 'resume', 'spawns', 'decisions' or 'receipt:<n>'.
+    // `paneDetail`: which card the detail page shows: 'guide', 'resume', 'spawns', 'decisions', 'close' or 'receipt:<n>'.
+    // `mainOn`: the main turn is on (written at its start and end only).
     // `paneTab`: the page the desktop's nav bar shows ('home', 'running', 'guide', 'resume', 'decisions', 'spawns', 'overrides').
     // `paneNavTs`: when the person last moved to a page (ms): its cards slide in for a moment after.
     // `work`: what runs now (Work); `workTick`: bumped every few seconds while anything runs, so the elapsed times move; `workBusy`: how many agents and commands run, the nav bar's dot;
@@ -166,6 +174,7 @@ declare module 'claude-code' {
       workTick: number
       workBusy: number
       workConfirm: string | null
+      mainOn: boolean
       plan: Plan | null
       release: Release | null
     }

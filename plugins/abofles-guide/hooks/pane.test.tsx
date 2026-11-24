@@ -1,13 +1,15 @@
 import { expect, mock, test } from 'claude-code/testing'
-import { applyPlan, planBlock, planState } from './tasks'
+import { adoptMirror, applyPlan, planBlock, planState } from './tasks'
 import type { PlanStatus } from '../types'
 import type { OpEventResult } from 'claude-code'
-import { newer, releasesOf, updatePrompt, versionView } from './version'
+import { checkRelease, newer, releasesOf, updatePrompt, versionView } from './version'
 
-import { fmtWhen, headParts, receiptOf } from './pane'
+import { fmtWhen, headParts, receiptOf, spendOf } from './pane'
+import { spendCard } from './html'
 import { rawBase } from './editor'
-import { canStop, fmtElapsed, liveOf, toolLabel } from './running'
-import { cleanPane, COLOR_PAIRS, CONTINUE_PROMPT, shortHash } from './shared'
+import { QUIET_MS, canStop, fmtElapsed, isQuiet, liveOf, loopQuietSince, toolLabel, withSizes } from './running'
+import { cleanClose, cleanPane, COLOR_PAIRS, CONTINUE_PROMPT, shortHash } from './shared'
+import { closeFact, closeFill, closeView, whenOf } from './close'
 
 const SURFACES = ['terminal', 'desktop'] as const
 const NOW = 1_700_000_000 // epoch seconds the mocked clock stands at
@@ -951,7 +953,7 @@ for (const surface of SURFACES) {
     const rows = Array.from({ length: 8 }, (_, i) => ({ ...ROWS[1], ts: NOW - 1000 + i, description: `step ${i}`, task: 'Ship it' }))
     await harness($, on, { guide: guideOf([item()]), pane: panePayload({ spawns: { live: [], rows, totals: { spawns: 6, sessions: 4, tokens: 1, usd: 0, base_usd: 0, saved_pct: 0, open_fail: 0 } } }) })
     const ui = await mountPane($, surface, { bodyColumns: 160 })
-    expect(await labelOf(ui, 'more:history')).toBe('Show all 10') // 6 agents + 4 sub sessions; before, max(6, 8 rows) = 8
+    expect(await labelOf(ui, 'more:history')).toBe('Show last 8 of 10') // 6 agents + 4 sub sessions; the pane holds 8 rows, so it says so
     await ui.unmount()
   })
 
@@ -994,7 +996,7 @@ for (const surface of SURFACES) {
 
 test('a journal receipt line reads as a table row (time, spawns, $, saved), its done / check / open as details', () => {
   const line = '10-22 07:19 · 1 Spawn · 319K Tokens · $0.28 · Saved 46% ($0.24) vs Opus 5.5 · done: the pane · check: `79 pass` · open: none'
-  expect(receiptOf(line)).toEqual({ time: '10-22 07:19', spawns: '1 agent', usd: '$0.28', saved: '46%', tokens: '319K tokens', money: '46% saved ($0.24) vs Opus 5.5', text: '', details: ['done: the pane', 'check: 79 pass', 'open: none'] })
+  expect(receiptOf(line)).toEqual({ time: '10-22 07:19', spawns: '1 agent', usd: '$0.28', saved: '46%', over: null, tokens: '319K tokens', money: '46% saved ($0.24) vs Opus 5.5', text: '', details: ['done: the pane', 'check: 79 pass', 'open: none'] })
   expect(receiptOf('10-22 08:00 · 11 Spawns · $7.96 · Saved 27% ($2.93) vs Opus 5.5').spawns).toBe('11 agents') // a line written before the rename reads the same
   expect(receiptOf('10-22 08:00 · 2 Agents · $7.96 · Saved 27% ($2.93) vs Opus 5.5').spawns).toBe('2 agents')
   expect(receiptOf('10-22 08:00 · done: only a note')).toEqual({ time: '10-22 08:00', spawns: null, usd: null, saved: null, tokens: null, money: null, text: 'done: only a note', details: [] })
@@ -2456,12 +2458,28 @@ test('the task list follows update_plan: items, advance, done/start, wrap_up; To
   p = applyPlan(p, UP, { done: [2], start: 3 }, {}, 3)
   expect(p?.items.map(x => x.status)).toEqual(['completed', 'completed', 'in_progress'])
   expect(p?.closed).toBe(false)
-  // a wrap-up with two or more steps open leaves the list as it is (the app's goes on next turn); with one open it ticks it off
-  const mid = applyPlan(null, UP, { items: [{ content: 'a', status: 'completed' }, { content: 'b', status: 'in_progress' }, { content: 'c', status: 'pending' }] }, {}, 3)
-  expect(applyPlan(mid, 'mcp__ccd_turn__wrap_up', { recap: 'x' }, {}, 4)).toBeNull()
-  expect(applyPlan(mid, UP, { advance: true }, {}, 5)?.items.map(x => x.status)).toEqual(['completed', 'completed', 'in_progress'])
+  // the app's wrap-up hides its list and changes no status (1070/1070 app results); a later advance resumes it
+  const mid = applyPlan(null, UP, { items: [{ content: 'a', status: 'in_progress' }, { content: 'b', status: 'pending' }] }, {}, 3)
+  const wrapped = applyPlan(mid, 'mcp__ccd_turn__wrap_up', { recap: 'x' }, {}, 4)
+  expect(wrapped?.items.map(x => x.status)).toEqual(['in_progress', 'pending'])
+  expect(wrapped).toMatchObject({ closed: true, wrapped: true })
+  expect(planState(wrapped!, false, 0)).toMatchObject({ word: 'Wrapped up', line: '2 steps left open' })
+  // the app's own result after such a wrap-up: "Plan updated: step 2 of 2 is in progress."
+  const resumed = applyPlan(wrapped, UP, { advance: true }, {}, 5)
+  expect(resumed?.items.map(x => x.status)).toEqual(['completed', 'in_progress'])
+  expect(resumed?.closed).toBe(false)
+  expect(resumed?.wrapped).toBeUndefined()
+  expect(applyPlan(wrapped, UP, { items: [{ content: 'n', status: 'in_progress' }] }, {}, 6)?.closed).toBe(false)
+  // items beside advance: the app ignores the advance, so the mod does too
+  expect(applyPlan(null, UP, { items: [{ content: 'x', status: 'in_progress' }, { content: 'y', status: 'pending' }], advance: true }, {}, 6)?.items.map(x => x.status)).toEqual(['in_progress', 'pending'])
+  // advance, done and start given as strings
+  const s3 = applyPlan(null, UP, { items: [{ content: 'a', status: 'in_progress' }, { content: 'b', status: 'pending' }, { content: 'c', status: 'pending' }] }, {}, 7)
+  expect(applyPlan(s3, UP, { advance: 'true' }, {}, 8)?.items.map(x => x.status)).toEqual(['completed', 'in_progress', 'pending'])
+  expect(applyPlan(s3, UP, { done: ['1'], start: '3' }, {}, 8)?.items.map(x => x.status)).toEqual(['completed', 'pending', 'in_progress'])
+  // start without done: the app keeps the step already in progress ("steps 1, 2 of 3 are in progress")
+  expect(applyPlan(s3, UP, { start: 2 }, {}, 9)?.items.map(x => x.status)).toEqual(['in_progress', 'in_progress', 'pending'])
   p = applyPlan(p, 'mcp__ccd_turn__wrap_up', { recap: 'x' }, {}, 4)
-  expect(p?.items.every(x => x.status === 'completed')).toBe(true)
+  expect(p?.items.map(x => x.status)).toEqual(['completed', 'completed', 'in_progress'])
   expect(p?.closed).toBe(true)
   expect(applyPlan(null, UP, { advance: true }, {}, 5)).toBeNull()
   expect(applyPlan(p, 'Read', { file_path: '/a' }, {}, 5)).toBeNull()
@@ -2474,6 +2492,69 @@ test('the task list follows update_plan: items, advance, done/start, wrap_up; To
   c = applyPlan(c, 'TaskUpdate', { taskId: '8', status: 'deleted' }, {}, 10)
   expect(c?.items).toEqual([{ content: 'one', status: 'completed', id: '7' }])
   expect(applyPlan(c, 'TaskUpdate', { taskId: '99', status: 'completed' }, {}, 11)).toBeNull()
+  // a list seeded with no ids (an older hook copy): TaskUpdate's number names the step
+  const seeded = { items: [{ content: 'one', status: 'pending' as const }, { content: 'two', status: 'pending' as const }], ts: 1, closed: false }
+  expect(applyPlan(seeded, 'TaskUpdate', { taskId: '2', status: 'completed' }, {}, 12)?.items[1]!.status).toBe('completed')
+})
+
+// A replay of app result texts (scrubbed from real sessions): the card's step line must say what the app said.
+test('Tasks replay: each call gives the same "step N of M" the app answered', () => {
+  const UP = 'mcp__ccd_turn__update_plan'
+  const inProg = (p: any) => p.items.flatMap((x: any, i: number) => (x.status === 'in_progress' ? [i + 1] : []))
+  const calls: [string, object, number[]][] = [
+    [UP, { items: [1, 2, 3, 4, 5].map(i => ({ content: `s${i}`, status: i === 1 ? 'in_progress' : 'pending' })) }, [1]], // "Plan shown (5 steps)."
+    ['mcp__ccd_turn__wrap_up', { recap: 'r' }, [1]], // the app hides its list; nothing changes
+    [UP, { advance: true }, [2]], // "Plan updated: step 2 of 5 is in progress."
+    [UP, { start: 4 }, [2, 4]], // "Plan updated: steps 2, 4 of 5 are in progress."
+    [UP, { done: [2, 4], start: 5 }, [5]], // "Plan updated: step 5 of 5 is in progress."
+    ['mcp__ccd_turn__wrap_up', { recap: 'r' }, [5]],
+  ]
+  let p: any = null
+  calls.forEach(([tool, a, want], i) => {
+    p = applyPlan(p, tool, a as never, {}, i + 1) ?? p
+    expect([i, inProg(p)]).toEqual([i, want])
+  })
+})
+
+test('Tasks: TaskCreate after a wrap-up keeps the open steps (the hook mirror appends too)', () => {
+  const w = { items: [{ content: 'a', status: 'in_progress' as const, id: '1' }], ts: 1, closed: true, wrapped: true }
+  expect(applyPlan(w, 'TaskCreate', { subject: 'b' }, { result: 'Task #2 created' }, 2)?.items.map(x => x.content)).toEqual(['a', 'b'])
+})
+
+test('Running: an agent loop is quiet from its last tool call, else its start', () => {
+  expect(loopQuietSince({ startedAt: 100 })).toBe(100)
+  expect(loopQuietSince({ startedAt: 100, recent: [{ at: 150 }, { at: 900 }] })).toBe(900)
+  expect(loopQuietSince({ startedAt: 100, recent: [{ at: 150 }, { at: 900 }], doneAt: 950 })).toBe(950) // quiet from the tool's return
+  expect(loopQuietSince({ startedAt: 100, recent: [{ at: 150 }, { at: 900 }], doneAt: 200 })).toBe(Number.MAX_SAFE_INTEGER) // a tool still running: never quiet
+})
+
+test('Tasks: the hook mirror is adopted when 2 s newer and different; +N done counts done steps only; the last step names a step left above', () => {
+  const a = { items: [{ content: 'a', status: 'in_progress' as const }, { content: 'b', status: 'pending' as const }], ts: 1000, closed: false }
+  const b = { items: [{ content: 'a', status: 'completed' as const }, { content: 'b', status: 'completed' as const }], ts: 3500, closed: true }
+  expect(adoptMirror(a, b)).toBe(true)
+  expect(adoptMirror(a, { ...b, ts: 2000 })).toBe(false)
+  expect(adoptMirror(a, { ...a, ts: 9000 })).toBe(false)
+  // steps 1-3 pending above the current step 5: they are not "done above"
+  const odd = { items: Array.from({ length: 9 }, (_, i) => ({ content: `s${i + 1}`, status: (i === 4 ? 'in_progress' : i === 3 ? 'completed' : 'pending') as PlanStatus })), ts: 1, closed: false }
+  const blk = planBlock(odd, true, 0, 400, false)
+  expect(blk.alt).not.toContain('Done: s1')
+  // two in progress: the header follows the one further down
+  const two = { items: [{ content: 'a', status: 'in_progress' as const }, { content: 'b', status: 'in_progress' as const }, { content: 'c', status: 'pending' as const }], ts: 1, closed: false }
+  expect(planState(two, true, 0).line).toBe('Step 2 of 3')
+  // a background command with nothing new for 30 min is quiet: the card does not wait on it
+  expect(isQuiet({ startedAt: 0, size: 1 }, QUIET_MS - 1)).toBe(false)
+  expect(isQuiet({ startedAt: 0, size: 1 }, QUIET_MS)).toBe(true)
+  // a job whose output grew lately is not quiet, however long it has run; one whose output was never seen is never quiet
+  expect(isQuiet({ startedAt: 0, outAt: QUIET_MS, size: 5 }, QUIET_MS + 1000)).toBe(false)
+  expect(isQuiet({ startedAt: 0 }, QUIET_MS * 3)).toBe(false)
+  // the tick's look at the output sizes: the first look records, growth moves outAt, no growth keeps it
+  const t0 = [{ id: 'b1', kind: 'shell', desc: 'd', detail: null, startedAt: 100, out: '/x/b1.output' }]
+  const t1 = withSizes(t0, new Map([['b1', 10]]), 500)
+  expect(t1[0]).toMatchObject({ size: 10, outAt: 100 })
+  const t2 = withSizes(t1, new Map([['b1', 25]]), 900)
+  expect(t2[0]).toMatchObject({ size: 25, outAt: 900 })
+  expect(withSizes(t2, new Map([['b1', 25]]), 5000)[0]!.outAt).toBe(900)
+  expect(withSizes(t2, new Map(), 5000)[0]!.outAt).toBe(900)
 })
 
 test('the list state reads Working while the turn runs, Waiting on jobs, Paused once it ends, Done when all are checked', () => {
@@ -2613,6 +2694,26 @@ test('the version view: up to date, Reload when a newer one is installed than th
   expect(versionView(null, null, null)).toBeNull()
 })
 
+test('Update check = off asks GitHub nothing, and nor does a session whose state is not read yet; on asks once', async ($, on) => {
+  workOn(on, { value: [] })
+  const asked: string[] = []
+  on('http.fetch', (($: any, e: any) => (asked.push(e.url), { value: { ok: true, status: 200, headers: {}, json: async () => [], text: async () => '[]' } })) as any)
+  await harness($, on, { guide: guideOf([item()]), pane: panePayload({ version: { running: { abofles: '2.10.0' }, installed: { abofles: '2.10.0' }, market: 'sajadh92', check: 'off' } }) })
+  await checkRelease($ as any, true)
+  expect(asked).toEqual([])
+})
+
+test('a refused release check counts as an attempt: the next turn asks GitHub nothing', async ($, on) => {
+  workOn(on, { value: [] })
+  const asked: string[] = []
+  on('http.fetch', (($: any, e: any) => (asked.push(e.url), { value: { ok: false, status: 403, headers: {}, text: 'rate limited' } })) as any)
+  await harness($, on, { guide: guideOf([item()]), pane: panePayload({ version: { running: { abofles: '2.10.0' }, installed: { abofles: '2.10.0' }, market: 'sajadh92', check: 'on' } }) })
+  const before = asked.length
+  await checkRelease($ as any)
+  await checkRelease($ as any)
+  expect(asked.length - before).toBeLessThanOrEqual(1)
+})
+
 test('Home shows the Version card with Reload when a newer abofles is installed, and the footer says what runs', async ($, on) => {
   workOn(on, { value: [] })
   await harness($, on, { guide: guideOf([item()]), pane: panePayload({ version: { running: { abofles: '2.10.0' }, installed: { abofles: '2.10.1' }, market: 'sajadh92', check: 'off' } }) })
@@ -2668,3 +2769,171 @@ for (const [name, checkup] of [['no hits yet', { agent: 0, user: 0, denied: 0, l
     }
   })
 }
+
+test('agents that cost more than the base model read as an over cost in red, never a negative saving', () => {
+  const t = { spawns: 7, tokens: 29_200_000, usd: 31.55, base_usd: 17.47, saved_pct: -81, open_fail: 0, base_label: 'Opus 5.5', by_model: [{ model: 'fable', label: 'Fable 5.2', spawns: 5, tokens: 24_300_000, usd: 31.05, pct: 98 }] }
+  const s = spendOf(t as never, false)
+  expect(s.saved).toBe('81% over cost')
+  expect(s.tone).toBe('red')
+  expect(s.versus).toBe('$31.55 · $14.08 more than $17.47 on Opus 5.5')
+  expect(s.models[0]!.tone).toBe('violet') // Fable has its own colour, not grey
+  expect(spendCard(s, 400).html).toContain('class="big ink t-red">81% over cost')
+  const ok = spendOf({ ...t, usd: 0.41, base_usd: 0.9, saved_pct: 54 } as never, false)
+  expect([ok.saved, ok.tone]).toEqual(['54% saved', null])
+  const r = receiptOf('11-23 05:00 · 4 Agents · 23.6M Tokens · $29.01 · Cost +110% ($15.17) vs Opus 5.5 · done: analysis')
+  expect([r.saved, r.over, r.money]).toEqual([null, '110%', '110% over cost ($15.17) vs Opus 5.5'])
+})
+
+// ---- the close check on Home (st["close"], written by memo.py close-check). Fixture lines read as memo.py writes them.
+
+const closeLine = (over: object = {}) => ({ id: 'git:/r/repo-a:dirty', state: '⛔', src: 'git', text: 'repo-a: 3 uncommitted files', fix: 'commit them, then push', ...over })
+const closeRaw = (over: object = {}) => ({ lines: [closeLine()], verdict: '⛔', ts: 1_700_000_000, fp: 'x', turn_ts: 1, stale: false, git_rule: 'pushed', agent: 'yes', ...over })
+const NOW_MS = 1_700_000_000_000 + 60_000
+const okRaw = (over: object = {}) => closeRaw({ lines: [closeLine({ state: '✓', text: 'repo-a: clean, main pushed' })], verdict: '✅', ...over })
+
+test('cleanClose reads the stored check; an unknown state reads as not checked, never ✓', () => {
+  const c = cleanClose(closeRaw({ lines: [closeLine(), closeLine({ id: 'x', state: 'ok?' }), closeLine({ id: 'w', state: '⚠', waived: { trace: 'fine', ts: 2 }, by_rule: 'Close git = local', by: 'agent', judges: 'rule:Tests' })] }))
+  expect(c?.lines.map(l => l.state)).toEqual(['⛔', 'not checked', '⚠'])
+  expect(c?.lines[2]).toMatchObject({ waived: true, byRule: 'Close git = local', by: 'agent', judges: 'rule:Tests' })
+  expect(c?.agent).toBe('yes')
+  expect(cleanClose(closeRaw({ agent: 'maybe' }))?.agent).toBe(null)
+  expect(cleanClose(null)).toBe(null)
+  expect(cleanClose({ verdict: '✅' })).toBe(null) // no lines: no check
+  expect(cleanClose(closeRaw({ verdict: 'yes' }))?.verdict).toBe('not checked')
+  const many = Array.from({ length: 120 }, (_, i) => closeLine({ id: `l${i}`, state: '✓' }))
+  expect(cleanClose(closeRaw({ lines: [...many, closeLine({ id: 'late', by: 'agent' })] }))?.lines.at(-1)?.id).toBe('late') // a late agent ⛔ is never cut off
+})
+
+test('the glance chip counts unwaived blockers; a stale check reads amber and out of date', () => {
+  expect(closeFact(cleanClose(closeRaw()))).toEqual({ label: 'Close', value: '1 blocker', tone: 'red' })
+  expect(closeFact(cleanClose(closeRaw({ lines: [closeLine(), closeLine({ id: 'b' }), closeLine({ id: 'c', waived: { trace: 'ok', ts: 1 } })] })))?.value).toBe('2 blockers')
+  expect(closeFact(cleanClose(closeRaw({ stale: true })))).toEqual({ label: 'Close', value: '1 blocker · out of date', tone: 'amber' })
+  expect(closeFact(cleanClose(closeRaw({ lines: [closeLine({ state: '⚠' })] })))).toBe(null)
+  expect(closeFact(null)).toBe(null)
+})
+
+test('the card head is the stored verdict in words; stale reads out of date; task steps and running work keep ✅ at Not yet', () => {
+  const v = (raw: object | null, busy = 0, plan: any = null) => closeView(raw ? cleanClose(raw) : null, plan, busy, true, NOW_MS)
+  expect(v(closeRaw())).toMatchObject({ word: '1 blocker', tone: 'red' })
+  const stale = v(closeRaw({ stale: true }))
+  expect(stale).toMatchObject({ word: 'Out of date', tone: 'amber' }) // a stale blocker is not shown as a live red one
+  expect(stale?.notes[0]?.text).toMatch(/^Changed since the check at \d\d:\d\d — run it again$/)
+  expect(v(closeRaw({ lines: [closeLine({ state: '⚠' })], verdict: '⚠' }))).toMatchObject({ word: '1 to check', tone: 'amber' })
+  expect(v(closeRaw({ lines: [closeLine({ state: 'not checked' })], verdict: 'not checked' }))).toMatchObject({ word: 'Not checked', tone: 'grey' })
+  const ok = v(okRaw())
+  expect(ok).toMatchObject({ word: 'Yes', tone: 'green' })
+  expect(ok?.notes[0]?.text).toMatch(/^Checked at \d\d:\d\d$/) // the check's time on every card
+  const busy = v(okRaw(), 2)
+  expect(busy).toMatchObject({ word: 'Not yet', tone: 'amber' })
+  expect(busy?.notes.map(n => n.text)).toContain('2 agents and commands still running')
+  expect(v(okRaw({ agent: 'no' }))).toMatchObject({ word: 'Not yet' })
+  expect(v(okRaw({ agent: 'no' }))?.notes.map(n => n.text)).toContain('The close agent has not judged this check yet')
+  expect(v(null)).toMatchObject({ word: 'Not run', tone: 'grey' }) // guide clear, no check yet
+  expect(closeView(null, null, 0, false)).toBe(null) // guide still open and no check: no card
+  expect(closeView(null, null, 0, true, NOW_MS, false, false)).toBe(null) // a new session that has not worked yet: no card
+})
+
+test('the check time: HH:MM today, the day too when older, nothing for a record with no time', () => {
+  const d = new Date(2026, 10, 24, 9, 5).getTime()
+  expect(whenOf(d / 1000, d + 3_600_000)).toBe('09:05')
+  expect(whenOf(d / 1000, d + 2 * 86_400_000)).toBe('24 Nov 09:05')
+  expect(whenOf(0, d)).toBe('')
+})
+
+test('a judged Close: rule line counts through the agent line: verdict ✅ draws Yes, not Not checked', () => {
+  const raw = okRaw({ lines: [closeLine({ state: '✓', text: 'repo-a: clean' }), { id: 'rule:Tests', state: 'not checked', src: 'rule', text: 'Close: Tests = the suite passes', fix: '' }, { id: 'agent:1', state: '✓', src: 'agent', text: 'Tests: 231 pass', fix: '', by: 'agent', judges: 'rule:Tests' }] })
+  const v = closeView(cleanClose(raw), null, 0, true, NOW_MS)
+  expect(v).toMatchObject({ word: 'Yes', tone: 'green' })
+  expect(v?.rows.some(r => /Close: Tests/.test(r.text))).toBe(false)
+})
+
+test('open task steps are ⚠ rows only; a wrapped or hidden list does not count, and Tasks place = off passes no list', () => {
+  const plan = { items: [{ content: 'ship it', status: 'in_progress' }, { content: 'done', status: 'completed' }], ts: 1, closed: false }
+  const v = closeView(cleanClose(okRaw()), plan as never, 0, true, NOW_MS)
+  expect(v).toMatchObject({ word: 'Not yet', tone: 'amber', blockers: 0 })
+  expect(v?.rows.find(r => r.sub === 'tasks')).toEqual({ text: 'Task step open: ship it', sub: 'tasks', tone: 'amber', word: 'Check' })
+  expect(closeView(cleanClose(okRaw()), { ...plan, hidden: true } as never, 0, true, NOW_MS)?.word).toBe('Yes')
+  expect(closeView(cleanClose(okRaw()), { ...plan, closed: true, wrapped: true } as never, 0, true, NOW_MS)?.word).toBe('Yes')
+})
+
+test('Home keeps the stored lines first: a blocker is never pushed off by task rows; the rest are counted', () => {
+  const lines = Array.from({ length: 8 }, (_, i) => closeLine({ id: `l${i}`, text: `line ${i}` }))
+  const plan = { items: [{ content: 'a', status: 'pending' }, { content: 'b', status: 'pending' }], ts: 1, closed: false }
+  const v = closeView(cleanClose(closeRaw({ lines })), plan as never, 0, true, NOW_MS)
+  expect(v?.rows.map(r => r.text)).toEqual(['line 0', 'line 1', 'line 2', 'line 3', 'line 4', 'line 5'])
+  expect(v?.more).toBe('+2 more lines on Full details')
+  const whole = closeView(cleanClose(closeRaw({ lines })), plan as never, 0, true, NOW_MS, true)
+  expect(whole?.rows.length).toBe(10)
+  expect(whole?.more).toBe(null)
+})
+
+test('a fill asks, never orders: a git line asks for the owner\'s words and carries no git command', () => {
+  const git = cleanClose(closeRaw())!.lines[0]!
+  expect(closeFill(git)).toBe('Close-check line: repo-a: 3 uncommitted files. Ask me what git should do here; use the abofles-git agent, and no git write before I answer.')
+  const agentGit = cleanClose(closeRaw({ lines: [closeLine({ src: 'agent', text: 'branch not pushed', fix: 'run git push origin main' })] }))!.lines[0]!
+  expect(closeFill(agentGit)).not.toMatch(/git push/) // a git command in any line's fix is dropped
+  const plainLine = cleanClose(closeRaw({ lines: [closeLine({ src: 'memory', text: 'feedback-x.md\nmissing from MEMORY.md', fix: 'add its line' })] }))!.lines[0]!
+  expect(closeFill(plainLine)).toBe('Close-check line: feedback-x.md missing from MEMORY.md. Suggested fix: add its line. Check it, then tell me what you will change before you change it.')
+  const path = cleanClose(closeRaw({ lines: [closeLine({ src: 'memory', text: 'git repos folder note', fix: 'add it' })] }))!.lines[0]!
+  expect(closeFill(path)).toMatch(/^Close-check line: git repos folder note\. Suggested fix/) // "git repos" is a path, not a git command
+  const v = closeView(cleanClose(closeRaw({ lines: [closeLine(), closeLine({ id: 'm', src: 'memory', state: '⚠', fix: 'add it' }), closeLine({ id: 'n', state: 'not checked', fix: 'x' }), closeLine({ id: 'k', fix: 'y' })] })), null, 0, true, NOW_MS)
+  expect(v?.fixes.map(l => l.id)).toEqual(['git:/r/repo-a:dirty', 'k']) // blockers first, two at most, a not-checked line has no fix button
+  expect(v?.rows.map(r => r.tone)).toEqual(['red', 'red', 'amber', 'grey'])
+  expect(v?.rows.map(r => r.word)).toEqual(['Blocker', 'Blocker', 'Check', 'Not checked']) // the state in words, not by colour alone
+})
+
+test('a waived line stays on the card as Accepted', () => {
+  const v = closeView(cleanClose(closeRaw({ lines: [closeLine({ waived: { trace: 'keep it', ts: 1 } })], verdict: '✅' })), null, 0, true, NOW_MS)
+  expect(v?.rows[0]).toMatchObject({ word: 'Accepted', sub: 'git · accepted by you', tone: 'green' })
+})
+
+test('desktop: Home says guide clear, shows the blocker chip and the Ready to archive? card, its buttons fill, and Full details opens every line', async ($, on) => {
+  const w = await harness($, on, { guide: guideOf([item({ p: '✅', text: 'all clear', id: 'ok:a' })]), pane: panePayload(), close: closeRaw({ lines: [closeLine(), closeLine({ id: 'git:/r/repo-b:dirty', text: 'repo-b: 1 uncommitted file' })] }) })
+  const ui = await mountPane($, 'desktop')
+  expect(await said(ui, /^guide clear$/)).toBe(true)
+  expect(await said(ui, /^Ready to archive\?$/)).toBe(true)
+  expect(await said(ui, /^2 blockers$/)).toBe(true)
+  expect(await said(ui, /^repo-a: 3 uncommitted files$/)).toBe(true)
+  expect(await said(ui, /^Blocker · git · commit them, then push$/)).toBe(true)
+  expect(await labelOf(ui, 'close-run')).toBe('Run close check')
+  expect(await labelOf(ui, 'close-fix:git:/r/repo-a:dirty')).toBe('Fix git 1') // two git fixes: numbered
+  expect(await labelOf(ui, 'close-fix:git:/r/repo-b:dirty')).toBe('Fix git 2')
+  await ui.press({ key: 'close-run' })
+  expect(w.fills[w.fills.length - 1]).toEqual({ text: '/abofles:close', mode: 'replace' })
+  await ui.press({ key: 'close-fix:git:/r/repo-a:dirty' })
+  expect(w.fills[w.fills.length - 1]?.text).toMatch(/^Close-check line: repo-a: 3 uncommitted files\. Ask me what git should do/)
+  await ui.press({ key: 'detail:close' })
+  expect(await said(ui, /^Close check$/)).toBe(true)
+  expect(await said(ui, /^repo-b: 1 uncommitted file$/)).toBe(true)
+  await ui.unmount()
+})
+
+test('desktop: with Guide place = band the close card still shows on Home', async ($, on) => {
+  await harness($, on, { guide: guideOf([item({ p: '✅', text: 'all clear', id: 'ok:b' })]), pane: panePayload({ places: { ...PLACES, guide: 'band' } }), close: closeRaw() })
+  const ui = await mountPane($, 'desktop')
+  expect(await said(ui, /^Ready to archive\?$/)).toBe(true)
+  expect(await has(ui, 'close-run')).toBe(true)
+  await ui.unmount()
+})
+
+test('terminal: a stored check folds in as a Close check card with its buttons', async ($, on) => {
+  await harness($, on, { guide: guideOf([item({ p: '✅', text: 'all clear', id: 'ok:t' })]), pane: panePayload(), close: closeRaw() })
+  const ui = await mountPane($, 'terminal')
+  expect(await said(ui, /^Ready to archive\? 1 blocker$/)).toBe(true)
+  expect(await said(ui, /^Blocker · repo-a: 3 uncommitted files$/)).toBe(true)
+  expect(await has(ui, 'close-run')).toBe(true)
+  await ui.unmount()
+})
+
+test('desktop: Close place = chat or off keeps the Ready to archive? card and its chip off Home', async ($, on) => {
+  const state = (close: string) => ({ guide: guideOf([item({ p: '✅', text: 'all clear', id: `ok:${close}` })]), pane: panePayload({ places: { ...PLACES, close } }), close: closeRaw() })
+  const w = await harness($, on, state('chat'))
+  for (const close of ['chat', 'off']) {
+    w.state = state(close)
+    await $.turn.complete({ answer: 'x', durationMs: 1, isAborted: false, turnId: `t-close-${close}`, reason: 'answered' } as never)
+    const ui = await mountPane($, 'desktop')
+    expect(await said(ui, /^Ready to archive\?$/)).toBe(false)
+    expect(await has(ui, 'close-run')).toBe(false)
+    await ui.unmount()
+  }
+})

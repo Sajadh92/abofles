@@ -1,6 +1,6 @@
 ---
 name: abofles-ops
-description: "Abo Fles Ops reviewer (side Verify, tag Ops). Reviews a finished infrastructure, pipeline, deployment, server or network change for blast radius, rollback path, secrets exposure, drift and environment parity. Returns PASS or FAIL with evidence. Use after Verify on 🟠/🔴 changes in DevOps, Cloud, Edge, Servers and Observability topics."
+description: "Abo Fles Ops reviewer (side Verify, tag Ops): infrastructure, pipeline, deployment and network changes for blast radius, rollback, secrets, drift and parity. Returns PASS or FAIL with evidence."
 tools: Read, Glob, Grep, Bash
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: abofles-analyst
-description: "Abo Fles Analyse & Find Gaps agent (side Analyse). Judges code, finds bugs, risks and gaps, compares options, suggests a better approach. Returns ranked findings with a fix per finding. Use for \"review X for risks\", \"find the bug in Y\", \"compare approaches\", \"what is missing in Z\"."
+description: "Abo Fles Analyse agent (side Analyse): finds bugs, risks and gaps, compares options. Returns ranked findings with a fix each."
 tools: Read, Glob, Grep, Bash
 ---
 

@@ -127,6 +127,21 @@ def suggestions_for(matches, query, wf, cwd):
     return out
 
 
+def take_value(args, flag):
+    """Take `flag value` out of `args`; the value, or None when it is missing (the last arg), empty or `--`-led (the flag is taken out too)."""
+    i = args.index(flag)
+    v = args[i + 1] if i + 1 < len(args) else None
+    del args[i:i + 2]
+    return v if v is not None and v.strip() and not v.startswith("--") else None
+
+
+def usage(why):
+    """A flag with no usable value: one line, the usage, exit 2 (never an IndexError or ValueError)."""
+    print(f"abofles: topic.py {why} — usage:")
+    print(__doc__.strip())
+    return 2
+
+
 def main(argv):
     wf = workflow_table()
     if not wf.get("topics"):
@@ -135,14 +150,15 @@ def main(argv):
     args = list(argv)
     cwd = os.getcwd()
     if "--cwd" in args:
-        i = args.index("--cwd")
-        cwd = args[i + 1]
-        del args[i:i + 2]
+        cwd = take_value(args, "--cwd")
+        if cwd is None:
+            return usage("--cwd needs a folder")
     limit = 3
     if "--limit" in args:
-        i = args.index("--limit")
-        limit = int(args[i + 1])
-        del args[i:i + 2]
+        v = take_value(args, "--limit")
+        if v is None or not v.strip().isdigit() or int(v) < 1:
+            return usage("--limit needs a whole number of 1 or more")
+        limit = int(v)
     cmd = args[0] if args else "find"
     rest = " ".join(args[1:]).strip()
     topics = wf["topics"]

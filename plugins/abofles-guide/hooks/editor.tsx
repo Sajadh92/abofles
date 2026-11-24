@@ -33,8 +33,8 @@ const CUSTOM_KEYS: Record<string, { start: string; hint: string }> = {
 }
 
 // The editor's groups, in order, and each key's group and help line. A key the table adds later lands in "More", without help.
-const GROUPS = ['Session', 'Agents', 'Memo', 'Output', 'Where it shows', 'More'] as const
-const GROUP_ICON: Record<(typeof GROUPS)[number], IconName> = { Session: 'clock', Agents: 'fork', Memo: 'bookmark', Output: 'list', 'Where it shows': 'compass', More: 'sliders' }
+const GROUPS = ['Session', 'Agents', 'Memo', 'Close', 'Output', 'Where it shows', 'More'] as const
+const GROUP_ICON: Record<(typeof GROUPS)[number], IconName> = { Session: 'clock', Agents: 'fork', Memo: 'bookmark', Close: 'check', Output: 'list', 'Where it shows': 'compass', More: 'sliders' }
 const KEY_INFO: Record<string, { group: (typeof GROUPS)[number]; help: string }> = {
   'Main session': { group: 'Session', help: 'Model and effort of a main session' },
   'Sub session': { group: 'Session', help: 'Same, for a session started by another' },
@@ -70,6 +70,11 @@ const KEY_INFO: Record<string, { group: (typeof GROUPS)[number]; help: string }>
   Guide: { group: 'Output', help: 'The next-step line' },
   Resume: { group: 'Output', help: 'What it covers; off = not in chat' },
   Language: { group: 'Output', help: 'Language of owner questions' },
+  'Close check': { group: 'Close', help: 'ask: runs from the Run close check button or /abofles:close; auto: also at each Stop (script only)' },
+  'Close git': { group: 'Close', help: 'What counts as done: pushed, committed, or local (git lines become checks, not blockers)' },
+  'Close agent': { group: 'Close', help: 'The close agent judges your Close: rules and chat decisions; off = script lines only' },
+  'Close PR check': { group: 'Close', help: 'on: an open pull request on a work branch is a line to check (needs gh)' },
+  'Close place': { group: 'Where it shows', help: 'Ready to archive? card: Home in the pane, printed in the chat, or off' },
   'Guide place': { group: 'Where it shows', help: 'Pane, or the band over the prompt' },
   'Resume place': { group: 'Where it shows', help: 'Pane, or printed in the chat' },
   'Agents place': { group: 'Where it shows', help: 'Pane, or printed in the chat' },
@@ -278,7 +283,12 @@ async function save($: EngineInterface, p: Pane, ov: PaneOverrides, d: Draft, fi
       if (again !== null) await applyOverrides($, again)
       else await refresh($)
     }
-    await updatePaneDraft($, emptied)
+    // only what was saved leaves the draft: a value typed while the save ran (it can take seconds) stays to be saved next
+    await updatePaneDraft($, cur => {
+      const out: Draft = emptied(cur)
+      for (const k of Object.keys(cur) as (keyof Draft)[]) if (k !== SCOPE && JSON.stringify(cur[k]) !== JSON.stringify(d[k])) (out as Record<string, unknown>)[k as string] = cur[k]
+      return out
+    })
     $.ui.toast(`Saved to ${saved.join(' and ')}`)
   } catch (err) {
     $.ui.toast(`Save failed — ${err instanceof Error ? err.message : String(err)}`)
@@ -456,7 +466,7 @@ export async function overridesPage($: EngineInterface, ui: Ui, p: Pane | null, 
             {scopeButton('project', 'This project')}
             {scopeButton('user', 'All projects')}
           </Box>
-          <Text size="caption" dimColor>{`${files[scope]} · one per line: topic tiers, cells, reviewers, workflows — e.g. Reviewers: Money = finance, tester`}</Text>
+          <Text size="caption" dimColor>{`${files[scope]} · one per line: topic tiers, cells, reviewers, workflows, close rules — e.g. Close: Tests = the test suite passes`}</Text>
           <Input key="raw" rows={Math.min(8, Math.max(2, raw.length + 1))} placeholder="Topic: Billing = T3" value={d[RAW] ?? rawBase(ov, scope).join('\n')} onInput={v => setDraft($, RAW, v)} onSubmit={v => setDraft($, RAW, v)} />
           {others.map(r => (
             <Text size="caption" dimColor>{`${r.line} — in ${where(r)}`}</Text>

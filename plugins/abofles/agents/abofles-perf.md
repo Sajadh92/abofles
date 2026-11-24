@@ -1,6 +1,6 @@
 ---
 name: abofles-perf
-description: "Abo Fles Perf reviewer (side Verify, tag Perf). Reviews a finished change for performance: hot paths and complexity, N+1 and round-trips, allocations and blocking calls, caching, and benchmark or load evidence before and after. Returns PASS or FAIL with evidence. Use after Verify on 🟠/🔴 changes in Performance, Search/Cache/Messaging and performance-sensitive topics."
+description: "Abo Fles Perf reviewer (side Verify, tag Perf): hot paths, N+1 and round-trips, allocations, blocking calls, caching, benchmark evidence. Returns PASS or FAIL with evidence."
 tools: Read, Glob, Grep, Bash
 ---
 

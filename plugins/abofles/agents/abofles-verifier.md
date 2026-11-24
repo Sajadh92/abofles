@@ -1,6 +1,6 @@
 ---
 name: abofles-verifier
-description: "Abo Fles Verify & Review agent (side Verify). Checks finished work against acceptance criteria: runs tests, reviews the diff, confirms docs match code. Returns PASS or FAIL with evidence. Use for \"verify the change to X\", \"review this diff against the plan\", \"confirm Y still works\"."
+description: "Abo Fles Verify agent (side Verify): checks finished work against acceptance criteria — runs tests, reviews the diff, confirms docs match code. Returns PASS or FAIL with evidence."
 tools: Read, Glob, Grep, Bash
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: abofles-compliance
-description: "Abo Fles Compliance reviewer (side Verify, tag Compliance). Reviews a finished change for PII exposure, consent, retention and deletion, audit trail completeness, and legal or regulatory text. Returns PASS or FAIL with evidence. Use after Verify on changes in Data Privacy, Audit Logging and any topic the project marks as regulated."
+description: "Abo Fles Compliance reviewer (side Verify, tag Compliance): PII exposure, consent, retention and deletion, audit trail, regulatory text. Returns PASS or FAIL with evidence."
 tools: Read, Glob, Grep, Bash
 ---
 

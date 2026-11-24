@@ -1,6 +1,6 @@
 ---
 name: abofles-dba
-description: "Abo Fles DBA reviewer (side Verify, tag DBA). Reviews a finished database change — migrations, schema, queries, indexes, transactions, replicas, backups — for safety, reversibility, locking and performance under production data. Returns PASS or FAIL with evidence. Use after Verify on 🟠/🔴 changes in Data & Databases topics."
+description: "Abo Fles DBA reviewer (side Verify, tag DBA): migrations, schema, queries, indexes, transactions and backups for safety, reversibility and locking. Returns PASS or FAIL with evidence."
 tools: Read, Glob, Grep, Bash
 ---
 
